@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Darwish Smart Power</title>
+<meta name="theme-color" content="#111833">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Darwish Power">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<style>
+:root{--night:#070b18;--deep:#111833;--violet:#231446;--fill:rgba(255,255,255,.07);--fill2:rgba(255,255,255,.12);--stroke:rgba(255,255,255,.14);
+  --text:#f3f6ff;--soft:#a9b2cf;--faint:#6e7899;--cyan:#4fd1ff;--green:#3ee6a0;--amber:#ffb547;--pink:#ff6b9a;--red:#ff6b6b;--purple:#a78bfa}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{background:#070b18}
+html,body{margin:0;min-height:100%}
+body{color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+  background:radial-gradient(900px 600px at 85% -10%,rgba(35,20,70,.95),transparent 70%),
+             radial-gradient(800px 700px at 0% 110%,rgba(11,51,64,.8),transparent 70%),
+             linear-gradient(180deg,var(--deep),var(--night) 60%);background-attachment:fixed;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+bdi{unicode-bidi:isolate}
+button{font:inherit;color:inherit;cursor:pointer}
+.wrap{max-width:820px;margin:auto;padding:0 16px 40px}
+.glass{background:linear-gradient(135deg,var(--fill2),var(--fill));border:1px solid var(--stroke);border-radius:24px;
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+header{display:flex;align-items:center;gap:12px;padding:18px 0 14px}
+header img{width:40px;height:40px;border-radius:12px}
+header .t{flex:1;min-width:0}
+header h1{margin:0;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header .hello{color:var(--soft);font-size:13px}
+.icon-btn{border:1px solid var(--stroke);background:var(--fill);border-radius:999px;padding:7px 13px;font-size:13px}
+.hero{padding:20px;margin-bottom:16px;position:relative;overflow:hidden}
+.hero .label{color:var(--soft);font-size:13px}
+.hero .big{font-size:46px;font-weight:800;letter-spacing:-1.5px;line-height:1.1;margin:4px 0 2px;
+  background:linear-gradient(90deg,#fff,#bfeeff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero .big small{font-size:18px;font-weight:600;color:var(--soft);-webkit-text-fill-color:var(--soft)}
+.hero svg{width:100%;height:56px;display:block;margin:6px 0 12px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kpi{background:var(--fill);border-radius:16px;padding:10px 12px}
+.kpi b{display:block;font-size:15px;white-space:nowrap}
+.kpi span{color:var(--soft);font-size:12px}
+.row-title{display:flex;align-items:center;justify-content:space-between;margin:22px 4px 10px}
+.row-title h2{margin:0;font-size:16px}
+.scenes{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 6px;scrollbar-width:none}
+.scene{flex:none;padding:12px 16px;border-radius:18px;display:flex;align-items:center;gap:8px;font-weight:600;border:1px solid var(--stroke);
+  background:linear-gradient(135deg,rgba(79,209,255,.16),rgba(167,139,250,.12))}
+.scene .e{font-size:20px}
+.strip{padding:16px;margin-bottom:14px}
+.strip.offline{opacity:.6}
+.strip-head{display:flex;align-items:flex-start;gap:10px}
+.strip-head .n{flex:1;min-width:0}
+.strip-head h3{margin:0;font-size:17px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--faint);display:inline-block}
+.dot.on{background:var(--green);box-shadow:0 0 10px var(--green)}
+.lock{font-size:13px}
+.strip-head .w{font-size:24px;font-weight:800;direction:ltr}
+.strip-head .w small{font-size:12px;color:var(--soft)}
+.pills{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}
+.pill{background:var(--fill);color:var(--soft);font-size:12px;border-radius:999px;padding:3px 10px}
+.pill.warn{color:var(--amber)}
+.actions{display:flex;gap:8px;margin-bottom:12px}
+.btn{flex:1;border:1px solid var(--stroke);background:var(--fill);border-radius:14px;padding:10px;font-weight:600}
+.btn.primary{border:0;background:linear-gradient(135deg,#1ed8a0,#14a9e0);color:#03201a}
+.btn.small{flex:none;padding:8px 14px}
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(min-width:620px){.tiles{grid-template-columns:repeat(4,1fr)}}
+.tile{position:relative;text-align:start;border:1px solid var(--stroke);background:var(--fill);border-radius:20px;padding:12px;min-height:118px;
+  transition:background .25s,border-color .25s,box-shadow .25s}
+.tile.on{background:linear-gradient(135deg,rgba(30,216,160,.28),rgba(20,169,224,.22));border-color:rgba(62,230,160,.6);
+  box-shadow:0 0 22px -6px rgba(62,230,160,.6)}
+.tile .e{font-size:26px;line-height:1}
+.tile .nm{font-weight:700;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .mt{color:var(--soft);font-size:12px}
+.tile .sw{position:absolute;top:12px;inset-inline-end:12px;width:38px;height:22px;border-radius:999px;background:rgba(255,255,255,.18);transition:background .25s}
+.tile .sw::after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:inset-inline-start .25s}
+.tile.on .sw{background:var(--green)}
+.tile.on .sw::after{inset-inline-start:19px}
+.tile .more{position:absolute;bottom:8px;inset-inline-end:8px;border:0;background:none;color:var(--soft);font-size:18px;padding:4px 8px}
+.tile .tm{color:var(--amber);font-size:11px;font-weight:600}
+.tile.busy{opacity:.6}
+.empty,.login{padding:24px;text-align:center}
+.login{max-width:380px;margin:12vh auto 0}
+.login img{width:84px;height:84px;border-radius:24px;margin-bottom:8px}
+input{width:100%;font:inherit;color:var(--text);background:rgba(255,255,255,.06);border:1px solid var(--stroke);border-radius:14px;padding:13px 14px;margin:14px 0 10px;outline:none;direction:ltr;text-align:center}
+input:focus{border-color:var(--cyan)}
+.err{color:var(--red);min-height:1.4em;font-size:13px}
+.toast{position:fixed;inset-inline:16px;bottom:calc(18px + env(safe-area-inset-bottom));margin:auto;max-width:420px;padding:12px 16px;border-radius:16px;
+  background:rgba(17,24,51,.95);border:1px solid var(--stroke);text-align:center;transform:translateY(20px);opacity:0;visibility:hidden;
+  transition:transform .25s,opacity .25s,visibility .25s;z-index:9}
+.toast.show{transform:none;opacity:1;visibility:visible}
+.install{display:none}
+.room{color:var(--soft);font-size:13px;font-weight:600;margin:20px 6px 8px}
+</style>
+</head>
+<body>
+<div class="wrap" id="root"></div>
+<div class="toast" id="toast"></div>
+<script>
+const L = {
+  ar: {lang: "English", hello_m: "صباح الخير", hello_e: "مساء الخير", now: "الاستهلاك دلوقتي", today: "النهارده", month: "الشهر ده",
+       scenes: "المشاهد", strip: "مشترك", outlet: "مخرج", online: "متصل", offline: "غير متصل", allOn: "شغّل الكل", allOff: "اطفي الكل",
+       timer: "مؤقت", rename: "اسم جديد (فاضي = الافتراضي):", timerAsk: "بعد كام دقيقة يتغير؟ (0 = إلغاء)", turnsOn: "هيشتغل", turnsOff: "هيطفي",
+       login: "ادخل باسورد السيرفر", enter: "دخول", wrong: "الباسورد غلط", unreachable: "السيرفر مش بيرد", logout: "خروج",
+       none: "مفيش مشترك متصل لسه. اعمل إعداد للمشترك من تطبيق الأندرويد.", pin: "المشترك ده مقفول. ادخل الـ PIN:", wrongPin: "الـ PIN غلط",
+       queued: "المشترك مش متصل، الأمر هيتنفذ أول ما يرجع", done: "تم", fail: "فشل: ", install: "تثبيت", other: "بدون غرفة",
+       iosHint: "على الآيفون: زرار المشاركة ← إضافة إلى الشاشة الرئيسية", cost: "ج.م", waiting: "مستني يرجع"},
+  en: {lang: "العربية", hello_m: "Good morning", hello_e: "Good evening", now: "Using now", today: "Today", month: "This month",
+       scenes: "Scenes", strip: "Strip", outlet: "Outlet", online: "online", offline: "offline", allOn: "All on", allOff: "All off",
+       timer: "Timer", rename: "New name (empty = default):", timerAsk: "Switch after how many minutes? (0 = cancel)", turnsOn: "on at", turnsOff: "off at",
+       login: "Enter the server password", enter: "Sign in", wrong: "Wrong password", unreachable: "The server is not answering", logout: "Sign out",
+       none: "No strip connected yet. Set one up from the Android app.", pin: "This strip is locked. Enter its PIN:", wrongPin: "Wrong PIN",
+       queued: "The strip is offline; it will run when it is back", done: "Done", fail: "Failed: ", install: "Install", other: "No room",
+       iosHint: "On iPhone: Share → Add to Home Screen", cost: "EGP", waiting: "waiting"}
+};
+const ICON = {plug:"🔌",kettle:"☕",router:"📶",tv:"📺",ac:"❄️",lamp:"💡",heater:"🔥",fan:"🌀",fridge:"🧊",washer:"🧺",charger:"🔋",
+              computer:"💻",speaker:"🔊",camera:"📷",microwave:"🍲",iron:"👔"};
+let lang = (() => { try { return localStorage.getItem("dsp-lang") } catch (e) { return null } })() ||
+           ((navigator.language || "").startsWith("ar") ? "ar" : "en");
+let token = (() => { try { return localStorage.getItem("dsp-token") || "" } catch (e) { return "" } })();
+const qt = new URLSearchParams(location.search).get("token");
+if (qt) { token = qt; save("dsp-token", qt); history.replaceState(null, "", location.pathname); }
+let state = null, busy = new Set(), pins = {}, deferredInstall = null, timerId = null;
+
+function save(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v) } catch (e) {} }
+const t = k => L[lang][k];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const num = (v, d = 1) => Number(v || 0).toFixed(d);
+const clock = ts => new Date(ts * 1000).toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"});
+function toast(msg) { const el = document.getElementById("toast"); el.textContent = msg; el.classList.add("show");
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 2600); }
+
+async function api(path, body) {
+  const opt = {headers: {"X-Token": token}};
+  if (body) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || r.status); e.status = r.status; e.locked = j.locked; throw e; }
+  return j;
+}
+
+function renderLogin(msg) {
+  document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  document.getElementById("root").innerHTML = `<div class="login glass">
+      <img src="/icons/icon-192.png" alt=""><h2 style="margin:4px 0">Darwish Smart Power</h2>
+      <div style="color:var(--soft)">${t("login")}</div>
+      <input id="pw" type="password" autocomplete="current-password" autofocus>
+      <div class="err">${esc(msg || "")}</div>
+      <button class="btn primary" style="width:100%" id="go">${t("enter")}</button>
+      <button class="icon-btn" style="margin-top:14px" id="lang">${t("lang")}</button></div>`;
+  const go = async () => {
+    token = document.getElementById("pw").value.trim();
+    try { await api("/api/health"); save("dsp-token", token); start(); }
+    catch (e) { renderLogin(e.status === 401 ? t("wrong") : t("unreachable")); }
+  };
+  document.getElementById("go").onclick = go;
+  document.getElementById("pw").onkeydown = e => { if (e.key === "Enter") go(); };
+  document.getElementById("lang").onclick = () => { lang = lang === "ar" ? "en" : "ar"; save("dsp-lang", lang); renderLogin(); };
+}
+
+function spark(hours) {
+  const v = hours && hours.length ? hours : new Array(24).fill(0), max = Math.max(...v, 0.001), w = 300, h = 64;
+  const pts = v.map((x, i) => [i * w / (v.length - 1), h - 6 - (x / max) * (h - 12)]);
+  const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#4fd1ff" stop-opacity=".45"/><stop offset="1" stop-color="#4fd1ff" stop-opacity="0"/></linearGradient></defs>
+    <path d="${d} L${w} ${h} L0 ${h} Z" fill="url(#sg)"/><path d="${d}" fill="none" stroke="#4fd1ff" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
+}
+
+function render() {
+  document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  const s = state, cur = s.settings && s.settings.currency === "EGP" ? t("cost") : (s.settings && s.settings.currency) || "";
+  const watts = s.strips.reduce((a, x) => a + x.watts, 0), hour = new Date().getHours();
+  const rooms = {};
+  s.strips.forEach(x => (rooms[x.room || ""] = rooms[x.room || ""] || []).push(x));
+  let html = `<header><img src="/icons/icon-192.png" alt=""><div class="t"><h1 dir="ltr" style="text-align:start">Darwish Power</h1>
+      <div class="hello">${hour < 12 ? t("hello_m") : t("hello_e")}</div></div>
+      <button class="icon-btn install" id="install">${t("install")}</button>
+      <button class="icon-btn" id="lang">${t("lang")}</button><button class="icon-btn" id="logout">${t("logout")}</button></header>
+    <section class="hero glass"><div class="label">${t("now")}</div>
+      <div class="big"><bdi dir="ltr">${num(watts)} <small>W</small></bdi></div>${spark(s.today && s.today.hours)}
+      <div class="kpis"><div class="kpi"><b><bdi>${num(s.today.kwh, 2)} kWh</bdi></b><span>${t("today")}</span></div>
+        <div class="kpi"><b><bdi>${num(s.today.cost, 2)}</bdi> ${esc(cur)}</b><span>${t("today")}</span></div>
+        <div class="kpi"><b><bdi>${num(s.month.cost, 2)}</bdi> ${esc(cur)}</b><span>${t("month")}</span></div></div></section>`;
+  if (s.scenes && s.scenes.length) {
+    html += `<div class="row-title"><h2>${t("scenes")}</h2></div><div class="scenes">` +
+      s.scenes.map(sc => `<button class="scene" data-scene="${esc(sc.id)}"><span class="e">${esc(sc.icon)}</span>${esc(sc.name)}</button>`).join("") + `</div>`;
+  }
+  if (!s.strips.length) html += `<div class="empty glass" style="margin-top:16px">${t("none")}</div>`;
+  Object.keys(rooms).sort((a, b) => (a || "~").localeCompare(b || "~")).forEach(room => {
+    if (Object.keys(rooms).length > 1 || room) html += `<div class="room">${esc(room || t("other"))}</div>`;
+    rooms[room].forEach(x => { html += stripHtml(x); });
+  });
+  document.getElementById("root").innerHTML = html;
+  document.getElementById("lang").onclick = () => { lang = lang === "ar" ? "en" : "ar"; save("dsp-lang", lang); render(); };
+  document.getElementById("logout").onclick = () => { save("dsp-token", null); token = ""; clearInterval(timerId); renderLogin(); };
+  const ib = document.getElementById("install");
+  if (deferredInstall) { ib.style.display = "inline-block"; ib.onclick = async () => { deferredInstall.prompt(); deferredInstall = null; ib.style.display = "none"; }; }
+  else if (/iphone|ipad/i.test(navigator.userAgent) && !navigator.standalone) { ib.style.display = "inline-block"; ib.onclick = () => toast(t("iosHint")); }
+}
+
+function stripHtml(x) {
+  const name = x.name || `${t("strip")} ${x.id.slice(-6)}`;
+  const pills = [`${num(x.today_kwh, 2)} kWh`, x.volts ? `${num(x.volts)} V` : "", x.rssi != null ? `Wi-Fi ${x.rssi} dBm` : ""].filter(Boolean)
+    .map(p => `<span class="pill"><bdi>${esc(p)}</bdi></span>`).join("") +
+    (Object.keys(x.pending || {}).length ? `<span class="pill warn">⏳ ${t("waiting")}</span>` : "");
+  return `<section class="strip glass${x.online ? "" : " offline"}">
+    <div class="strip-head"><div class="n"><h3>${esc(name)} <span class="dot${x.online ? " on" : ""}"></span>
+      ${x.locked ? '<span class="lock">🔒</span>' : ""}</h3><div style="color:var(--soft);font-size:12px">${x.online ? t("online") : t("offline")}</div></div>
+      <div class="w"><bdi dir="ltr">${num(x.watts)} <small>W</small></bdi></div></div>
+    <div class="pills">${pills}</div>
+    <div class="actions"><button class="btn primary" data-sw="${x.id}" data-o="0" data-on="1">${t("allOn")}</button>
+      <button class="btn" data-sw="${x.id}" data-o="0" data-on="0">${t("allOff")}</button>
+      <button class="btn small" data-timer="${x.id}" data-o="0" data-on="${x.outlets.some(o => o.on) ? 0 : 1}">⏱</button></div>
+    <div class="tiles">${x.outlets.map(o => {
+      const key = x.id + "/" + o.index, tm = o.timer ? `${o.timer.on ? t("turnsOn") : t("turnsOff")} ${clock(o.timer.at)}` : "";
+      return `<div class="tile${o.on ? " on" : ""}${busy.has(key) ? " busy" : ""}" data-sw="${x.id}" data-o="${o.index}" data-on="${o.on ? 0 : 1}" role="button" tabindex="0">
+        <div class="e">${ICON[o.icon] || "🔌"}</div><div class="sw"></div>
+        <div class="nm">${esc(o.name || t("outlet") + " " + o.index)}</div>
+        <div class="mt"><bdi>${num(o.watts)} W</bdi>${o.temp_c != null ? ` · <bdi>${o.temp_c}°C</bdi>` : ""}</div>
+        <div class="tm">${esc(tm)}</div>
+        <button class="more" data-more="${x.id}" data-o="${o.index}" data-on="${o.on ? 0 : 1}" aria-label="more">⋯</button></div>`;
+    }).join("")}</div></section>`;
+}
+
+async function withPin(stripId, fn) {
+  try { return await fn(pins[stripId]); }
+  catch (e) {
+    if (e.status !== 403 || !e.locked) throw e;
+    const p = prompt(t("pin")); if (!p) return null;
+    try { const r = await fn(p); pins[stripId] = p; return r; }
+    catch (e2) { if (e2.status === 403) { toast(t("wrongPin")); return null; } throw e2; }
+  }
+}
+
+document.addEventListener("click", async ev => {
+  const more = ev.target.closest("[data-more]");
+  if (more) {
+    ev.stopPropagation();
+    const id = more.dataset.more, o = +more.dataset.o;
+    const n = prompt(t("rename")); if (n !== null) { await api("/api/rename", {strip: id, outlet: o, name: n}).catch(e => toast(t("fail") + e.message)); refresh(); }
+    return;
+  }
+  const sc = ev.target.closest("[data-scene]");
+  if (sc) { try { await api("/api/scenes/run", {id: sc.dataset.scene}); toast(t("done")); } catch (e) { toast(t("fail") + e.message); } refresh(); return; }
+  const tm = ev.target.closest("[data-timer]");
+  if (tm) {
+    const m = prompt(t("timerAsk"), "30"); if (m === null) return;
+    await withPin(tm.dataset.timer, pin => api("/api/timer", {strip: tm.dataset.timer, outlet: 0, minutes: +m || 0, on: tm.dataset.on === "1", pin}))
+      .catch(e => toast(t("fail") + e.message));
+    refresh(); return;
+  }
+  const sw = ev.target.closest("[data-sw]");
+  if (!sw) return;
+  const id = sw.dataset.sw, o = +sw.dataset.o, on = sw.dataset.on === "1", key = id + "/" + o;
+  if (busy.has(key)) return;
+  busy.add(key);
+  if (o) { const strip = state.strips.find(x => x.id === id); const out = strip && strip.outlets.find(x => x.index === o); if (out) out.on = on; render(); }
+  try {
+    const r = await withPin(id, pin => api("/api/switch", {strip: id, outlets: [o], on, pin}));
+    if (r && r.queued) toast(t("queued"));
+  } catch (e) { toast(t("fail") + e.message); }
+  busy.delete(key); refresh();
+});
+
+async function refresh() {
+  try { state = await api("/api/state"); render(); }
+  catch (e) {
+    if (e.status === 401) { clearInterval(timerId); save("dsp-token", null); renderLogin(t("wrong")); }
+    else if (!state) renderLogin(t("unreachable"));
+  }
+}
+function start() { refresh(); clearInterval(timerId); timerId = setInterval(() => { if (!document.hidden) refresh(); }, 2500); }
+
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredInstall = e; if (state) render(); });
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+token ? start() : renderLogin();
+</script>
+</body>
+</html>

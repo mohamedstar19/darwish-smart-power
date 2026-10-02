@@ -16,11 +16,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import datetime
+import hashlib
 import hmac
 import ipaddress
 import json
 import os
+import re
 import socket
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -32,7 +36,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlsplit
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 STRIP_PORT = 10086                       # fixed in the strip firmware
 SETUP_ADDR = ("192.168.1.1", 30300)      # the strip's own access point while in setup mode
 OUTLETS = (1, 2, 3, 4)
@@ -41,12 +45,31 @@ DIAG_EVERY = 30.0                        # seconds between voltage / Wi-Fi signa
 MAX_MISSED_POLLS = 3                     # unanswered reads before the connection is dropped
 TIMER_GRACE = 600                        # drop a timer that could not run this long after it was due
 MAX_BODY = 16 * 1024
+OFFLINE_ALERT_AFTER = 90                 # seconds offline before an "offline" alert
+ALERT_REPEAT = {"temp": 3600, "power": 1800}
+MAX_EVENTS = 500
+QUEUE_TTL = 24 * 3600                    # commands for an offline strip are kept this long
+PIN_MAX_TRIES = 5                        # wrong PINs before a strip refuses PINs for a minute
+ICONS = ("plug", "kettle", "router", "tv", "ac", "lamp", "heater", "fan", "fridge",
+         "washer", "charger", "computer", "speaker", "camera", "microwave", "iron")
+DEFAULT_SETTINGS = {"price_kwh": 1.5, "currency": "EGP", "max_temp_c": 60, "max_watts": 3000}
 HERE = Path(__file__).resolve().parent
 # the Android app: a downloaded copy next to this file, or a local Gradle build
 APK_CANDIDATES = (HERE / "darwish-smart-power.apk", HERE / "android/app/build/outputs/apk/debug/app-debug.apk")
 
 APK_RELEASE_URL = "https://github.com/mohamedstar19/darwish-smart-power/releases/latest/download/darwish-smart-power.apk"
-WEBSITE_PATH = HERE / "website" / "index.html"
+APK_RELEASE_API = "https://api.github.com/repos/mohamedstar19/darwish-smart-power/releases/latest"
+APK_REFRESH_EVERY = 6 * 3600            # look for a newer app build this often
+WEBSITE = HERE / "website"
+# public pages and files of the website (no token): path -> (file in website/, content type)
+STATIC = {
+    "/": ("index.html", "text/html; charset=utf-8"),
+    "/welcome": ("index.html", "text/html; charset=utf-8"),
+    "/panel": ("panel.html", "text/html; charset=utf-8"),
+    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
+    "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
+}
+ICON_TYPES = {".png": "image/png", ".svg": "image/svg+xml"}
 
 
 def find_apk() -> Optional[Path]:
@@ -112,23 +135,36 @@ def onoff_command(outlet: int, on: bool) -> str:
 # --------------------------------------------------------------------------- saved settings
 
 class Store:
-    """Outlet names and timers, kept in a small JSON file next to the script."""
+    """Names, timers, schedules, rooms/icons and settings, kept in a small JSON file."""
 
     def __init__(self, path: Path):
         self.path = path
         self.names: Dict[str, Dict[str, str]] = {}
         self.timers: Dict[str, Dict[str, Any]] = {}
+        self.meta: Dict[str, Dict[str, Any]] = {}
+        self.schedules: List[Dict[str, Any]] = []
+        self.scenes: List[Dict[str, Any]] = []
+        self.pending: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        self.settings: Dict[str, Any] = dict(DEFAULT_SETTINGS)
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             self.names = dict(data.get("names", {}))
             self.timers = dict(data.get("timers", {}))
+            self.meta = dict(data.get("meta", {}))
+            self.schedules = [normalise_schedule(x) for x in data.get("schedules", [])]
+            self.scenes = list(data.get("scenes", []))
+            self.pending = dict(data.get("pending", {}))
+            self.settings.update(data.get("settings", {}))
         except FileNotFoundError:
             pass
         except (OSError, ValueError) as err:
             log("[store] could not read %s (%s), starting empty" % (path, err))
 
     def save(self) -> None:
-        data = json.dumps({"names": self.names, "timers": self.timers}, ensure_ascii=False, indent=1)
+        data = json.dumps({"names": self.names, "timers": self.timers, "meta": self.meta,
+                           "schedules": self.schedules, "scenes": self.scenes, "pending": self.pending,
+                           "settings": self.settings},
+                          ensure_ascii=False, indent=1)
         fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), prefix=".smartpower-")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -167,6 +203,179 @@ class Store:
         if self.timers.pop(self.timer_key(mac, outlet), None) is not None:
             self.save()
 
+    # rooms, icons, favourites
+    def room(self, mac: str) -> Optional[str]:
+        return self.meta.get(mac, {}).get("room") or None
+
+    def outlet_meta(self, mac: str, outlet: int) -> Dict[str, Any]:
+        return self.meta.get(mac, {}).get("outlets", {}).get(str(outlet), {})
+
+    def set_meta(self, mac: str, outlet: int, room: Optional[str] = None,
+                 icon: Optional[str] = None, favorite: Optional[bool] = None) -> None:
+        entry = self.meta.setdefault(mac, {})
+        if room is not None:
+            if room:
+                entry["room"] = room
+            else:
+                entry.pop("room", None)
+        if outlet and (icon is not None or favorite is not None):
+            o = entry.setdefault("outlets", {}).setdefault(str(outlet), {})
+            if icon is not None:
+                o["icon"] = icon
+            if favorite is not None:
+                o["fav"] = favorite
+        self.save()
+
+    # schedules, kind "time": {"id", "strip", "outlets", "on", "time": "HH:MM", "days": [0..6 = Mon..Sun], "enabled"}
+    #            kind "cycle": {"id", "strip", "outlets", "on_minutes", "off_minutes", "started_at", "enabled"}
+    def save_schedule(self, sched: Dict[str, Any]) -> None:
+        self.schedules = [s for s in self.schedules if s.get("id") != sched["id"]] + [sched]
+        self.schedules.sort(key=lambda s: (s.get("kind") != "time", s.get("time", ""), s["strip"]))
+        self.save()
+
+    def delete_schedule(self, sched_id: str) -> bool:
+        before = len(self.schedules)
+        self.schedules = [s for s in self.schedules if s.get("id") != sched_id]
+        if len(self.schedules) != before:
+            self.save()
+            return True
+        return False
+
+    # PIN locks: meta[mac]["pin"] = "salt$sha256(salt + pin)"
+    def locked(self, mac: str) -> bool:
+        return bool(self.meta.get(mac, {}).get("pin"))
+
+    def pin_ok(self, mac: str, pin: str) -> bool:
+        stored = self.meta.get(mac, {}).get("pin", "")
+        salt, _, digest = stored.partition("$")
+        return bool(stored) and hmac.compare_digest(hashlib.sha256((salt + pin).encode()).hexdigest(), digest)
+
+    def set_pin(self, mac: str, pin: str) -> None:
+        entry = self.meta.setdefault(mac, {})
+        if pin:
+            salt = os.urandom(8).hex()
+            entry["pin"] = salt + "$" + hashlib.sha256((salt + pin).encode()).hexdigest()
+        else:
+            entry.pop("pin", None)
+        self.save()
+
+    # commands waiting for an offline strip: pending[mac][outlet] = {"on", "at"}
+    def queue(self, mac: str, outlets: List[int], on: bool, now: float) -> None:
+        waiting = self.pending.setdefault(mac, {})
+        for n in outlets:
+            waiting[str(n)] = {"on": on, "at": int(now)}
+        self.save()
+
+    def take_pending(self, mac: str, now: float) -> Dict[int, bool]:
+        waiting = self.pending.pop(mac, {})
+        if waiting:
+            self.save()
+        return {int(n): bool(c["on"]) for n, c in waiting.items() if now - c.get("at", 0) <= QUEUE_TTL}
+
+    # scenes: {"id", "name", "icon", "actions": [{"strip", "outlet", "on"}]}
+    def save_scene(self, scene: Dict[str, Any]) -> None:
+        self.scenes = [x for x in self.scenes if x.get("id") != scene["id"]] + [scene]
+        self.save()
+
+    def delete_scene(self, scene_id: str) -> bool:
+        before = len(self.scenes)
+        self.scenes = [x for x in self.scenes if x.get("id") != scene_id]
+        if len(self.scenes) != before:
+            self.save()
+            return True
+        return False
+
+
+def normalise_schedule(sched: Dict[str, Any]) -> Dict[str, Any]:
+    """Older files stored one "outlet" per schedule; now it is a list."""
+    sched = dict(sched)
+    if "outlets" not in sched:
+        sched["outlets"] = [int(sched.pop("outlet", 0))]
+    sched.setdefault("kind", "time")
+    return sched
+
+
+def outlet_list(req: Dict[str, Any]) -> List[int]:
+    """"outlets": [1, 3] or "outlet": 2; 0 anywhere means all four."""
+    raw = req.get("outlets")
+    if raw is None:
+        raw = [req.get("outlet", 0)]
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("outlets must be a non-empty list")
+    outlets = sorted({int(n) for n in raw})
+    if any(n != 0 and n not in OUTLETS for n in outlets):
+        raise ValueError("outlets must be 0 (all) or 1-4")
+    return [0] if 0 in outlets else outlets
+
+
+# --------------------------------------------------------------------------- energy history + alerts
+
+class History:
+    """Hourly energy per outlet and the alert log, in a small SQLite file.
+
+    The strip reports a running energy counter per outlet (Wh). Each new reading adds the
+    difference to the current hour, so energy used while this server was down is still
+    counted (it lands in the hour the server comes back).
+    """
+
+    MAX_STEP_WH = 5000          # ignore impossible jumps (garbage readings)
+
+    def __init__(self, path: Path):
+        self.db = sqlite3.connect(str(path))
+        self.db.executescript("""
+            CREATE TABLE IF NOT EXISTS energy (mac TEXT, outlet INTEGER, hour INTEGER, wh REAL,
+                                               PRIMARY KEY (mac, outlet, hour));
+            CREATE TABLE IF NOT EXISTS counters (mac TEXT, outlet INTEGER, wh REAL,
+                                                 PRIMARY KEY (mac, outlet));
+            CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER,
+                                               kind TEXT, mac TEXT, outlet INTEGER, value REAL);
+        """)
+        self.counters = {(m, o): wh for m, o, wh in self.db.execute("SELECT mac, outlet, wh FROM counters")}
+
+    def record(self, mac: str, counters_wh: Dict[int, float], now: Optional[float] = None) -> None:
+        now = time.time() if now is None else now
+        hour = int(now // 3600 * 3600)
+        for outlet, wh in counters_wh.items():
+            last = self.counters.get((mac, outlet))
+            self.counters[(mac, outlet)] = wh
+            self.db.execute("INSERT OR REPLACE INTO counters VALUES (?, ?, ?)", (mac, outlet, wh))
+            if last is None:
+                continue
+            step = wh - last if wh >= last else wh          # a smaller value means the counter was reset
+            if 0 < step <= self.MAX_STEP_WH:
+                self.db.execute("INSERT INTO energy VALUES (?, ?, ?, ?) ON CONFLICT (mac, outlet, hour) "
+                                "DO UPDATE SET wh = wh + excluded.wh", (mac, outlet, hour, step))
+        self.db.commit()
+
+    def rows_since(self, start: float, mac: Optional[str] = None) -> List[Tuple[str, int, int, float]]:
+        sql = "SELECT mac, outlet, hour, wh FROM energy WHERE hour >= ?"
+        args: List[Any] = [int(start)]
+        if mac:
+            sql += " AND mac = ?"
+            args.append(mac)
+        return list(self.db.execute(sql, args))
+
+    def add_event(self, kind: str, mac: str, outlet: int = 0, value: float = 0.0,
+                  now: Optional[float] = None) -> None:
+        now = time.time() if now is None else now
+        self.db.execute("INSERT INTO events (ts, kind, mac, outlet, value) VALUES (?, ?, ?, ?, ?)",
+                        (int(now), kind, mac, outlet, value))
+        self.db.execute("DELETE FROM events WHERE id <= (SELECT MAX(id) FROM events) - ?", (MAX_EVENTS,))
+        self.db.commit()
+
+    def events_after(self, after: int, limit: int = 100) -> List[Dict[str, Any]]:
+        rows = self.db.execute("SELECT id, ts, kind, mac, outlet, value FROM events WHERE id > ? "
+                               "ORDER BY id DESC LIMIT ?", (after, limit))
+        return [{"id": i, "ts": ts, "kind": k, "strip": m, "outlet": o, "value": v} for i, ts, k, m, o, v in rows]
+
+    def last_event_id(self) -> int:
+        return self.db.execute("SELECT COALESCE(MAX(id), 0) FROM events").fetchone()[0]
+
+
+def local_midnight(now: float, days_back: int = 0) -> float:
+    day = datetime.date.fromtimestamp(now) - datetime.timedelta(days=days_back)
+    return time.mktime(day.timetuple())
+
 
 # --------------------------------------------------------------------------- strips
 
@@ -195,12 +404,17 @@ class Strip:
     def online(self) -> bool:
         return self.link is not None and not self.link.closed
 
-    def to_json(self, store: Store) -> Dict[str, Any]:
+    def to_json(self, store: Store, today: Optional[Dict[Tuple[str, int], float]] = None) -> Dict[str, Any]:
         watts = round(sum(o.watts for o in self.outlets.values()), 2)
         all_timer = store.timer(self.mac, 0)
+        today = today or {}
         return {
             "id": self.mac,
             "name": store.name(self.mac, 0),
+            "room": store.room(self.mac),
+            "locked": store.locked(self.mac),
+            "pending": {n: c["on"] for n, c in store.pending.get(self.mac, {}).items()},
+            "today_kwh": round(sum(today.get((self.mac, n), 0.0) for n in OUTLETS) / 1000.0, 3),
             "model": self.model,
             "fw": self.fw,
             "address": self.address,
@@ -221,6 +435,9 @@ class Strip:
                     "kwh": o.kwh,
                     "temp_c": o.temp_c,
                     "timer": store.timer(self.mac, o.index),
+                    "icon": store.outlet_meta(self.mac, o.index).get("icon", "plug"),
+                    "favorite": bool(store.outlet_meta(self.mac, o.index).get("fav", False)),
+                    "today_kwh": round(today.get((self.mac, o.index), 0.0) / 1000.0, 3),
                 }
                 for o in self.outlets.values()
             ],
@@ -290,7 +507,7 @@ class StripLink:
         boot = parse_bootinfo(line)
         if boot:
             self.strip = self.hub.attach(self, boot)
-            asyncio.ensure_future(self.read_state())
+            asyncio.ensure_future(self.hub.came_online(self))
             return
         strip = self.strip
         if strip is None:
@@ -303,6 +520,7 @@ class StripLink:
                 for n, r in readings.items():
                     o = strip.outlets[n]
                     o.on, o.watts, o.kwh, o.temp_c = r["on"], r["watts"], r["kwh"], r["temp_c"]
+                self.hub.record_energy(strip)
                 for w in self.state_waiters:
                     if not w.done():
                         w.set_result(True)
@@ -348,9 +566,15 @@ class StripLink:
 
 
 class Hub:
-    def __init__(self, store: Store):
+    def __init__(self, store: Store, history: History):
         self.store = store
+        self.history = history
         self.strips: Dict[str, Strip] = {}
+        self.alerted_offline: Dict[str, bool] = {}
+        self.last_alert: Dict[Tuple[str, str, int], float] = {}
+        self.schedule_fired: Dict[str, str] = {}
+        self.cycle_phase: Dict[str, bool] = {}
+        self.pin_failures: Dict[str, Tuple[int, float]] = {}
 
     @staticmethod
     def label(strip: Strip) -> str:
@@ -376,42 +600,397 @@ class Hub:
     async def accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         await StripLink(self, reader, writer).run()
 
+    async def came_online(self, link: "StripLink") -> None:
+        """Read the state, then run whatever was asked while the strip was offline."""
+        await link.read_state()
+        strip = link.strip
+        if strip is None:
+            return
+        queued = self.store.take_pending(strip.mac, time.time())
+        for on in (True, False):
+            outlets = [n for n, want in queued.items() if want == on]
+            if outlets and not link.closed:
+                targets = list(OUTLETS) if 0 in outlets else outlets
+                ok = await link.switch(targets, on)
+                log("[queue] %s outlets %s -> %s (%s)" % (self.label(strip), targets, "on" if on else "off",
+                                                          "done" if ok else "not confirmed"))
+
+    def check_pin(self, strip: Strip, pin: Any) -> Optional[Tuple[int, Dict[str, Any]]]:
+        """None when the strip is not locked or the PIN is right, else the error reply."""
+        if not self.store.locked(strip.mac):
+            return None
+        tries, since = self.pin_failures.get(strip.mac, (0, 0.0))
+        if tries >= PIN_MAX_TRIES and time.time() - since < 60:
+            return 429, {"error": "too many wrong PINs, wait a minute", "locked": True}
+        if pin is not None and self.store.pin_ok(strip.mac, str(pin)):
+            self.pin_failures.pop(strip.mac, None)
+            return None
+        if pin is not None:
+            self.pin_failures[strip.mac] = (tries + 1 if time.time() - since < 60 else 1, time.time())
+            return 403, {"error": "wrong PIN", "locked": True}
+        return 403, {"error": "PIN required", "locked": True}
+
+    def record_energy(self, strip: Strip, now: Optional[float] = None) -> None:
+        try:
+            self.history.record(strip.mac, {o.index: round(o.kwh * 1000) for o in strip.outlets.values()}, now)
+        except sqlite3.Error as err:
+            log("[history] could not record: %s" % err)
+
+    def strip_json(self, strip: Strip) -> Dict[str, Any]:
+        return strip.to_json(self.store, self.today_by_outlet())
+
+    def today_by_outlet(self, now: Optional[float] = None) -> Dict[Tuple[str, int], float]:
+        totals: Dict[Tuple[str, int], float] = {}
+        for mac, outlet, _, wh in self.history.rows_since(local_midnight(time.time() if now is None else now)):
+            totals[(mac, outlet)] = totals.get((mac, outlet), 0.0) + wh
+        return totals
+
+    def cost(self, kwh: float) -> float:
+        return round(kwh * float(self.store.settings.get("price_kwh", 0)), 2)
+
     # ---- used by the web side (always on the event loop)
 
-    async def snapshot(self) -> Dict[str, Any]:
-        return {"strips": [s.to_json(self.store) for s in self.strips.values()]}
+    async def snapshot(self, now: Optional[float] = None) -> Dict[str, Any]:
+        now = time.time() if now is None else now
+        today = self.today_by_outlet(now)
+        midnight = local_midnight(now)
+        hours = [0.0] * 24
+        for _, _, hour, wh in self.history.rows_since(midnight):
+            index = int((hour - midnight) // 3600)
+            if 0 <= index < 24:
+                hours[index] += wh / 1000.0
+        month_start = time.mktime(datetime.date.fromtimestamp(now).replace(day=1).timetuple())
+        month_kwh = sum(wh for *_, wh in self.history.rows_since(month_start)) / 1000.0
+        today_kwh = sum(today.values()) / 1000.0
+        strips = sorted(self.strips.values(), key=lambda s: ((self.store.room(s.mac) or "~").lower(), s.mac))
+        return {
+            "strips": [s.to_json(self.store, today) for s in strips],
+            "schedules": self.schedules_json(now),
+            "scenes": self.store.scenes,
+            "settings": self.store.settings,
+            "today": {"kwh": round(today_kwh, 3), "cost": self.cost(today_kwh),
+                      "hours": [round(h, 3) for h in hours]},
+            "month": {"kwh": round(month_kwh, 3), "cost": self.cost(month_kwh)},
+            "last_event": self.history.last_event_id(),
+        }
+
+    async def history_report(self, rng: str, strip_id: Optional[str] = None,
+                             now: Optional[float] = None) -> Tuple[int, Dict[str, Any]]:
+        now = time.time() if now is None else now
+        mac = None
+        if strip_id:
+            strip = self.find(strip_id)
+            if strip is None:
+                return 404, {"error": "unknown strip"}
+            mac = strip.mac
+        if rng == "day":
+            start = local_midnight(now)
+            labels = [int(start + h * 3600) for h in range(24)]
+        elif rng in ("week", "month"):
+            days = 7 if rng == "week" else 30
+            start = local_midnight(now, days - 1)
+            labels = [int(local_midnight(now, days - 1 - d)) for d in range(days)]
+        else:
+            return 400, {"error": "range must be day, week or month"}
+        buckets = [0.0] * len(labels)
+        by_outlet: Dict[Tuple[str, int], float] = {}
+        first_day = datetime.date.fromtimestamp(start)
+        for m, outlet, hour, wh in self.history.rows_since(start, mac):
+            if rng == "day":
+                index = int((hour - start) // 3600)
+            else:
+                index = (datetime.date.fromtimestamp(hour) - first_day).days
+            if 0 <= index < len(buckets):
+                buckets[index] += wh / 1000.0
+            by_outlet[(m, outlet)] = by_outlet.get((m, outlet), 0.0) + wh / 1000.0
+        total = sum(buckets)
+        return 200, {
+            "range": rng,
+            "buckets": [{"t": t, "kwh": round(v, 3)} for t, v in zip(labels, buckets)],
+            "total_kwh": round(total, 3),
+            "cost": self.cost(total),
+            "currency": self.store.settings.get("currency", "EGP"),
+            "price_kwh": self.store.settings.get("price_kwh", 0),
+            "by_outlet": [{"strip": m, "outlet": o, "kwh": round(v, 3), "cost": self.cost(v)}
+                          for (m, o), v in sorted(by_outlet.items(), key=lambda kv: -kv[1])],
+        }
+
+    async def events(self, after: int) -> Dict[str, Any]:
+        return {"events": self.history.events_after(after), "last_id": self.history.last_event_id()}
 
     def find(self, strip_id: Any) -> Optional[Strip]:
         return self.strips.get(str(strip_id).upper())
 
-    async def switch(self, strip_id: Any, outlet: int, on: bool) -> Tuple[int, Dict[str, Any]]:
+    async def switch(self, strip_id: Any, outlet: int, on: bool, outlets: Optional[List[int]] = None,
+                     pin: Any = None, internal: bool = False) -> Tuple[int, Dict[str, Any]]:
+        """Switch one outlet, several ([outlets]) or all (0). Timers, schedules and scenes the owner
+        set up run as [internal] and skip the PIN. An offline strip gets the command queued."""
         strip = self.find(strip_id)
         if strip is None:
             return 404, {"error": "unknown strip"}
+        if not internal:
+            denied = self.check_pin(strip, pin)
+            if denied:
+                return denied
+        wanted = outlets if outlets is not None else [outlet]
+        targets = list(OUTLETS) if 0 in wanted else wanted
         if not strip.online or strip.link is None:
-            return 503, {"error": "strip offline"}
-        targets = list(OUTLETS) if outlet == 0 else [outlet]
+            self.store.queue(strip.mac, [0] if 0 in wanted else targets, on, time.time())
+            return 202, {"ok": True, "queued": True, "confirmed": False, "strip": self.strip_json(strip)}
         confirmed = await strip.link.switch(targets, on)
-        return 200, {"ok": True, "confirmed": confirmed, "strip": strip.to_json(self.store)}
+        return 200, {"ok": True, "confirmed": confirmed, "strip": self.strip_json(strip)}
+
+    async def set_lock(self, strip_id: Any, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        strip = self.find(strip_id)
+        if strip is None:
+            return 404, {"error": "unknown strip"}
+        if self.store.locked(strip.mac):
+            denied = self.check_pin(strip, req.get("old_pin"))
+            if denied:
+                return denied
+        pin = str(req.get("pin") or "")
+        if pin and not (pin.isdigit() and 4 <= len(pin) <= 8):
+            return 400, {"error": "the PIN must be 4 to 8 digits"}
+        self.store.set_pin(strip.mac, pin)
+        return 200, {"ok": True, "strip": self.strip_json(strip)}
 
     async def rename(self, strip_id: Any, outlet: int, name: str) -> Tuple[int, Dict[str, Any]]:
         strip = self.find(strip_id)
         if strip is None:
             return 404, {"error": "unknown strip"}
         self.store.rename(strip.mac, outlet, name)
-        return 200, {"ok": True, "strip": strip.to_json(self.store)}
+        return 200, {"ok": True, "strip": self.strip_json(strip)}
 
-    async def set_timer(self, strip_id: Any, outlet: int, minutes: float, on: bool) -> Tuple[int, Dict[str, Any]]:
+    async def set_timer(self, strip_id: Any, outlet: int, minutes: float, on: bool,
+                        outlets: Optional[List[int]] = None, pin: Any = None) -> Tuple[int, Dict[str, Any]]:
         strip = self.find(strip_id)
         if strip is None:
             return 404, {"error": "unknown strip"}
-        if minutes <= 0:
-            self.store.clear_timer(strip.mac, outlet)
+        denied = self.check_pin(strip, pin)
+        if denied:
+            return denied
+        for n in (outlets if outlets is not None else [outlet]):
+            if minutes <= 0:
+                self.store.clear_timer(strip.mac, n)
+            else:
+                self.store.set_timer(strip.mac, n, on, int(time.time() + minutes * 60))
+        return 200, {"ok": True, "strip": self.strip_json(strip)}
+
+    async def set_meta(self, strip_id: Any, outlet: int, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        strip = self.find(strip_id)
+        if strip is None:
+            return 404, {"error": "unknown strip"}
+        icon = req.get("icon")
+        if icon is not None and icon not in ICONS:
+            return 400, {"error": "unknown icon"}
+        room = req.get("room")
+        if room is not None:
+            room = str(room).strip()[:30]
+        favorite = req.get("favorite")
+        self.store.set_meta(strip.mac, outlet, room=room, icon=icon,
+                            favorite=None if favorite is None else bool(favorite))
+        return 200, {"ok": True, "strip": self.strip_json(strip)}
+
+    async def save_schedule(self, req: Dict[str, Any], now: Optional[float] = None) -> Tuple[int, Dict[str, Any]]:
+        now = time.time() if now is None else now
+        strip = self.find(req.get("strip", ""))
+        if strip is None:
+            return 404, {"error": "unknown strip"}
+        denied = self.check_pin(strip, req.get("pin"))
+        if denied:
+            return denied
+        try:
+            outlets = outlet_list(req)
+        except (TypeError, ValueError) as err:
+            return 400, {"error": str(err)}
+        kind = req.get("kind", "time")
+        sched: Dict[str, Any] = {"id": str(req.get("id") or os.urandom(4).hex()), "strip": strip.mac,
+                                 "outlets": outlets, "kind": kind, "enabled": bool(req.get("enabled", True))}
+        if kind == "time":
+            hhmm = str(req.get("time", ""))
+            try:
+                hh, mm = (int(x) for x in hhmm.split(":"))
+                if not (0 <= hh < 24 and 0 <= mm < 60):
+                    raise ValueError
+            except ValueError:
+                return 400, {"error": "time must be HH:MM"}
+            days = sorted({int(d) for d in req.get("days", []) if str(d).isdigit() and 0 <= int(d) <= 6})
+            if not days:
+                return 400, {"error": "pick at least one day (0 = Monday ... 6 = Sunday)"}
+            sched.update({"on": bool(req.get("on")), "time": "%02d:%02d" % (hh, mm), "days": days})
+        elif kind == "cycle":
+            try:
+                on_m, off_m = int(req.get("on_minutes", 0)), int(req.get("off_minutes", 0))
+            except (TypeError, ValueError):
+                return 400, {"error": "on_minutes and off_minutes must be numbers"}
+            if not (1 <= on_m <= 1440 and 1 <= off_m <= 1440):
+                return 400, {"error": "on and off times must be 1 to 1440 minutes"}
+            sched.update({"on_minutes": on_m, "off_minutes": off_m, "started_at": int(now)})
+            self.cycle_phase.pop(sched["id"], None)           # (re)start from the "on" part
         else:
-            self.store.set_timer(strip.mac, outlet, on, int(time.time() + minutes * 60))
-        return 200, {"ok": True, "strip": strip.to_json(self.store)}
+            return 400, {"error": "kind must be time or cycle"}
+        self.store.save_schedule(sched)
+        return 200, {"ok": True, "schedule": sched, "schedules": self.schedules_json(now)}
+
+    async def delete_schedule(self, sched_id: str, pin: Any = None) -> Tuple[int, Dict[str, Any]]:
+        sched = next((x for x in self.store.schedules if x.get("id") == sched_id), None)
+        if sched is None:
+            return 404, {"error": "unknown schedule"}
+        strip = self.find(sched["strip"])
+        if strip is not None:
+            denied = self.check_pin(strip, pin)
+            if denied:
+                return denied
+        self.store.delete_schedule(sched_id)
+        self.cycle_phase.pop(sched_id, None)
+        return 200, {"ok": True, "schedules": self.schedules_json()}
+
+    @staticmethod
+    def cycle_state(sched: Dict[str, Any], now: float) -> Tuple[bool, float]:
+        """(should the outlets be on now, when the next switch happens)."""
+        on_s, off_s = sched["on_minutes"] * 60, sched["off_minutes"] * 60
+        into = (now - sched["started_at"]) % (on_s + off_s)
+        return (True, now + on_s - into) if into < on_s else (False, now + on_s + off_s - into)
+
+    def schedules_json(self, now: Optional[float] = None) -> List[Dict[str, Any]]:
+        now = time.time() if now is None else now
+        out = []
+        for sched in self.store.schedules:
+            item = dict(sched)
+            if sched.get("kind") == "cycle" and sched.get("enabled", True):
+                on, change = self.cycle_state(sched, now)
+                item.update({"phase_on": on, "next_change": int(change)})
+            out.append(item)
+        return out
+
+    # ---- scenes
+
+    async def save_scene(self, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        name = str(req.get("name") or "").strip()[:30]
+        if not name:
+            return 400, {"error": "the scene needs a name"}
+        actions = []
+        for a in req.get("actions", [])[:64]:
+            strip = self.find(a.get("strip", "")) if isinstance(a, dict) else None
+            if strip is None:
+                return 400, {"error": "unknown strip in the scene"}
+            try:
+                outlet = int(a.get("outlet", 0))
+            except (TypeError, ValueError):
+                return 400, {"error": "bad outlet in the scene"}
+            if outlet != 0 and outlet not in OUTLETS:
+                return 400, {"error": "outlets must be 0 (all) or 1-4"}
+            actions.append({"strip": strip.mac, "outlet": outlet, "on": bool(a.get("on"))})
+        if not actions:
+            return 400, {"error": "the scene needs at least one outlet"}
+        scene = {"id": str(req.get("id") or os.urandom(4).hex()), "name": name,
+                 "icon": str(req.get("icon") or "✨")[:4], "actions": actions}
+        self.store.save_scene(scene)
+        return 200, {"ok": True, "scene": scene, "scenes": self.store.scenes}
+
+    async def delete_scene(self, scene_id: str) -> Tuple[int, Dict[str, Any]]:
+        if not self.store.delete_scene(scene_id):
+            return 404, {"error": "unknown scene"}
+        return 200, {"ok": True, "scenes": self.store.scenes}
+
+    async def run_scene(self, scene_id: str, pin: Any = None) -> Tuple[int, Dict[str, Any]]:
+        scene = next((x for x in self.store.scenes if x.get("id") == scene_id), None)
+        if scene is None:
+            return 404, {"error": "unknown scene"}
+        groups: Dict[Tuple[str, bool], List[int]] = {}
+        for a in scene["actions"]:
+            groups.setdefault((a["strip"], bool(a["on"])), []).append(int(a["outlet"]))
+        for mac, _ in groups:                         # check every PIN before switching anything
+            strip = self.find(mac)
+            if strip is not None:
+                denied = self.check_pin(strip, pin)
+                if denied:
+                    return denied
+        results = []
+        for (mac, on), outlets in groups.items():
+            code, body = await self.switch(mac, 0, on, outlets=outlets, internal=True)
+            results.append({"strip": mac, "on": on, "status": code,
+                            "queued": bool(body.get("queued")), "confirmed": bool(body.get("confirmed"))})
+        return 200, {"ok": True, "results": results}
+
+    async def update_settings(self, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        new = dict(self.store.settings)
+        limits = {"price_kwh": (0, 1000), "max_temp_c": (20, 150), "max_watts": (50, 100000)}
+        for key, (low, high) in limits.items():
+            if key in req:
+                value = float(req[key])
+                if not low <= value <= high:
+                    return 400, {"error": "%s must be between %s and %s" % (key, low, high)}
+                new[key] = value
+        if "currency" in req:
+            new["currency"] = str(req["currency"]).strip()[:8] or "EGP"
+        self.store.settings = new
+        self.store.save()
+        return 200, {"ok": True, "settings": new}
 
     # ---- background work
+
+    def check_alerts(self, now: Optional[float] = None) -> None:
+        now = time.time() if now is None else now
+        settings = self.store.settings
+        for strip in self.strips.values():
+            mac = strip.mac
+            if not strip.online:
+                if strip.last_seen and now - strip.last_seen >= OFFLINE_ALERT_AFTER \
+                        and not self.alerted_offline.get(mac):
+                    self.alerted_offline[mac] = True
+                    self.history.add_event("offline", mac, now=now)
+                continue
+            if self.alerted_offline.pop(mac, False):
+                self.history.add_event("online", mac, now=now)
+            for o in strip.outlets.values():
+                if o.temp_c is not None and o.temp_c >= float(settings.get("max_temp_c", 60)):
+                    self.alert_once("temp", mac, o.index, o.temp_c, now)
+            watts = sum(o.watts for o in strip.outlets.values())
+            if watts >= float(settings.get("max_watts", 3000)):
+                self.alert_once("power", mac, 0, watts, now)
+
+    def alert_once(self, kind: str, mac: str, outlet: int, value: float, now: float) -> None:
+        key = (kind, mac, outlet)
+        if now - self.last_alert.get(key, 0.0) >= ALERT_REPEAT[kind]:
+            self.last_alert[key] = now
+            self.history.add_event(kind, mac, outlet, round(value, 1), now=now)
+
+    async def run_due_schedules(self, now: Optional[float] = None) -> None:
+        now = time.time() if now is None else now
+        lt = time.localtime(now)
+        hhmm = "%02d:%02d" % (lt.tm_hour, lt.tm_min)
+        minute_key = time.strftime("%Y-%m-%d %H:%M", lt)
+        for sched in list(self.store.schedules):
+            if not sched.get("enabled", True):
+                continue
+            if sched.get("kind") == "cycle":
+                on, _ = self.cycle_state(sched, now)
+                if self.cycle_phase.get(sched["id"]) == on:
+                    continue
+                self.cycle_phase[sched["id"]] = on
+                code, body = await self.switch(sched["strip"], 0, on, outlets=sched["outlets"], internal=True)
+                log("[cycle] %s %s -> %s (%s)" % (sched["strip"][-6:], sched["outlets"], "on" if on else "off",
+                                                  "queued" if body.get("queued") else body.get("error", "sent")))
+                continue
+            if sched.get("time") != hhmm or lt.tm_wday not in sched.get("days", []):
+                continue
+            if self.schedule_fired.get(sched["id"]) == minute_key:
+                continue
+            self.schedule_fired[sched["id"]] = minute_key
+            code, body = await self.switch(sched["strip"], 0, bool(sched["on"]), outlets=sched["outlets"], internal=True)
+            log("[schedule] %s %s/%s -> %s (%s)" % (hhmm, sched["strip"][-6:], sched["outlets"],
+                                                    "on" if sched["on"] else "off",
+                                                    "done" if body.get("confirmed") else
+                                                    "queued" if body.get("queued") else body.get("error", "not confirmed")))
+
+    async def schedules_forever(self) -> None:
+        while True:
+            try:
+                await self.run_due_schedules()
+            except Exception as err:
+                log("[schedule] error: %r" % (err,))
+            await asyncio.sleep(10)
 
     async def poll_forever(self) -> None:
         last_diag = 0.0
@@ -433,6 +1012,10 @@ class Hub:
                 except (ConnectionError, OSError) as err:
                     log("[strip] %s write failed: %s" % (self.label(strip), err))
                     link.close()
+            try:
+                self.check_alerts()
+            except sqlite3.Error as err:
+                log("[alerts] %s" % err)
             await asyncio.sleep(POLL_EVERY)
 
     async def run_due_timers(self, now: Optional[float] = None) -> None:
@@ -448,7 +1031,7 @@ class Hub:
                     self.store.clear_timer(mac, int(outlet))
                 continue
             self.store.clear_timer(mac, int(outlet))
-            code, body = await self.switch(mac, int(outlet), bool(timer.get("on")))
+            code, body = await self.switch(mac, int(outlet), bool(timer.get("on")), internal=True)
             log("[timer] %s -> %s (%s)" % (key, "on" if timer.get("on") else "off",
                                            "done" if code == 200 and body.get("confirmed") else "not confirmed"))
 
@@ -463,119 +1046,6 @@ class Hub:
 
 # --------------------------------------------------------------------------- web UI + API
 
-PAGE = r"""<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Darwish Smart Power</title>
-<style>
-:root{--bg:#f4f1ec;--panel:#fff;--ink:#1d1b19;--soft:#6f6a63;--line:#e4ded5;--accent:#d9480f;--on:#2b8a3e;--onbg:#e6f4ea;--warn:#c92a2a}
-@media (prefers-color-scheme:dark){:root{--bg:#141210;--panel:#1f1c19;--ink:#f1ece6;--soft:#a39b91;--line:#332e29;--accent:#ff8c42;--on:#69db7c;--onbg:#1d3324;--warn:#ff8787}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px;max-width:760px;margin:auto}
-header h1{margin:0;font-size:19px}header h1 span{color:var(--accent)}
-.lang{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:6px 14px;font:inherit;cursor:pointer}
-main{max-width:760px;margin:auto;padding:0 16px 32px}
-.strip{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:16px}
-.strip.offline{opacity:.6}
-.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
-.title{font-weight:650;font-size:17px;cursor:pointer}
-.badge{display:inline-block;font-size:12px;border-radius:999px;padding:2px 10px;margin-inline-start:6px;background:var(--line);color:var(--soft)}
-.badge.on{background:var(--onbg);color:var(--on)}
-.big{font-size:34px;font-weight:700;letter-spacing:-.5px}.big small{font-size:15px;color:var(--soft);font-weight:500}
-.stats{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 14px}
-.stats span{background:var(--bg);border-radius:8px;padding:3px 9px;font-size:13px;color:var(--soft)}
-.row{display:flex;gap:8px;flex-wrap:wrap}
-.btn{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:8px 14px;font:inherit;cursor:pointer}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px}
-.outlet{border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--bg)}
-.outlet.on{background:var(--onbg);border-color:var(--on)}
-.oname{font-weight:600;cursor:pointer;overflow-wrap:anywhere}
-.ometa{font-size:12px;color:var(--soft);margin:4px 0 10px}
-.toggle{width:100%;border:0;border-radius:10px;padding:10px;font:inherit;font-weight:600;cursor:pointer;background:var(--line);color:var(--ink)}
-.outlet.on .toggle{background:var(--on);color:#fff}
-.timer{font-size:12px;color:var(--accent);margin-top:6px;min-height:1em}
-.link{background:none;border:0;color:var(--soft);font:inherit;font-size:12px;cursor:pointer;padding:6px 0 0;text-decoration:underline}
-.empty{background:var(--panel);border:1px dashed var(--line);border-radius:18px;padding:20px;color:var(--soft)}
-.empty code{background:var(--bg);padding:2px 6px;border-radius:6px;color:var(--ink);overflow-wrap:anywhere}
-.err{color:var(--warn);min-height:1.2em;margin:0 0 10px}
-</style></head>
-<body>
-<header><h1><span>&#9889;</span> Darwish Smart Power</h1><button class="lang" id="lang"></button></header>
-<main><p class="err" id="err"></p><div id="app"></div></main>
-<script>
-const L={
- en:{lang:"العربية",strip:"Power strip",outlet:"Outlet",on:"ON",off:"OFF",online:"online",offline:"offline",
-  allOn:"All on",allOff:"All off",turnOn:"Turn on",turnOff:"Turn off",timer:"Timer",rename:"Rename",
-  renameAsk:"New name (empty = default):",timerAsk:"Minutes until it switches (0 = cancel):",
-  willOff:"Turns off at",willOn:"Turns on at",lastSeen:"last seen",
-  none:"No strip connected yet. Put the strip in setup mode and run:",fail:"Command failed: "},
- ar:{lang:"English",strip:"مشترك الكهرباء",outlet:"مخرج",on:"شغال",off:"مطفي",online:"متصل",offline:"غير متصل",
-  allOn:"تشغيل الكل",allOff:"إطفاء الكل",turnOn:"تشغيل",turnOff:"إطفاء",timer:"مؤقت",rename:"تغيير الاسم",
-  renameAsk:"الاسم الجديد (فارغ = الافتراضي):",timerAsk:"بعد كم دقيقة يتغير؟ (0 = إلغاء):",
-  willOff:"يطفي الساعة",willOn:"يشتغل الساعة",lastSeen:"آخر ظهور",
-  none:"لا يوجد مشترك متصل بعد. حط المشترك في وضع الإعداد وشغّل:",fail:"فشل الأمر: "}};
-let lang=localStorage.getItem("sp-lang")||((navigator.language||"").startsWith("ar")?"ar":"en");
-const token=new URLSearchParams(location.search).get("token")||"";
-let state={strips:[]},busy=false;
-const t=k=>L[lang][k];
-const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const clock=ts=>new Date(ts*1000).toLocaleTimeString(lang==="ar"?"ar-EG":"en-GB",{hour:"2-digit",minute:"2-digit"});
-async function call(path,body){
-  const h={};if(token)h["X-Token"]=token;
-  const opt=body?{method:"POST",headers:{...h,"Content-Type":"application/json"},body:JSON.stringify(body)}:{headers:h};
-  const r=await fetch(path,opt);const j=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(j.error||r.status);return j;
-}
-function timerText(tm){return tm?(tm.on?t("willOn"):t("willOff"))+" "+clock(tm.at):""}
-function render(){
-  document.documentElement.lang=lang;document.documentElement.dir=lang==="ar"?"rtl":"ltr";
-  document.getElementById("lang").textContent=t("lang");
-  const app=document.getElementById("app");
-  if(!state.strips.length){
-    const ip=state.server&&state.server.ip||"SERVER-IP";
-    app.innerHTML=`<div class="empty">${t("none")}<br><br><code>python3 smartpower.py provision --server-ip ${esc(ip)} --ssid WIFI --wifi-password PASSWORD</code></div>`;return;
-  }
-  app.innerHTML=state.strips.map(s=>{
-    const anyOn=s.outlets.some(o=>o.on);
-    const stats=[`${s.kwh} kWh`,s.volts?`${s.volts} V`:"",s.amps!=null?`${s.amps} A`:"",s.rssi!=null?`Wi-Fi ${s.rssi} dBm`:"",
-      s.online?"":`${t("lastSeen")} ${s.last_seen?clock(s.last_seen):"-"}`].filter(Boolean);
-    return `<section class="strip${s.online?"":" offline"}">
-     <div class="top"><div>
-       <div class="title" data-act="rename" data-id="${s.id}" data-n="0">${esc(s.name||t("strip")+" "+s.id.slice(-6))}
-         <span class="badge${s.online?" on":""}">${s.online?t("online"):t("offline")}</span></div>
-       <div class="big"><bdi dir="ltr">${s.watts} <small>W</small></bdi></div></div>
-       <div class="row"><button class="btn primary" data-act="sw" data-id="${s.id}" data-n="0" data-on="1">${t("allOn")}</button>
-       <button class="btn" data-act="sw" data-id="${s.id}" data-n="0" data-on="0">${t("allOff")}</button>
-       <button class="btn" data-act="timer" data-id="${s.id}" data-n="0" data-on="${anyOn?0:1}">${t("timer")}</button></div></div>
-     <div class="stats">${stats.map(x=>`<span><bdi>${esc(x)}</bdi></span>`).join("")}</div>
-     <div class="timer">${timerText(s.timer)}</div>
-     <div class="grid">${s.outlets.map(o=>`<div class="outlet${o.on?" on":""}">
-       <div class="oname" data-act="rename" data-id="${s.id}" data-n="${o.index}">${esc(o.name||t("outlet")+" "+o.index)}</div>
-       <div class="ometa">${o.on?t("on"):t("off")} · <bdi>${o.watts} W</bdi>${o.temp_c!=null?` · <bdi>${o.temp_c}°C</bdi>`:""}</div>
-       <button class="toggle" data-act="sw" data-id="${s.id}" data-n="${o.index}" data-on="${o.on?0:1}">${o.on?t("turnOff"):t("turnOn")}</button>
-       <div class="timer">${timerText(o.timer)}</div>
-       <button class="link" data-act="timer" data-id="${s.id}" data-n="${o.index}" data-on="${o.on?0:1}">${t("timer")}</button>
-     </div>`).join("")}</div></section>`;}).join("");
-}
-async function refresh(){if(busy)return;try{state=await call("api/state");document.getElementById("err").textContent="";render()}catch(e){document.getElementById("err").textContent=t("fail")+e.message}}
-document.getElementById("app").addEventListener("click",async ev=>{
-  const b=ev.target.closest("[data-act]");if(!b)return;
-  const id=b.dataset.id,outlet=+b.dataset.n,on=b.dataset.on==="1";
-  try{
-    if(b.dataset.act==="sw"){busy=true;b.disabled=true;await call("api/switch",{strip:id,outlet,on})}
-    else if(b.dataset.act==="rename"){const n=prompt(t("renameAsk"));if(n===null)return;await call("api/rename",{strip:id,outlet,name:n})}
-    else if(b.dataset.act==="timer"){const m=prompt(t("timerAsk"),"30");if(m===null)return;await call("api/timer",{strip:id,outlet,minutes:+m||0,on})}
-  }catch(e){document.getElementById("err").textContent=t("fail")+e.message}
-  finally{busy=false;refresh()}
-});
-document.getElementById("lang").onclick=()=>{lang=lang==="ar"?"en":"ar";localStorage.setItem("sp-lang",lang);render()};
-refresh();setInterval(refresh,2000);
-</script>
-</body></html>
-"""
 
 
 class WebServer(ThreadingHTTPServer):
@@ -592,7 +1062,6 @@ class WebServer(ThreadingHTTPServer):
 class WebHandler(BaseHTTPRequestHandler):
     server: WebServer
     server_version = "DarwishSmartPower/" + VERSION
-    PUBLIC = ("/smartpower.py", "/app.apk", "/welcome")
 
     def log_message(self, fmt, *args):
         pass
@@ -619,9 +1088,10 @@ class WebHandler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        extra = dict(extra or {})
+        self.send_header("Cache-Control", extra.pop("Cache-Control", "no-store"))
         self.send_header("X-Content-Type-Options", "nosniff")
-        for k, v in (extra or {}).items():
+        for k, v in extra.items():
             self.send_header(k, v)
         self.end_headers()
         if self.command != "HEAD":
@@ -631,8 +1101,8 @@ class WebHandler(BaseHTTPRequestHandler):
         self.reply(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
     def deny(self) -> None:
-        self.reply(401, b"token required\n", "text/plain; charset=utf-8",
-                   {"WWW-Authenticate": 'Basic realm="Darwish Smart Power"'})
+        # no WWW-Authenticate: the panel asks for the password itself (a browser pop-up would get in the way)
+        self.reply_json(401, {"error": "token required"})
 
     def send_file(self, path: Path, ctype: str, filename: str) -> None:
         if not path.is_file():
@@ -640,14 +1110,26 @@ class WebHandler(BaseHTTPRequestHandler):
             return
         self.reply(200, path.read_bytes(), ctype, {"Content-Disposition": 'attachment; filename="%s"' % filename})
 
-    def send_welcome(self) -> None:
-        page = WEBSITE_PATH.read_text(encoding="utf-8") if WEBSITE_PATH.is_file() else None
-        if page is None:
-            self.reply_json(404, {"error": "website/index.html is missing"})
-            return
-        if find_apk():                              # download the app from this server instead of GitHub
-            page = page.replace(APK_RELEASE_URL, "/app.apk")
-        self.reply(200, page.encode("utf-8"), "text/html; charset=utf-8")
+    def send_static(self, path: str) -> bool:
+        """Serve a public website file; False when [path] is not one."""
+        if path.endswith("/") and len(path) > 1:
+            path = path[:-1]
+        if path in STATIC:
+            name, ctype = STATIC[path]
+            target = WEBSITE / name
+        elif re.fullmatch(r"/icons/[a-z0-9-]+\.(png|svg)", path):
+            target = WEBSITE / path.lstrip("/")
+            ctype = ICON_TYPES[target.suffix]
+        else:
+            return False
+        if not target.is_file():
+            self.reply_json(404, {"error": "website file missing: %s" % target.name})
+            return True
+        extra = {"Cache-Control": "no-cache"}
+        if path == "/sw.js":
+            extra["Service-Worker-Allowed"] = "/"
+        self.reply(200, target.read_bytes(), ctype, extra)
+        return True
 
     # ---- routes
 
@@ -659,23 +1141,35 @@ class WebHandler(BaseHTTPRequestHandler):
         if path == "/smartpower.py":                 # public: lets a phone or laptop fetch the provisioner
             self.send_file(Path(__file__).resolve(), "text/x-python", "smartpower.py")
             return
-        if path in ("/welcome", "/welcome/"):        # public: the introduction page with an app download button
-            self.send_welcome()
-            return
         if path == "/app.apk":                      # public: install the Android app from the phone browser
-            self.send_file(find_apk() or APK_CANDIDATES[0], "application/vnd.android.package-archive", "darwish-smart-power.apk")
+            apk = find_apk()
+            if apk:
+                self.send_file(apk, "application/vnd.android.package-archive", "darwish-smart-power.apk")
+            else:                                   # not downloaded yet: send the phone to the GitHub copy
+                self.reply(302, b"", "text/plain", {"Location": APK_RELEASE_URL})
+            return
+        if self.send_static(path):                  # public: website, control panel (asks for the password), PWA files
             return
         if not self.token_ok():
             self.deny()
             return
-        if path in ("/", "/index.html"):
-            self.reply(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
-        elif path == "/api/state":
+        if path == "/api/state":
             snap = self.server.run_on_loop(self.server.hub.snapshot())
             snap["server"] = {"ip": self.server.public_ip, "strip_port": STRIP_PORT, "version": VERSION}
             self.reply_json(200, snap)
         elif path == "/api/health":
             self.reply_json(200, {"ok": True, "app": "darwish-smart-power", "version": VERSION})
+        elif path == "/api/history":
+            query = parse_qs(urlsplit(self.path).query)
+            code, body = self.server.run_on_loop(self.server.hub.history_report(
+                query.get("range", ["day"])[0], query.get("strip", [None])[0]))
+            self.reply_json(code, body)
+        elif path == "/api/events":
+            try:
+                after = int(parse_qs(urlsplit(self.path).query).get("after", ["0"])[0])
+            except ValueError:
+                after = 0
+            self.reply_json(200, self.server.run_on_loop(self.server.hub.events(after)))
         else:
             self.reply_json(404, {"error": "not found"})
 
@@ -695,7 +1189,6 @@ class WebHandler(BaseHTTPRequestHandler):
             req = json.loads(self.rfile.read(length).decode("utf-8"))
             if not isinstance(req, dict):
                 raise ValueError("body must be an object")
-            strip_id = str(req["strip"])
             outlet = int(req.get("outlet", 0))
             if outlet != 0 and outlet not in OUTLETS:
                 raise ValueError("outlet must be 0 (all) or 1-4")
@@ -704,9 +1197,29 @@ class WebHandler(BaseHTTPRequestHandler):
             return
 
         hub = self.server.hub
+        strip_id = str(req.get("strip", ""))
+        pin = req.get("pin")
         try:
-            if path == "/api/switch":
-                code, body = self.server.run_on_loop(hub.switch(strip_id, outlet, bool(req.get("on"))))
+            outlets = outlet_list(req) if "outlets" in req else None
+            if path == "/api/meta":
+                code, body = self.server.run_on_loop(hub.set_meta(strip_id, outlet, req))
+            elif path == "/api/schedules/save":
+                code, body = self.server.run_on_loop(hub.save_schedule(req))
+            elif path == "/api/schedules/delete":
+                code, body = self.server.run_on_loop(hub.delete_schedule(str(req.get("id", "")), pin))
+            elif path == "/api/scenes/save":
+                code, body = self.server.run_on_loop(hub.save_scene(req))
+            elif path == "/api/scenes/delete":
+                code, body = self.server.run_on_loop(hub.delete_scene(str(req.get("id", ""))))
+            elif path == "/api/scenes/run":
+                code, body = self.server.run_on_loop(hub.run_scene(str(req.get("id", "")), pin))
+            elif path == "/api/lock":
+                code, body = self.server.run_on_loop(hub.set_lock(strip_id, req))
+            elif path == "/api/settings":
+                code, body = self.server.run_on_loop(hub.update_settings(req))
+            elif path == "/api/switch":
+                code, body = self.server.run_on_loop(hub.switch(strip_id, outlet, bool(req.get("on")),
+                                                                outlets=outlets, pin=pin))
             elif path == "/api/rename":
                 name = str(req.get("name") or "").strip()[:40]
                 code, body = self.server.run_on_loop(hub.rename(strip_id, outlet, name))
@@ -714,7 +1227,8 @@ class WebHandler(BaseHTTPRequestHandler):
                 minutes = float(req.get("minutes", 0))
                 if not 0 <= minutes <= 7 * 24 * 60:
                     raise ValueError("minutes must be between 0 and 10080")
-                code, body = self.server.run_on_loop(hub.set_timer(strip_id, outlet, minutes, bool(req.get("on"))))
+                code, body = self.server.run_on_loop(hub.set_timer(strip_id, outlet, minutes, bool(req.get("on")),
+                                                                   outlets=outlets, pin=pin))
             else:
                 code, body = 404, {"error": "not found"}
         except (TypeError, ValueError) as err:
@@ -725,6 +1239,48 @@ class WebHandler(BaseHTTPRequestHandler):
 
 
 # --------------------------------------------------------------------------- commands
+
+def refresh_apk() -> None:
+    """Download the newest Android app from the GitHub release if it changed, so phones get it from here."""
+    target = APK_CANDIDATES[0]
+    marker = target.with_name(".apk-version")
+    req = urllib.request.Request(APK_RELEASE_API, headers={"Accept": "application/vnd.github+json",
+                                                           "User-Agent": "darwish-smart-power"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        release = json.loads(r.read())
+    asset = next((a for a in release.get("assets", []) if a.get("name", "").endswith(".apk")), None)
+    if asset is None:
+        return
+    version = "%s %s" % (asset.get("id"), asset.get("updated_at"))
+    if target.is_file() and marker.is_file() and marker.read_text().strip() == version:
+        return
+    fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=".apk-")
+    try:
+        with os.fdopen(fd, "wb") as fh, urllib.request.urlopen(asset["browser_download_url"], timeout=300) as r:
+            while True:
+                chunk = r.read(1 << 16)
+                if not chunk:
+                    break
+                fh.write(chunk)
+        if os.path.getsize(tmp) < 100_000:
+            raise OSError("download too small")
+        os.replace(tmp, str(target))
+        marker.write_text(version)
+        log("[app] downloaded the Android app (%d KB)" % (target.stat().st_size // 1024))
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+async def apk_refresh_forever() -> None:
+    loop = asyncio.get_running_loop()
+    while True:
+        try:
+            await loop.run_in_executor(None, refresh_apk)
+        except Exception as err:                # no internet, GitHub down, disk full: try again later
+            log("[app] could not update the Android app: %s" % (err,))
+        await asyncio.sleep(APK_REFRESH_EVERY)
+
 
 def guess_lan_ip() -> str:
     """The address other machines on this network would use to reach us."""
@@ -738,7 +1294,8 @@ def guess_lan_ip() -> str:
 
 async def serve(args) -> int:
     store = Store(Path(args.data).resolve())
-    hub = Hub(store)
+    history = History(store.path.with_name(store.path.stem + "-history.db"))
+    hub = Hub(store, history)
     strip_server = await asyncio.start_server(hub.accept, args.bind, STRIP_PORT)
     ip = args.public_ip or guess_lan_ip()
     web = WebServer((args.bind, args.web_port), hub, asyncio.get_running_loop(), args.token, ip)
@@ -746,17 +1303,19 @@ async def serve(args) -> int:
 
     url = "http://%s:%d/" % (ip, args.web_port)
     print("Darwish Smart Power %s" % VERSION)
-    print("  web page / app   %s%s" % (url, "?token=<TOKEN>" if args.token else ""))
+    print("  website          %s" % url)
+    print("  control panel    %spanel   (installable app, asks for the password)" % url)
     print("  strip port       TCP %d" % STRIP_PORT)
     print("  security         %s" % ("token required" if args.token else "NO TOKEN - only use on a home network you trust"))
     print("  saved settings   %s" % store.path)
-    if find_apk():
-        print("  Android app      %sapp.apk" % url)
-    print("  intro page       %swelcome" % url)
+    print("  Android app      %sapp.apk" % url)
     print("  provision with   python3 smartpower.py provision --server-ip %s --ssid WIFI --wifi-password PASS" % ip)
     print("  Ctrl+C to stop", flush=True)
     async with strip_server:
-        await asyncio.gather(hub.poll_forever(), hub.timers_forever())
+        tasks = [hub.poll_forever(), hub.timers_forever(), hub.schedules_forever()]
+        if not args.no_app_download:
+            tasks.append(apk_refresh_forever())
+        await asyncio.gather(*tasks)
     return 0
 
 
@@ -819,11 +1378,12 @@ def provision(args) -> int:
 
 async def selftest() -> None:
     tmpdir = tempfile.mkdtemp(prefix="smartpower-test-")
-    hub = Hub(Store(Path(tmpdir) / "data.json"))
+    hub = Hub(Store(Path(tmpdir) / "data.json"), History(Path(tmpdir) / "history.db"))
     srv = await asyncio.start_server(hub.accept, "127.0.0.1", 0)
     port = srv.sockets[0].getsockname()[1]
     reader, writer = await asyncio.open_connection("127.0.0.1", port)
     relays = {1: False, 2: True, 3: False, 4: False}
+    energy_wh = {n: 1500 * n for n in (1, 2, 3, 4, 5)}
     sent: List[str] = []
 
     def getinfo() -> str:
@@ -831,10 +1391,10 @@ async def selftest() -> None:
         for n in (1, 2, 3, 4, 5):
             on = relays.get(n, any(relays.values()))
             mw = 60000 if (n == 2 and on) else 0
-            blocks.append("%d:%d;%s;%d;0;0;%d;%08X;00000000;00000000;0;00;%d" % (n, n * 10, "on" if on else "off", on, mw, 1500 * n, 30 + n))
+            blocks.append("%d:%d;%s;%d;0;0;%d;%08X;00000000;00000000;0;00;%d" % (n, n * 10, "on" if on else "off", on, mw, energy_wh[n], 30 + n))
         return "up:getinfo:" + ":".join(blocks)
 
-    async def fake_strip() -> None:
+    async def fake_strip(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         while True:
             raw = await reader.readline()
             if not raw:
@@ -849,7 +1409,7 @@ async def selftest() -> None:
                 writer.write(line.encode() + b"\r\n")
             await writer.drain()
 
-    strip_task = asyncio.ensure_future(fake_strip())
+    strip_task = asyncio.ensure_future(fake_strip(reader, writer))
     writer.write(b"up:bootinfo:LGU+-TAP-HW002;a1b2c3d4e5f6;a1b2c3d4e5f7;0.1.54-1.0.66;connect\r\n")
     writer.write(b"up:power_report:1:229800\r\nup:power_report:2:270\r\nup:query:-61\r\n")
     await writer.drain()
@@ -879,6 +1439,95 @@ async def selftest() -> None:
     await hub.run_due_timers(now=time.time() + 120)
     assert not relays[2] and hub.store.timer("A1B2C3D4E5F6", 2) is None
 
+    # energy history: the strip's counters grow, the difference lands in the current hour
+    energy_wh[2] += 50
+    energy_wh[3] += 25
+    assert await strip.link.read_state()
+    code, report = await hub.history_report("day")
+    assert code == 200 and report["total_kwh"] == 0.075 and len(report["buckets"]) == 24
+    assert report["by_outlet"][0] == {"strip": "A1B2C3D4E5F6", "outlet": 2, "kwh": 0.05, "cost": 0.08}
+    energy_wh[2] = 10                               # counter reset on the strip: counts as 10 Wh
+    assert await strip.link.read_state()
+    snap = await hub.snapshot()
+    assert snap["today"]["kwh"] == 0.085 and snap["strips"][0]["outlets"][1]["today_kwh"] == 0.06
+    assert (await hub.history_report("week"))[1]["total_kwh"] == 0.085
+    assert len((await hub.history_report("month"))[1]["buckets"]) == 30
+
+    # rooms, icons, favourites
+    await hub.set_meta("A1B2C3D4E5F6", 0, {"room": "Kitchen"})
+    code, body = await hub.set_meta("A1B2C3D4E5F6", 1, {"icon": "kettle", "favorite": True})
+    assert code == 200 and body["strip"]["room"] == "Kitchen"
+    assert body["strip"]["outlets"][0]["icon"] == "kettle" and body["strip"]["outlets"][0]["favorite"]
+    assert (await hub.set_meta("A1B2C3D4E5F6", 1, {"icon": "spaceship"}))[0] == 400
+
+    # schedules: one due right now fires once per minute
+    now = time.time()
+    lt = time.localtime(now)
+    code, body = await hub.save_schedule({"strip": "a1b2c3d4e5f6", "outlet": 3, "on": True,
+                                          "time": "%02d:%02d" % (lt.tm_hour, lt.tm_min), "days": [lt.tm_wday]})
+    assert code == 200 and not relays[3]
+    await hub.run_due_schedules(now)
+    assert relays[3]
+    relays[3] = False
+    await hub.run_due_schedules(now)
+    assert not relays[3], "a schedule must not fire twice in the same minute"
+    assert (await hub.save_schedule({"strip": "A1B2C3D4E5F6", "time": "25:00", "days": [1]}))[0] == 400
+    assert (await hub.save_schedule({"strip": "A1B2C3D4E5F6", "time": "07:00", "days": []}))[0] == 400
+    assert (await hub.delete_schedule(body["schedule"]["id"]))[0] == 200 and not hub.store.schedules
+
+    # several outlets at once
+    code, body = await hub.switch("A1B2C3D4E5F6", 0, False, outlets=[1, 3])
+    assert code == 200 and not relays[1] and not relays[3]
+
+    # PIN lock: the server refuses without the right PIN; the owner's own timers still run
+    assert (await hub.set_lock("A1B2C3D4E5F6", {"pin": "12a4"}))[0] == 400
+    assert (await hub.set_lock("A1B2C3D4E5F6", {"pin": "2468"}))[0] == 200
+    assert (await hub.switch("A1B2C3D4E5F6", 1, True))[0] == 403
+    assert (await hub.switch("A1B2C3D4E5F6", 1, True, pin="0000"))[0] == 403
+    code, body = await hub.switch("A1B2C3D4E5F6", 1, True, pin="2468")
+    assert code == 200 and relays[1] and body["strip"]["locked"]
+    assert (await hub.set_timer("A1B2C3D4E5F6", 1, 5, False))[0] == 403
+    await hub.set_timer("A1B2C3D4E5F6", 1, 1, False, pin="2468")
+    await hub.run_due_timers(now=time.time() + 120)
+    assert not relays[1]
+    assert (await hub.set_lock("A1B2C3D4E5F6", {"pin": ""}))[0] == 403          # removing needs the old PIN
+    assert (await hub.set_lock("A1B2C3D4E5F6", {"pin": "", "old_pin": "2468"}))[0] == 200
+    assert not hub.store.locked("A1B2C3D4E5F6")
+
+    # scenes switch groups of outlets in one go
+    code, body = await hub.save_scene({"name": "Movie night", "icon": "🎬", "actions": [
+        {"strip": "A1B2C3D4E5F6", "outlet": 1, "on": True}, {"strip": "A1B2C3D4E5F6", "outlet": 4, "on": True},
+        {"strip": "A1B2C3D4E5F6", "outlet": 2, "on": False}]})
+    assert code == 200
+    code, res = await hub.run_scene(body["scene"]["id"])
+    assert code == 200 and relays[1] and relays[4] and not relays[2]
+    assert (await hub.save_scene({"name": "Empty", "actions": []}))[0] == 400
+    assert (await hub.delete_scene(body["scene"]["id"]))[0] == 200
+
+    # cycle: 1 minute on, 1 minute off, repeating
+    relays[3] = False
+    code, body = await hub.save_schedule({"strip": "A1B2C3D4E5F6", "kind": "cycle", "outlets": [3],
+                                          "on_minutes": 1, "off_minutes": 1}, now=now)
+    assert code == 200 and body["schedules"][0]["phase_on"]
+    await hub.run_due_schedules(now + 1)
+    assert relays[3]
+    await hub.run_due_schedules(now + 61)
+    assert not relays[3]
+    await hub.run_due_schedules(now + 121)
+    assert relays[3]
+    assert (await hub.save_schedule({"strip": "A1B2C3D4E5F6", "kind": "cycle", "outlets": [3],
+                                     "on_minutes": 0, "off_minutes": 5}))[0] == 400
+    await hub.delete_schedule(body["schedule"]["id"])
+
+    # alerts: hot outlet (thresholds come from the settings)
+    assert (await hub.update_settings({"max_temp_c": 5}))[0] == 400
+    await hub.update_settings({"max_temp_c": 34, "price_kwh": 2})
+    hub.check_alerts(now)
+    hub.check_alerts(now + 60)                      # repeated alerts are rate-limited
+    events = (await hub.events(0))["events"]
+    assert [(e["kind"], e["outlet"]) for e in events] == [("temp", 4)]
+    assert hub.cost(1.5) == 3.0
+
     # web layer, called from a worker thread like a real request
     web = WebServer(("127.0.0.1", 0), hub, asyncio.get_running_loop(), "s3cret", "127.0.0.1")
     threading.Thread(target=web.serve_forever, daemon=True).start()
@@ -903,14 +1552,59 @@ async def selftest() -> None:
     status, res = await loop.run_in_executor(None, http, "/api/switch", {"strip": "A1B2C3D4E5F6", "outlet": 4, "on": False})
     assert status == 200 and res["confirmed"] and not relays[4]
     assert (await loop.run_in_executor(None, http, "/api/switch", {"strip": "A1B2C3D4E5F6", "outlet": 9, "on": True}))[0] == 400
+    status, report = await loop.run_in_executor(None, http, "/api/history?range=week")
+    assert status == 200 and len(report["buckets"]) == 7
+    status, res = await loop.run_in_executor(None, http, "/api/meta", {"strip": "A1B2C3D4E5F6", "outlet": 2, "icon": "router"})
+    assert status == 200 and res["strip"]["outlets"][1]["icon"] == "router"
+    status, res = await loop.run_in_executor(None, http, "/api/schedules/save",
+                                             {"strip": "A1B2C3D4E5F6", "outlet": 0, "on": False, "time": "23:30", "days": [0, 1, 2, 3, 4]})
+    assert status == 200 and len(res["schedules"]) == 1
+    status, res = await loop.run_in_executor(None, http, "/api/settings", {"price_kwh": 1.75})
+    assert status == 200 and res["settings"]["price_kwh"] == 1.75
+    status, res = await loop.run_in_executor(None, http, "/api/events?after=0")
+    assert status == 200 and res["last_id"] >= 1
+    status, state = await loop.run_in_executor(None, http, "/api/state")
+    assert state["schedules"][0]["time"] == "23:30" and state["settings"]["price_kwh"] == 1.75
+    S = "A1B2C3D4E5F6"
+    assert (await loop.run_in_executor(None, http, "/api/lock", {"strip": S, "pin": "1111"}))[0] == 200
+    assert (await loop.run_in_executor(None, http, "/api/switch", {"strip": S, "outlets": [1, 2], "on": True}))[0] == 403
+    status, res = await loop.run_in_executor(None, http, "/api/switch", {"strip": S, "outlets": [1, 2], "on": True, "pin": "1111"})
+    assert status == 200 and relays[1] and relays[2]
+    assert (await loop.run_in_executor(None, http, "/api/lock", {"strip": S, "pin": "", "old_pin": "1111"}))[0] == 200
+    status, res = await loop.run_in_executor(None, http, "/api/scenes/save",
+                                             {"name": "Off", "actions": [{"strip": S, "outlet": 0, "on": False}]})
+    assert status == 200
+    status, res = await loop.run_in_executor(None, http, "/api/scenes/run", {"id": res["scene"]["id"]})
+    assert status == 200 and not any(relays[n] for n in OUTLETS)
+    status, res = await loop.run_in_executor(None, http, "/api/timer", {"strip": S, "outlets": [1, 4], "minutes": 30, "on": True})
+    assert status == 200 and res["strip"]["outlets"][0]["timer"] and res["strip"]["outlets"][3]["timer"]
     web.shutdown()
 
     strip_task.cancel()
     writer.close()
     await asyncio.sleep(0.1)
     assert not strip.online
+    hub.check_alerts(time.time() + OFFLINE_ALERT_AFTER + 1)
+    assert (await hub.events(0))["events"][0]["kind"] == "offline"
+
+    # a command for an offline strip waits and runs when it reconnects
+    relays[2] = False
+    code, body = await hub.switch("A1B2C3D4E5F6", 2, True)
+    assert code == 202 and body["queued"] and body["strip"]["pending"] == {"2": True}
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    strip_task = asyncio.ensure_future(fake_strip(reader, writer))
+    writer.write(b"up:bootinfo:LGU+-TAP-HW002;a1b2c3d4e5f6;a1b2c3d4e5f7;0.1.54-1.0.66;connect\r\n")
+    await writer.drain()
+    for _ in range(30):
+        await asyncio.sleep(0.1)
+        if relays[2]:
+            break
+    assert relays[2] and not hub.store.pending
+    strip_task.cancel()
+    writer.close()
     srv.close()
-    print("selftest OK: protocol parsing, switching, button events, names, timers, web API + token")
+    print("selftest OK: protocol, switching, button events, names, timers, energy history, rooms/icons, "
+          "schedules, cycles, scenes, PIN locks, offline queue, alerts, settings, web API + token")
 
 
 # --------------------------------------------------------------------------- main
@@ -927,6 +1621,8 @@ def main() -> int:
     s.add_argument("--public-ip", default=os.environ.get("SP_PUBLIC_IP", ""),
                    help="address shown in hints, e.g. your VPS public IP (default: auto-detect)")
     s.add_argument("--bind", default="0.0.0.0", help="interface to listen on (default all)")
+    s.add_argument("--no-app-download", action="store_true",
+                   help="do not fetch the Android app from GitHub to serve it at /app.apk")
     s.add_argument("--data", default=os.environ.get("SP_DATA", str(HERE / "smartpower-data.json")),
                    help="file for outlet names and timers (env SP_DATA)")
 

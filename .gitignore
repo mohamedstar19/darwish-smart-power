@@ -2,3 +2,6 @@ smartpower-data.json
 .smartpower-*
 darwish-smart-power.apk
 __pycache__/
+.apk-version
+.apk-*
+*-history.db

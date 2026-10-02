@@ -7,24 +7,24 @@
 <meta name="description" content="تحكم في مشترك الكهرباء الذكي من موبايلك، من أي مكان، من غير أي حساب سحابي.">
 <meta property="og:title" content="Darwish Smart Power">
 <meta property="og:description" content="تحكم في مشترك الكهرباء الذكي من موبايلك، من أي مكان.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 108 108'%3E%3Crect width='108' height='108' rx='24' fill='%23d9480f'/%3E%3Ccircle cx='54' cy='54' r='29' fill='none' stroke='white' stroke-width='4'/%3E%3Cpath d='M58 33 41 58h11l-3 17 18-26H56l4-16z' fill='white'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#111833">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#fbf8f4;--panel:#ffffff;--ink:#1d1b19;--soft:#6b655e;--line:#ebe4dc;
-  --brand:#d9480f;--brand-ink:#ffffff;--brand-soft:#ffe8dc;--on:#2b8a3e;--on-soft:#e3f4e7;
-  --shadow:0 18px 50px -20px rgba(80,40,10,.25);
+  --bg:#070b18;--panel:rgba(255,255,255,.07);--ink:#f3f6ff;--soft:#a9b2cf;--line:rgba(255,255,255,.14);
+  --brand:#4fd1ff;--brand-ink:#03121c;--brand-soft:rgba(79,209,255,.14);--on:#3ee6a0;--on-soft:rgba(62,230,160,.18);
+  --shadow:0 18px 50px -20px rgba(0,0,0,.7);
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#13110f;--panel:#1d1a17;--ink:#f3eee8;--soft:#a69d93;--line:#2f2924;
-  --brand:#ff7a3d;--brand-ink:#1b0b02;--brand-soft:#3a1d0e;--on:#6fd884;--on-soft:#1b3322;
-  --shadow:0 18px 50px -20px rgba(0,0,0,.6);
-}}
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 "Cairo",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;overflow-x:hidden}
+html{scroll-behavior:smooth;background:#070b18}
+body{margin:0;background:radial-gradient(1000px 700px at 90% -10%,rgba(35,20,70,.95),transparent 70%),
+  radial-gradient(900px 800px at 0% 100%,rgba(11,51,64,.75),transparent 70%),linear-gradient(180deg,#111833,#070b18 55%);background-attachment:fixed;color:var(--ink);font:16px/1.7 "Cairo",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;overflow-x:hidden}
 a{color:inherit}
 .wrap{max-width:1100px;margin:auto;padding:0 20px}
 bdi{unicode-bidi:isolate}
@@ -33,7 +33,8 @@ bdi{unicode-bidi:isolate}
 nav{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 nav .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;height:64px}
 .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;text-decoration:none;white-space:nowrap}
-.logo svg{width:34px;height:34px;flex:none}
+.logo svg,.logo img{width:36px;height:36px;flex:none;border-radius:10px}
+.feature,.step,.device,.flow,.card{backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
 .navlinks{display:flex;align-items:center;gap:18px}
 .navlinks a{text-decoration:none;color:var(--soft);font-weight:600;font-size:15px}
 .navlinks a:hover{color:var(--ink)}
@@ -56,10 +57,10 @@ h1 span{color:var(--brand)}
 @media (max-width:860px){.hero .wrap{grid-template-columns:1fr}.hero{padding-top:36px}}
 
 /* phone mockup */
-.phone{justify-self:center;width:290px;border-radius:40px;background:#0f0d0c;padding:12px;box-shadow:var(--shadow);transform:rotate(-2deg)}
+.phone{justify-self:center;width:290px;border-radius:40px;background:#05070f;padding:12px;box-shadow:var(--shadow);transform:rotate(-2deg)}
 html[dir="ltr"] .phone{transform:rotate(2deg)}
 .screen{border-radius:30px;background:var(--bg);overflow:hidden;padding:18px 14px 20px;min-height:540px}
-.notch{width:90px;height:22px;background:#0f0d0c;border-radius:0 0 14px 14px;margin:-18px auto 12px}
+.notch{width:90px;height:22px;background:#05070f;border-radius:0 0 14px 14px;margin:-18px auto 12px}
 .appbar{font-weight:800;font-size:15px;margin-bottom:12px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:14px}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -113,10 +114,10 @@ code{direction:ltr;unicode-bidi:isolate;background:var(--bg);border:1px solid va
 .device ul{margin:10px 0 0;padding-inline-start:20px;color:var(--soft)}
 @media (max-width:640px){.device{grid-template-columns:1fr;justify-items:center;text-align:center}.device ul{text-align:start}}
 
-.download{background:linear-gradient(135deg,var(--brand),#b8380a);color:#fff;border-radius:30px;padding:44px 32px;text-align:center}
+.download{background:linear-gradient(135deg,#1ed8a0,#14a9e0 55%,#a78bfa);color:#fff;border-radius:30px;padding:44px 32px;text-align:center}
 .download h2{color:#fff}
 .download p{opacity:.9;max-width:36em;margin:0 auto 24px}
-.download .btn{background:#fff;color:#b8380a;border-color:#fff}
+.download .btn{background:#fff;color:#0b2a4a;border-color:#fff}
 .download .req{font-size:14px;opacity:.85;margin-top:16px}
 
 footer{border-top:1px solid var(--line);padding:28px 0;color:var(--soft);font-size:14px}
@@ -127,13 +128,14 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 
 <nav><div class="wrap">
   <a class="logo" href="#top">
-    <svg viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" rx="24" fill="#d9480f"/><circle cx="54" cy="54" r="29" fill="none" stroke="#fff" stroke-width="4"/><path d="M58 33 41 58h11l-3 17 18-26H56l4-16z" fill="#fff"/></svg>
+    <img src="/icons/icon.svg" alt="">
     Darwish Smart Power
   </a>
   <div class="navlinks">
     <a href="#features" data-i="nav_features">المميزات</a>
     <a href="#how" data-i="nav_how">إزاي بيشتغل</a>
     <a href="#download" data-i="nav_download">تحميل</a>
+    <a href="/panel" data-i="nav_panel">لوحة التحكم</a>
     <button class="lang" id="lang" type="button">English</button>
   </div>
 </div></nav>
@@ -148,7 +150,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg>
         <span data-i="dl">حمّل التطبيق</span>
       </a>
-      <a class="btn" href="#how" data-i="see_how">شوف إزاي بيشتغل</a>
+      <a class="btn" href="/panel" data-i="open_panel">افتح لوحة التحكم</a>
     </div>
     <p class="note" data-i="note">أندرويد 8 أو أحدث · عربي وإنجليزي · مجاني</p>
   </div>
@@ -214,7 +216,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
       <g fill="var(--soft)"><rect x="71" y="40" width="5" height="12" rx="2"/><rect x="84" y="40" width="5" height="12" rx="2"/>
         <rect x="71" y="90" width="5" height="12" rx="2"/><rect x="84" y="90" width="5" height="12" rx="2"/>
         <rect x="71" y="140" width="5" height="12" rx="2"/><rect x="84" y="140" width="5" height="12" rx="2"/></g>
-      <circle cx="80" cy="186" r="9" fill="#d9480f"/>
+      <circle cx="80" cy="186" r="9" fill="#4fd1ff"/>
     </svg>
     <div>
       <div class="kicker" data-i="d_k">الجهاز المدعوم</div>
@@ -247,14 +249,15 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 
 <script>
 // Where the Android app is downloaded from (GitHub release built by CI).
-const APK_URL = "https://github.com/mohamedstar19/darwish-smart-power/releases/latest/download/darwish-smart-power.apk";
+// The server keeps the newest app build and serves it here (or forwards to the GitHub copy).
+const APK_URL = "/app.apk";
 
 const EN = {
   nav_features:"Features", nav_how:"How it works", nav_download:"Download",
   tag:"For the MTTL-W01 smart power strip",
   h1:'Control your power<br><span>from your phone, from anywhere</span>',
   lead:"Switch every outlet, watch consumption live, and set timers, all through your own server. No cloud account, no subscription.",
-  dl:"Download the app", see_how:"See how it works", note:"Android 8+ · Arabic & English · Free",
+  dl:"Download the app", open_panel:"Open the control panel", nav_panel:"Control panel", note:"Android 8+ · Arabic & English · Free",
   m_strip:"Living room", m_online:"Online", m_allon:"All on", m_alloff:"All off",
   f_k:"FEATURES", f_h:"Everything you need to control your home", f_s:"Simple to use, solid underneath.",
   f1h:"Every outlet", f1p:"Turn each of the four outlets on or off, or all of them at once.",
@@ -322,6 +325,7 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
   setInterval(() => { const o = outlets[[3, 1, 3, 0][i++ % 4]]; o.on = !o.on; renderTiles(); }, 2600);
 }
 apply();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 </script>
 </body>
 </html>

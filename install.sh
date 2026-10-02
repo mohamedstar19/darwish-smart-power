@@ -115,11 +115,12 @@ sys.exit(0 if json.load(urllib.request.urlopen(req, timeout=2)).get('app') == 'd
         echo
         echo "   Password (token):  $TOKEN"
         echo
-        echo "   Control panel:     http://$IP:$PORT/"
-        echo "   Intro page:        http://$IP:$PORT/welcome"
-        echo "   Android app:       Settings -> address $IP:$PORT + the password"
+        echo "   Website:           http://$IP:$PORT/"
+        echo "   Control panel:     http://$IP:$PORT/panel"
+        echo "   Android app:       http://$IP:$PORT/app.apk"
+        echo "   App settings:      address $IP:$PORT (or your domain) + the password"
         echo
-        echo " In the browser: any user name, and the password above."
+        echo " In the control panel and the app: the password above."
         echo " Run 'sudo bash $DIR/install.sh' again to see it later."
         if systemctl is-active --quiet darwish-tunnel 2>/dev/null; then
             echo
