@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Darwish Smart Power</string>
+    <string name="settings">Settings</string>
+    <string name="back">Back</string>
+    <string name="more">More</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="retry">Try again</string>
+    <string name="show">Show</string>
+    <string name="hide">Hide</string>
+
+    <!-- home -->
+    <string name="welcome_title">Welcome</string>
+    <string name="welcome_body">Enter the address of the computer or server that runs smartpower.py to see your power strip.</string>
+    <string name="open_settings">Open settings</string>
+    <string name="problem_title">Can\'t load your strips</string>
+    <string name="problem_unreachable">The server can\'t be reached. Check the address and that smartpower.py is running.</string>
+    <string name="problem_bad_token">The server rejected the token. Check it in Settings.</string>
+    <string name="problem_server">The server answered with an error. Try again in a moment.</string>
+    <string name="stale_banner">Showing the last known state.</string>
+    <string name="no_strips_title">No strip connected yet</string>
+    <string name="no_strips_body">The server is running, but no power strip has connected to it. Set up the strip so it knows this server\'s address.</string>
+    <string name="setup_strip">Set up a strip</string>
+    <string name="default_strip_name">Power strip %1$s</string>
+    <string name="default_outlet_name">Outlet %1$d</string>
+    <string name="online">Online</string>
+    <string name="offline">Offline</string>
+    <string name="last_seen">Last seen %1$s</string>
+    <string name="all_on">All on</string>
+    <string name="all_off">All off</string>
+    <string name="timer">Timer</string>
+    <string name="rename">Rename</string>
+    <string name="state_on">On</string>
+    <string name="state_off">Off</string>
+    <string name="timer_turns_on">Turns on at %1$s</string>
+    <string name="timer_turns_off">Turns off at %1$s</string>
+
+    <!-- dialogs -->
+    <string name="rename_title">Rename</string>
+    <string name="name">Name</string>
+    <string name="rename_hint">Leave empty to use the default name.</string>
+    <string name="timer_title">Timer · %1$s</string>
+    <string name="timer_action">What should happen?</string>
+    <string name="turn_off">Turn off</string>
+    <string name="turn_on">Turn on</string>
+    <string name="timer_after">After</string>
+    <string name="minutes">Minutes</string>
+    <string name="minutes_short">%1$d min</string>
+    <string name="hours_short">%1$d h</string>
+    <string name="start">Start</string>
+    <string name="cancel_timer">Cancel timer</string>
+
+    <!-- messages -->
+    <string name="note_not_confirmed">The strip has not confirmed the change yet.</string>
+    <string name="note_strip_offline">The strip is offline.</string>
+    <string name="note_server_error">Server error: %1$s</string>
+    <string name="note_timer_set">Timer set.</string>
+    <string name="note_timer_cancelled">Timer cancelled.</string>
+    <string name="settings_saved">Settings saved.</string>
+
+    <!-- settings -->
+    <string name="section_server">Server</string>
+    <string name="server_address">Server address</string>
+    <string name="server_address_hint">For example 192.168.1.20, 203.0.113.5:7896 or https://power.example.com (port 8080 if none is given).</string>
+    <string name="settings_bad_address">That doesn\'t look like an address. Use an IP or host name, optionally with :port.</string>
+    <string name="token">Token</string>
+    <string name="token_hint">Leave empty if the server runs without --token.</string>
+    <string name="test">Test</string>
+    <string name="test_ok">Connected · version %1$s strips online</string>
+    <string name="section_language">Language</string>
+    <string name="lang_system">Phone language</string>
+    <string name="lang_ar" translatable="false">العربية</string>
+    <string name="lang_en" translatable="false">English</string>
+    <string name="section_setup">New strip</string>
+    <string name="setup_intro">Connect a new or reset strip to your Wi-Fi and to this server, right from your phone.</string>
+    <string name="about">Darwish Smart Power controls MTTL-W01 power strips through your own server. No cloud account is needed.</string>
+
+    <!-- strip setup -->
+    <string name="setup_title">Set up a strip</string>
+    <string name="setup_step1">Hold the strip\'s main button for about 10 seconds until the light blinks fast.</string>
+    <string name="setup_step2">In the phone\'s Wi-Fi settings join the network TONLY_TAP_XXXXXXX. Its password is LGU_ followed by the same 7 characters. If Android says there is no internet, choose to stay connected.</string>
+    <string name="setup_step3">Come back here, fill in the fields below and tap Send.</string>
+    <string name="setup_step4">When it says done, switch the phone back to your home Wi-Fi. The strip appears on the home screen within a minute.</string>
+    <string name="setup_server_ip">Server IP</string>
+    <string name="setup_server_ip_hint">The IPv4 address the strip will connect to: the computer\'s home IP, or the public IP of your VPS.</string>
+    <string name="setup_wifi_name">Home Wi-Fi name</string>
+    <string name="setup_wifi_hint">2.4 GHz networks only. The strip cannot use 5 GHz.</string>
+    <string name="setup_wifi_password">Home Wi-Fi password</string>
+    <string name="setup_send">Send to strip</string>
+    <string name="setup_done">Done. The strip will join your Wi-Fi and connect to %1$s. Switch the phone back to your home Wi-Fi now.</string>
+    <string name="setup_no_wifi">The phone is not connected to any Wi-Fi. Join the strip\'s TONLY_TAP network first.</string>
+    <string name="setup_not_reachable">The strip did not answer. Make sure it is blinking fast (setup mode) and the phone is on its TONLY_TAP network.</string>
+    <string name="setup_refused">The strip answered something unexpected: %1$s</string>
+    <string name="setup_bad_ip">The server IP must be an IPv4 address such as 192.168.1.20.</string>
+    <string name="setup_empty_ssid">Enter the Wi-Fi name.</string>
+    <string name="setup_bad_ssid">The strip cannot accept a Wi-Fi name that contains \":\".</string>
+    <string name="setup_empty_password">Enter the Wi-Fi password.</string>
+    <string name="setup_bad_password">The strip cannot accept a Wi-Fi password that contains \":\".</string>
+</resources>

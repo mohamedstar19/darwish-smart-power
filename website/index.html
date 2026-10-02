@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Darwish Smart Power</title>
+<meta name="description" content="تحكم في مشترك الكهرباء الذكي من موبايلك، من أي مكان، من غير أي حساب سحابي.">
+<meta property="og:title" content="Darwish Smart Power">
+<meta property="og:description" content="تحكم في مشترك الكهرباء الذكي من موبايلك، من أي مكان.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 108 108'%3E%3Crect width='108' height='108' rx='24' fill='%23d9480f'/%3E%3Ccircle cx='54' cy='54' r='29' fill='none' stroke='white' stroke-width='4'/%3E%3Cpath d='M58 33 41 58h11l-3 17 18-26H56l4-16z' fill='white'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#fbf8f4;--panel:#ffffff;--ink:#1d1b19;--soft:#6b655e;--line:#ebe4dc;
+  --brand:#d9480f;--brand-ink:#ffffff;--brand-soft:#ffe8dc;--on:#2b8a3e;--on-soft:#e3f4e7;
+  --shadow:0 18px 50px -20px rgba(80,40,10,.25);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#13110f;--panel:#1d1a17;--ink:#f3eee8;--soft:#a69d93;--line:#2f2924;
+  --brand:#ff7a3d;--brand-ink:#1b0b02;--brand-soft:#3a1d0e;--on:#6fd884;--on-soft:#1b3322;
+  --shadow:0 18px 50px -20px rgba(0,0,0,.6);
+}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 "Cairo",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;overflow-x:hidden}
+a{color:inherit}
+.wrap{max-width:1100px;margin:auto;padding:0 20px}
+bdi{unicode-bidi:isolate}
+
+/* nav */
+nav{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;height:64px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;text-decoration:none;white-space:nowrap}
+.logo svg{width:34px;height:34px;flex:none}
+.navlinks{display:flex;align-items:center;gap:18px}
+.navlinks a{text-decoration:none;color:var(--soft);font-weight:600;font-size:15px}
+.navlinks a:hover{color:var(--ink)}
+.lang{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:4px 14px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+@media (max-width:720px){.navlinks a{display:none}}
+
+/* hero */
+.hero{padding:64px 0 40px}
+.hero .wrap{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:center}
+.tag{display:inline-block;background:var(--brand-soft);color:var(--brand);font-weight:700;font-size:13px;border-radius:999px;padding:4px 14px;margin-bottom:16px}
+h1{font-size:clamp(34px,5.4vw,56px);line-height:1.2;margin:0 0 16px;font-weight:800;letter-spacing:-.5px}
+h1 span{color:var(--brand)}
+.lead{font-size:clamp(17px,2vw,20px);color:var(--soft);margin:0 0 28px;max-width:34em}
+.cta{display:flex;gap:12px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:10px;text-decoration:none;font-weight:700;border-radius:14px;padding:13px 22px;border:1px solid var(--line);background:var(--panel);transition:transform .15s}
+.btn:hover{transform:translateY(-2px)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink);box-shadow:0 10px 24px -10px var(--brand)}
+.btn svg{width:20px;height:20px}
+.note{font-size:13px;color:var(--soft);margin-top:12px}
+@media (max-width:860px){.hero .wrap{grid-template-columns:1fr}.hero{padding-top:36px}}
+
+/* phone mockup */
+.phone{justify-self:center;width:290px;border-radius:40px;background:#0f0d0c;padding:12px;box-shadow:var(--shadow);transform:rotate(-2deg)}
+html[dir="ltr"] .phone{transform:rotate(2deg)}
+.screen{border-radius:30px;background:var(--bg);overflow:hidden;padding:18px 14px 20px;min-height:540px}
+.notch{width:90px;height:22px;background:#0f0d0c;border-radius:0 0 14px 14px;margin:-18px auto 12px}
+.appbar{font-weight:800;font-size:15px;margin-bottom:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:14px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sname{font-weight:700;font-size:14px}
+.pill{font-size:11px;font-weight:700;border-radius:999px;padding:1px 9px;background:var(--on-soft);color:var(--on)}
+.watts{font-size:30px;font-weight:800;direction:ltr}
+.watts small{font-size:13px;color:var(--soft);font-weight:600}
+.stats{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 10px}
+.stats span{font-size:10.5px;background:var(--bg);border-radius:7px;padding:1px 7px;color:var(--soft)}
+.allrow{display:flex;gap:6px;margin-bottom:10px}
+.allrow b{flex:1;text-align:center;font-size:12px;border-radius:10px;padding:6px;border:1px solid var(--line)}
+.allrow b:first-child{background:var(--brand-soft);border-color:transparent;color:var(--brand)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{border-radius:14px;padding:9px 10px;background:var(--bg);border:1px solid var(--line);transition:background .3s,border-color .3s}
+.tile.on{background:var(--on-soft);border-color:transparent}
+.tile .t{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .m{font-size:10.5px;color:var(--soft)}
+.sw{margin-top:6px;width:38px;height:22px;border-radius:999px;background:var(--line);position:relative;transition:background .3s}
+.sw::after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:inset-inline-start .3s}
+.tile.on .sw{background:var(--on)}
+.tile.on .sw::after{inset-inline-start:19px}
+.timer{font-size:10px;color:var(--brand);font-weight:700;margin-top:4px;min-height:14px}
+
+/* sections */
+section{padding:72px 0}
+.kicker{color:var(--brand);font-weight:800;font-size:14px;letter-spacing:.5px}
+h2{font-size:clamp(26px,3.6vw,38px);line-height:1.3;margin:6px 0 14px;font-weight:800}
+.sub{color:var(--soft);max-width:40em;margin:0 0 36px;font-size:17px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.feature{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:22px}
+.ico{width:46px;height:46px;border-radius:14px;background:var(--brand-soft);color:var(--brand);display:grid;place-items:center;margin-bottom:14px}
+.ico svg{width:24px;height:24px}
+.feature h3{margin:0 0 6px;font-size:18px}
+.feature p{margin:0;color:var(--soft);font-size:15px}
+
+.flow{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:26px;margin-bottom:28px;direction:ltr}
+.node{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:10px 16px;text-align:center;font-weight:700;font-size:15px}
+.node small{display:block;color:var(--soft);font-weight:600;font-size:12px}
+.node.mid{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.node.mid small{color:inherit;opacity:.8}
+.arrow{color:var(--soft);font-size:22px}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;counter-reset:s}
+.step{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:22px 22px 22px}
+.step::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--brand);color:var(--brand-ink);font-weight:800;margin-bottom:12px}
+.step h3{margin:0 0 6px;font-size:18px}
+.step p{margin:0;color:var(--soft);font-size:15px}
+code{direction:ltr;unicode-bidi:isolate;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:1px 6px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace}
+
+.device{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:26px;padding:28px}
+.device svg{width:150px;height:auto}
+.device ul{margin:10px 0 0;padding-inline-start:20px;color:var(--soft)}
+@media (max-width:640px){.device{grid-template-columns:1fr;justify-items:center;text-align:center}.device ul{text-align:start}}
+
+.download{background:linear-gradient(135deg,var(--brand),#b8380a);color:#fff;border-radius:30px;padding:44px 32px;text-align:center}
+.download h2{color:#fff}
+.download p{opacity:.9;max-width:36em;margin:0 auto 24px}
+.download .btn{background:#fff;color:#b8380a;border-color:#fff}
+.download .req{font-size:14px;opacity:.85;margin-top:16px}
+
+footer{border-top:1px solid var(--line);padding:28px 0;color:var(--soft);font-size:14px}
+footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="logo" href="#top">
+    <svg viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" rx="24" fill="#d9480f"/><circle cx="54" cy="54" r="29" fill="none" stroke="#fff" stroke-width="4"/><path d="M58 33 41 58h11l-3 17 18-26H56l4-16z" fill="#fff"/></svg>
+    Darwish Smart Power
+  </a>
+  <div class="navlinks">
+    <a href="#features" data-i="nav_features">المميزات</a>
+    <a href="#how" data-i="nav_how">إزاي بيشتغل</a>
+    <a href="#download" data-i="nav_download">تحميل</a>
+    <button class="lang" id="lang" type="button">English</button>
+  </div>
+</div></nav>
+
+<header class="hero" id="top"><div class="wrap">
+  <div>
+    <span class="tag" data-i="tag">لمشترك الكهرباء الذكي MTTL-W01</span>
+    <h1 data-i="h1" data-html>تحكم في الكهرباء<br><span>من موبايلك، من أي مكان</span></h1>
+    <p class="lead" data-i="lead">شغّل واطفي كل مخرج، شوف الاستهلاك لحظة بلحظة، واضبط مؤقتات، كل ده عن طريق سيرفر بتاعك إنت. من غير حساب سحابي ومن غير اشتراك.</p>
+    <div class="cta">
+      <a class="btn primary" href="APK_URL" data-dl>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg>
+        <span data-i="dl">حمّل التطبيق</span>
+      </a>
+      <a class="btn" href="#how" data-i="see_how">شوف إزاي بيشتغل</a>
+    </div>
+    <p class="note" data-i="note">أندرويد 8 أو أحدث · عربي وإنجليزي · مجاني</p>
+  </div>
+
+  <div class="phone" aria-hidden="true"><div class="screen">
+    <div class="notch"></div>
+    <div class="appbar">Darwish Smart Power</div>
+    <div class="card">
+      <div class="row"><span class="sname" data-i="m_strip">مشترك الصالة</span><span class="pill" data-i="m_online">متصل</span></div>
+      <div class="watts"><span id="w">61.8</span> <small>W</small></div>
+      <div class="stats"><span><bdi>23.0 kWh</bdi></span><span><bdi>229.8 V</bdi></span><span><bdi>0.27 A</bdi></span><span><bdi>Wi-Fi -58 dBm</bdi></span></div>
+      <div class="allrow"><b data-i="m_allon">شغّل الكل</b><b data-i="m_alloff">اطفي الكل</b></div>
+      <div class="tiles" id="tiles"></div>
+    </div>
+  </div></div>
+</div></header>
+
+<section id="features"><div class="wrap">
+  <div class="kicker" data-i="f_k">المميزات</div>
+  <h2 data-i="f_h">كل اللي محتاجه علشان تتحكم في البيت</h2>
+  <p class="sub" data-i="f_s">مصمم علشان يكون بسيط في الاستخدام، وقوي من جوه.</p>
+  <div class="grid">
+    <div class="feature"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></div>
+      <h3 data-i="f1h">تحكم في كل مخرج</h3><p data-i="f1p">شغّل واطفي كل مخرج من الأربعة لوحده، أو الكل بضغطة واحدة.</p></div>
+    <div class="feature"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg></div>
+      <h3 data-i="f2h">استهلاك لحظي</h3><p data-i="f2p">الوات والكيلووات ساعة والجهد والتيار والحرارة، بتتحدث كل ثانيتين.</p></div>
+    <div class="feature"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg></div>
+      <h3 data-i="f3h">مؤقتات</h3><p data-i="f3p">"اطفي التكييف بعد ساعتين". المؤقت شغال على السيرفر حتى لو الموبايل مقفول.</p></div>
+    <div class="feature"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
+      <h3 data-i="f4h">أسماء للمخارج</h3><p data-i="f4p">سمّي كل مخرج باللي عليه: الغلاية، السخان، الراوتر، علشان ما تتلخبطش.</p></div>
+    <div class="feature"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="19.5" r="1"/></svg></div>
+      <h3 data-i="f5h">إعداد من الموبايل</h3><p data-i="f5p">وصّل المشترك بالواي فاي بتاعك من التطبيق نفسه، من غير كمبيوتر.</p></div>
+    <div class="feature"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+      <h3 data-i="f6h">خصوصيتك عندك</h3><p data-i="f6p">مفيش سحابة ولا حسابات. البيانات على سيرفرك إنت، ومحمية برمز سري.</p></div>
+  </div>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <div class="kicker" data-i="h_k">إزاي بيشتغل</div>
+  <h2 data-i="h_h">تلات خطوات وتبدأ</h2>
+  <p class="sub" data-i="h_s">المشترك هو اللي بيتصل بالسيرفر بتاعك، علشان كده مش محتاج تغيّر أي حاجة في الراوتر.</p>
+  <div class="flow">
+    <div class="node"><span data-i="n_phone">الموبايل</span><small data-i="n_phone_s">التطبيق أو المتصفح</small></div>
+    <div class="arrow">⇄</div>
+    <div class="node mid">smartpower.py<small data-i="n_server_s">سيرفرك: كمبيوتر أو VPS</small></div>
+    <div class="arrow">⇄</div>
+    <div class="node"><span data-i="n_strip">المشترك</span><small>MTTL-W01 · TCP 10086</small></div>
+  </div>
+  <div class="steps">
+    <div class="step"><h3 data-i="s1h">شغّل السيرفر</h3><p data-i="s1p" data-html>على أي كمبيوتر بيفضل شغال أو على VPS: <code>python3 smartpower.py</code></p></div>
+    <div class="step"><h3 data-i="s2h">اعمل إعداد للمشترك</h3><p data-i="s2p">من التطبيق: الإعدادات ← إعداد مشترك. بتدخّله الواي فاي وعنوان السيرفر مرة واحدة بس.</p></div>
+    <div class="step"><h3 data-i="s3h">تحكم من أي مكان</h3><p data-i="s3p">افتح التطبيق، اكتب عنوان السيرفر، وكل المخارج قدامك.</p></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="device">
+    <svg viewBox="0 0 160 220" aria-hidden="true">
+      <rect x="20" y="6" width="120" height="208" rx="26" fill="var(--panel)" stroke="var(--line)" stroke-width="3"/>
+      <g fill="var(--bg)" stroke="var(--line)" stroke-width="3">
+        <circle cx="80" cy="46" r="22"/><circle cx="80" cy="96" r="22"/><circle cx="80" cy="146" r="22"/>
+      </g>
+      <g fill="var(--soft)"><rect x="71" y="40" width="5" height="12" rx="2"/><rect x="84" y="40" width="5" height="12" rx="2"/>
+        <rect x="71" y="90" width="5" height="12" rx="2"/><rect x="84" y="90" width="5" height="12" rx="2"/>
+        <rect x="71" y="140" width="5" height="12" rx="2"/><rect x="84" y="140" width="5" height="12" rx="2"/></g>
+      <circle cx="80" cy="186" r="9" fill="#d9480f"/>
+    </svg>
+    <div>
+      <div class="kicker" data-i="d_k">الجهاز المدعوم</div>
+      <h2 style="margin-bottom:6px">LG U+ / Jinheung MTTL-W01</h2>
+      <ul>
+        <li data-i="d1">مشترك ذكي 4 مخارج بيقيس الاستهلاك</li>
+        <li data-i="d2">بيشتغل على واي فاي 2.4 جيجا</li>
+        <li data-i="d3">السوفت وير الأصلي زي ما هو، من غير تعديل</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<section id="download"><div class="wrap">
+  <div class="download">
+    <h2 data-i="dl_h">جاهز تبدأ؟</h2>
+    <p data-i="dl_p">حمّل التطبيق على موبايلك، وبعد التحميل افتح الملف واسمح بالتثبيت من مصادر غير معروفة.</p>
+    <a class="btn" href="APK_URL" data-dl>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg>
+      <span data-i="dl_btn">تحميل Darwish Smart Power</span>
+    </a>
+    <div class="req" data-i="dl_req">أندرويد 8.0 أو أحدث · حجم صغير · مجاني</div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <span>© <span id="yr">2026</span> Darwish Smart Power</span>
+  <span data-i="by">تطوير محمد خالد درويش</span>
+</div></footer>
+
+<script>
+// Where the Android app is downloaded from (GitHub release built by CI).
+const APK_URL = "https://github.com/mohamedstar19/darwish-smart-power/releases/latest/download/darwish-smart-power.apk";
+
+const EN = {
+  nav_features:"Features", nav_how:"How it works", nav_download:"Download",
+  tag:"For the MTTL-W01 smart power strip",
+  h1:'Control your power<br><span>from your phone, from anywhere</span>',
+  lead:"Switch every outlet, watch consumption live, and set timers, all through your own server. No cloud account, no subscription.",
+  dl:"Download the app", see_how:"See how it works", note:"Android 8+ · Arabic & English · Free",
+  m_strip:"Living room", m_online:"Online", m_allon:"All on", m_alloff:"All off",
+  f_k:"FEATURES", f_h:"Everything you need to control your home", f_s:"Simple to use, solid underneath.",
+  f1h:"Every outlet", f1p:"Turn each of the four outlets on or off, or all of them at once.",
+  f2h:"Live consumption", f2p:"Watts, kWh, voltage, current and temperature, refreshed every two seconds.",
+  f3h:"Timers", f3p:"“Turn the AC off in two hours.” Timers run on the server, even when your phone is off.",
+  f4h:"Outlet names", f4p:"Name each outlet after what is plugged in: kettle, heater, router.",
+  f5h:"Setup from the phone", f5p:"Connect the strip to your Wi-Fi from the app itself, no computer needed.",
+  f6h:"Your data stays yours", f6p:"No cloud, no accounts. Everything lives on your server, protected by a token.",
+  h_k:"HOW IT WORKS", h_h:"Three steps to start", h_s:"The strip connects out to your server, so nothing changes on your router.",
+  n_phone:"Phone", n_phone_s:"app or browser", n_server_s:"your server: PC or VPS", n_strip:"Power strip",
+  s1h:"Run the server", s1p:'On any always-on computer or a VPS: <code>python3 smartpower.py</code>',
+  s2h:"Set up the strip", s2p:"In the app: Settings → Set up a strip. You give it the Wi-Fi and server address once.",
+  s3h:"Control from anywhere", s3p:"Open the app, enter the server address, and all outlets are in front of you.",
+  d_k:"SUPPORTED DEVICE", d1:"4-outlet smart strip with power metering", d2:"Works on 2.4 GHz Wi-Fi", d3:"Stock firmware, no flashing",
+  dl_h:"Ready to start?", dl_p:"Download the app on your phone, open the file and allow installing from unknown sources.",
+  dl_btn:"Download Darwish Smart Power", dl_req:"Android 8.0 or newer · Small download · Free",
+  by:"Developed by Mohamed Khaled Darwish", lang:"العربية"
+};
+const AR = {};
+document.querySelectorAll("[data-i]").forEach(el => AR[el.dataset.i] = el.innerHTML.trim());
+AR.lang = "English";
+
+document.querySelectorAll("[data-dl]").forEach(a => a.href = APK_URL);
+document.getElementById("yr").textContent = new Date().getFullYear();
+
+let lang = "ar";
+try { lang = localStorage.getItem("dsp-site-lang") || ((navigator.language||"").startsWith("ar") ? "ar" : "en"); } catch (e) {}
+function apply() {
+  const t = lang === "en" ? EN : AR;
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === "en" ? "ltr" : "rtl";
+  document.querySelectorAll("[data-i]").forEach(el => {
+    const v = t[el.dataset.i]; if (v === undefined) return;
+    if (el.hasAttribute("data-html")) el.innerHTML = v; else el.textContent = v;
+  });
+  document.getElementById("lang").textContent = t.lang;
+  renderTiles();
+}
+document.getElementById("lang").onclick = () => {
+  lang = lang === "en" ? "ar" : "en";
+  try { localStorage.setItem("dsp-site-lang", lang); } catch (e) {}
+  apply();
+};
+
+// Little live demo inside the phone mockup.
+const outlets = [
+  {ar:"الغلاية", en:"Kettle", on:true, w:45.2, t:32},
+  {ar:"الراوتر", en:"Router", on:true, w:8.3, t:31},
+  {ar:"التكييف", en:"AC", on:false, w:0, t:30, timer:true},
+  {ar:"اللمبة", en:"Lamp", on:true, w:8.3, t:33},
+];
+function renderTiles() {
+  const en = lang === "en";
+  document.getElementById("tiles").innerHTML = outlets.map(o => `
+    <div class="tile${o.on ? " on" : ""}">
+      <div class="t">${en ? o.en : o.ar}</div>
+      <div class="m">${o.on ? (en ? "On" : "شغال") : (en ? "Off" : "مطفي")} · <bdi>${o.on ? o.w : 0} W</bdi> · <bdi>${o.t}°C</bdi></div>
+      <div class="sw"></div>
+      <div class="timer">${o.timer ? (en ? "Turns on at 21:30" : "هيشتغل الساعة 21:30") : ""}</div>
+    </div>`).join("");
+  document.getElementById("w").textContent = outlets.reduce((s, o) => s + (o.on ? o.w : 0), 0).toFixed(1);
+}
+if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  let i = 0;
+  setInterval(() => { const o = outlets[[3, 1, 3, 0][i++ % 4]]; o.on = !o.on; renderTiles(); }, 2600);
+}
+apply();
+</script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings">الإعدادات</string>
+    <string name="back">رجوع</string>
+    <string name="more">المزيد</string>
+    <string name="save">حفظ</string>
+    <string name="cancel">إلغاء</string>
+    <string name="close">إغلاق</string>
+    <string name="retry">حاول تاني</string>
+    <string name="show">إظهار</string>
+    <string name="hide">إخفاء</string>
+
+    <string name="welcome_title">أهلاً بيك</string>
+    <string name="welcome_body">اكتب عنوان الكمبيوتر أو السيرفر اللي شغال عليه smartpower.py علشان تشوف المشترك بتاعك.</string>
+    <string name="open_settings">افتح الإعدادات</string>
+    <string name="problem_title">مش قادر أجيب المشتركات</string>
+    <string name="problem_unreachable">السيرفر مش بيرد. اتأكد من العنوان وإن smartpower.py شغال.</string>
+    <string name="problem_bad_token">السيرفر رفض الرمز. راجعه في الإعدادات.</string>
+    <string name="problem_server">السيرفر رجّع خطأ. حاول تاني بعد شوية.</string>
+    <string name="stale_banner">بيظهر آخر حالة معروفة.</string>
+    <string name="no_strips_title">مفيش مشترك متصل لسه</string>
+    <string name="no_strips_body">السيرفر شغال بس مفيش مشترك اتصل بيه. اعمل إعداد للمشترك علشان يعرف عنوان السيرفر ده.</string>
+    <string name="setup_strip">إعداد مشترك</string>
+    <string name="default_strip_name">مشترك %1$s</string>
+    <string name="default_outlet_name">مخرج %1$d</string>
+    <string name="online">متصل</string>
+    <string name="offline">غير متصل</string>
+    <string name="last_seen">آخر ظهور %1$s</string>
+    <string name="all_on">شغّل الكل</string>
+    <string name="all_off">اطفي الكل</string>
+    <string name="timer">مؤقت</string>
+    <string name="rename">تغيير الاسم</string>
+    <string name="state_on">شغال</string>
+    <string name="state_off">مطفي</string>
+    <string name="timer_turns_on">هيشتغل الساعة %1$s</string>
+    <string name="timer_turns_off">هيطفي الساعة %1$s</string>
+
+    <string name="rename_title">تغيير الاسم</string>
+    <string name="name">الاسم</string>
+    <string name="rename_hint">سيبه فاضي علشان يرجع للاسم الافتراضي.</string>
+    <string name="timer_title">مؤقت · %1$s</string>
+    <string name="timer_action">عايز يحصل إيه؟</string>
+    <string name="turn_off">إطفاء</string>
+    <string name="turn_on">تشغيل</string>
+    <string name="timer_after">بعد</string>
+    <string name="minutes">دقايق</string>
+    <string name="minutes_short">%1$d دقيقة</string>
+    <string name="hours_short">%1$d ساعة</string>
+    <string name="start">ابدأ</string>
+    <string name="cancel_timer">إلغاء المؤقت</string>
+
+    <string name="note_not_confirmed">المشترك لسه ما أكدش التغيير.</string>
+    <string name="note_strip_offline">المشترك غير متصل.</string>
+    <string name="note_server_error">خطأ من السيرفر: %1$s</string>
+    <string name="note_timer_set">تم ضبط المؤقت.</string>
+    <string name="note_timer_cancelled">تم إلغاء المؤقت.</string>
+    <string name="settings_saved">تم حفظ الإعدادات.</string>
+
+    <string name="section_server">السيرفر</string>
+    <string name="server_address">عنوان السيرفر</string>
+    <string name="server_address_hint">مثلاً 192.168.1.20 أو 203.0.113.5:7896 أو https://power.example.com (البورت 8080 لو ما كتبتش بورت).</string>
+    <string name="settings_bad_address">ده مش شكل عنوان. اكتب IP أو اسم سيرفر، وممكن تضيف :بورت.</string>
+    <string name="token">الرمز (Token)</string>
+    <string name="token_hint">سيبه فاضي لو السيرفر شغال من غير --token.</string>
+    <string name="test">اختبار</string>
+    <string name="test_ok">متصل · الإصدار %1$s مشترك متصل</string>
+    <string name="section_language">اللغة</string>
+    <string name="lang_system">لغة الموبايل</string>
+    <string name="section_setup">مشترك جديد</string>
+    <string name="setup_intro">وصّل مشترك جديد أو متعمله ريست بالواي فاي بتاعك وبالسيرفر ده، من الموبايل على طول.</string>
+    <string name="about">Darwish Smart Power بيتحكم في مشتركات MTTL-W01 عن طريق السيرفر بتاعك. مش محتاج أي حساب سحابي.</string>
+
+    <string name="setup_title">إعداد مشترك</string>
+    <string name="setup_step1">اضغط على الزرار الرئيسي في المشترك حوالي 10 ثواني لحد ما اللمبة ترمش بسرعة.</string>
+    <string name="setup_step2">من إعدادات الواي فاي في الموبايل ادخل على شبكة TONLY_TAP_XXXXXXX. الباسورد LGU_ وبعدها نفس الـ 7 حروف. لو أندرويد قال مفيش إنترنت، اختار تفضل متصل.</string>
+    <string name="setup_step3">ارجع هنا، املا الخانات اللي تحت واضغط إرسال.</string>
+    <string name="setup_step4">لما يقول تم، رجّع الموبايل على الواي فاي بتاع البيت. المشترك هيظهر في الشاشة الرئيسية خلال دقيقة.</string>
+    <string name="setup_server_ip">IP السيرفر</string>
+    <string name="setup_server_ip_hint">عنوان IPv4 اللي المشترك هيتصل بيه: IP الكمبيوتر في البيت، أو الـ IP العام للـ VPS.</string>
+    <string name="setup_wifi_name">اسم واي فاي البيت</string>
+    <string name="setup_wifi_hint">شبكات 2.4 جيجا بس. المشترك مش بيشتغل على 5 جيجا.</string>
+    <string name="setup_wifi_password">باسورد واي فاي البيت</string>
+    <string name="setup_send">إرسال للمشترك</string>
+    <string name="setup_done">تم. المشترك هيدخل على الواي فاي بتاعك ويتصل بـ %1$s. رجّع الموبايل على واي فاي البيت دلوقتي.</string>
+    <string name="setup_no_wifi">الموبايل مش متصل بأي واي فاي. ادخل على شبكة TONLY_TAP بتاعة المشترك الأول.</string>
+    <string name="setup_not_reachable">المشترك ما ردش. اتأكد إن لمبته بترمش بسرعة (وضع الإعداد) وإن الموبايل على شبكة TONLY_TAP بتاعته.</string>
+    <string name="setup_refused">المشترك رد برد غير متوقع: %1$s</string>
+    <string name="setup_bad_ip">IP السيرفر لازم يكون IPv4 زي 192.168.1.20.</string>
+    <string name="setup_empty_ssid">اكتب اسم الواي فاي.</string>
+    <string name="setup_bad_ssid">المشترك مش بيقبل اسم واي فاي فيه \":\".</string>
+    <string name="setup_empty_password">اكتب باسورد الواي فاي.</string>
+    <string name="setup_bad_password">المشترك مش بيقبل باسورد واي فاي فيه \":\".</string>
+</resources>
