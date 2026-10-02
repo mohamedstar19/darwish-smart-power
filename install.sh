@@ -5,6 +5,8 @@
 # - runs the server on port 8095, or the next free port if another program uses it
 #   (choose one with: sudo SP_WEB_PORT=9000 bash install.sh)
 # - starts it now and after every reboot, opens the firewall ports if ufw is on
+# - strips in other homes: sudo SP_PUBLIC_IP=<fixed internet IP> bash install.sh
+#   and forward TCP port 10086 on the router to this machine
 # Run it again any time to update or repair the installation.
 set -euo pipefail
 
@@ -72,6 +74,13 @@ fi
 # the LAN address other devices use to reach this machine
 IP="$(python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(("10.255.255.255", 1)); print(s.getsockname()[0])' 2>/dev/null || true)"
 IP="${IP:-127.0.0.1}"
+# the address new strips are told to connect to (port 10086). For strips in other homes give the
+# fixed internet IP once:  sudo SP_PUBLIC_IP=41.38.141.215 bash install.sh   (later runs keep it)
+STRIP_IP="${SP_PUBLIC_IP:-}"
+if [ -z "$STRIP_IP" ] && [ -f "$UNIT" ]; then
+    STRIP_IP="$(sed -n 's/^Environment=SP_PUBLIC_IP=//p' "$UNIT")"
+fi
+STRIP_IP="${STRIP_IP:-$IP}"
 
 cat > "$UNIT" <<EOF
 [Unit]
@@ -83,7 +92,7 @@ Wants=network-online.target
 User=$RUN_AS
 WorkingDirectory=$DIR
 Environment=SP_TOKEN=$TOKEN
-Environment=SP_PUBLIC_IP=$IP
+Environment=SP_PUBLIC_IP=$STRIP_IP
 Environment=SP_WEB_PORT=$PORT
 ExecStart=$(command -v python3) $DIR/smartpower.py serve
 Restart=always
@@ -125,6 +134,7 @@ sys.exit(0 if json.load(urllib.request.urlopen(req, timeout=2)).get('app') == 'd
         echo "   Control panel:     http://$IP:$PORT/panel"
         echo "   Android app:       http://$IP:$PORT/app.apk"
         echo "   App settings:      address $IP:$PORT (or your domain) + the password"
+        echo "   New strips connect to: $STRIP_IP port 10086"
         echo
         echo " In the control panel and the app: the password above."
         echo " Run 'sudo bash $DIR/install.sh' again to see it later."

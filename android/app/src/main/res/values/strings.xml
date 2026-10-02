@@ -84,7 +84,7 @@
     <string name="setup_step3">Come back here, fill in the fields below and tap Send.</string>
     <string name="setup_step4">When it says done, switch the phone back to your home Wi-Fi. The strip appears on the home screen within a minute.</string>
     <string name="setup_server_ip">Server IP</string>
-    <string name="setup_server_ip_hint">The IPv4 address the strip will connect to: the computer\'s home IP, or the public IP of your VPS.</string>
+    <string name="setup_server_ip_hint">The IPv4 address the strip will connect to: the server\'s fixed public IP (works from anywhere), or the computer\'s home IP.</string>
     <string name="setup_wifi_name">Home Wi-Fi name</string>
     <string name="setup_wifi_hint">2.4 GHz networks only. The strip cannot use 5 GHz.</string>
     <string name="setup_wifi_password">Home Wi-Fi password</string>

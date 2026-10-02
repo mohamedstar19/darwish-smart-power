@@ -76,7 +76,7 @@
     <string name="setup_step3">ارجع هنا، املا الخانات اللي تحت واضغط إرسال.</string>
     <string name="setup_step4">لما يقول تم، رجّع الموبايل على الواي فاي بتاع البيت. المشترك هيظهر في الشاشة الرئيسية خلال دقيقة.</string>
     <string name="setup_server_ip">IP السيرفر</string>
-    <string name="setup_server_ip_hint">عنوان IPv4 اللي المشترك هيتصل بيه: IP الكمبيوتر في البيت، أو الـ IP العام للـ VPS.</string>
+    <string name="setup_server_ip_hint">عنوان IPv4 اللي المشترك هيتصل بيه: الـ IP العام الثابت للسيرفر (يشتغل من أي مكان)، أو IP الكمبيوتر جوه البيت.</string>
     <string name="setup_wifi_name">اسم واي فاي البيت</string>
     <string name="setup_wifi_hint">شبكات 2.4 جيجا بس. المشترك مش بيشتغل على 5 جيجا.</string>
     <string name="setup_wifi_password">باسورد واي فاي البيت</string>
