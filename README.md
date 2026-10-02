@@ -12,9 +12,9 @@
 | تطبيق أندرويد | `android/`: Kotlin + Jetpack Compose (Material 3) |
 | تشغيله كخدمة | `smartpower.service`: ملف systemd للـ VPS |
 
-## سيرفرك: 192.168.1.116 (بورت 8090) و power.darwish-tech.com
+## سيرفرك: 192.168.1.116 (بورت 8095) و power.darwish-tech.com
 
-بورت 8080 مستخدم في السيرفر ده لداشبورد نظام التسويق، علشان كده Darwish Smart Power شغال على **8090**.
+بورت 8080 مستخدم لداشبورد نظام التسويق، و8090 مستخدم لبرنامج تاني على السيرفر، علشان كده Darwish Smart Power شغال على **8095**. ولو 8095 اتحجز في يوم، `install.sh` بيختار بورت فاضي لوحده، وشغّل بعده `tunnel.sh` علشان الدومين يمشي وراه.
 
 **التثبيت بخطوة واحدة** (على السيرفر نفسه):
 
@@ -27,11 +27,11 @@ cd ~ && { [ -d darwish-smart-power ] || git clone https://github.com/mohamedstar
 
 | إيه | من البيت | من أي مكان (Cloudflare Tunnel) |
 |---|---|---|
-| لوحة التحكم | `http://192.168.1.116:8090/` | `https://power.darwish-tech.com/` |
-| الصفحة التعريفية | `http://192.168.1.116:8090/welcome` | `https://power.darwish-tech.com/welcome` |
-| تحميل التطبيق | `http://192.168.1.116:8090/app.apk` | `https://power.darwish-tech.com/app.apk` |
+| لوحة التحكم | `http://192.168.1.116:8095/` | `https://power.darwish-tech.com/` |
+| الصفحة التعريفية | `http://192.168.1.116:8095/welcome` | `https://power.darwish-tech.com/welcome` |
+| تحميل التطبيق | `http://192.168.1.116:8095/app.apk` | `https://power.darwish-tech.com/app.apk` |
 
-- التطبيق متظبط إنه يتصل بـ `192.168.1.116:8090` لوحده. علشان تتحكم من برّه البيت، غيّر العنوان من الإعدادات لـ
+- التطبيق متظبط إنه يتصل بـ `192.168.1.116:8095` لوحده. علشان تتحكم من برّه البيت، غيّر العنوان من الإعدادات لـ
   `https://power.darwish-tech.com`، واكتب نفس الرمز (token).
 - علشان رابط `app.apk` يشتغل: نزّل الـ APK من صفحة الـ Releases في GitHub وحطه جنب `smartpower.py` باسم `darwish-smart-power.apk`.
 - **ربط الدومين بخطوة واحدة** (على السيرفر):
@@ -39,7 +39,7 @@ cd ~ && { [ -d darwish-smart-power ] || git clone https://github.com/mohamedstar
   السكربت بيثبّت `cloudflared`، ويطبع رابط واحد تفتحه وتختار الدومين وتدوس Authorize، وبعدها بيعمل الـ tunnel
   والـ subdomain وخدمة بتشتغل لوحدها بعد الريستارت. مش بيلمس أي tunnel تاني على السيرفر (زي بتاع n8n).
 - الدومين شغال عن طريق **Cloudflare Tunnel** (Zero Trust ← Networks ← Tunnels)، والـ Public hostname بتاعه
-  `power.darwish-tech.com` ← `HTTP` ← `localhost:8090`. مش محتاج Port Forwarding ولا IP عام.
+  `power.darwish-tech.com` ← `HTTP` ← `localhost:8095`. مش محتاج Port Forwarding ولا IP عام.
 - طول ما الدومين شغال **لازم** السيرفر يكون شغال بـ `--token`.
 
 ## المميزات

@@ -2,13 +2,13 @@
 # Installs Darwish Smart Power as a service on this Linux machine, in one step:
 #   sudo bash install.sh
 # - makes a random password (token) the first time and keeps it on later runs
-# - runs the server on port 8090 (change with: sudo SP_WEB_PORT=9000 bash install.sh)
+# - runs the server on port 8095, or the next free port if another program uses it
+#   (choose one with: sudo SP_WEB_PORT=9000 bash install.sh)
 # - starts it now and after every reboot, opens the firewall ports if ufw is on
 # Run it again any time to update or repair the installation.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PORT="${SP_WEB_PORT:-8090}"
 UNIT=/etc/systemd/system/smartpower.service
 RUN_AS="${SUDO_USER:-$(id -un)}"
 
@@ -24,7 +24,40 @@ fi
 echo "1/4 checking the server code ..."
 python3 "$DIR/smartpower.py" selftest >/dev/null
 
-echo "2/4 writing the service ..."
+echo "2/4 choosing a free port ..."
+systemctl stop smartpower 2>/dev/null || true   # so our own old copy does not count as "busy"
+sleep 1
+port_free() {
+    python3 -c "
+import socket, sys
+for host in ('0.0.0.0', '127.0.0.1'):
+    s = socket.socket()
+    try:
+        s.bind((host, $1))
+    except OSError:
+        sys.exit(1)
+    finally:
+        s.close()"
+}
+if ! port_free 10086; then
+    echo "Port 10086 (the power strip's port) is used by another program:"
+    ss -lntp 2>/dev/null | grep ':10086 ' || true
+    exit 1
+fi
+PORT="${SP_WEB_PORT:-8095}"
+FIRST="$PORT"
+while ! port_free "$PORT"; do
+    PORT=$((PORT + 1))
+    if [ "$PORT" -gt $((FIRST + 50)) ]; then
+        echo "No free port found between $FIRST and $((FIRST + 50))."
+        exit 1
+    fi
+done
+if [ "$PORT" != "$FIRST" ]; then
+    echo "    port $FIRST is used by another program, using $PORT"
+fi
+
+echo "    writing the service ..."
 TOKEN=""
 if [ -f "$UNIT" ]; then
     TOKEN="$(sed -n 's/^Environment=SP_TOKEN=//p' "$UNIT")"
@@ -69,8 +102,13 @@ if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active
 fi
 
 echo "4/4 checking ..."
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if python3 -c "import socket; socket.create_connection(('127.0.0.1', $PORT), 1).close()" 2>/dev/null; then
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    # it must be our server answering, not just anything on that port
+    if python3 -c "
+import json, sys, urllib.request
+req = urllib.request.Request('http://127.0.0.1:$PORT/api/health', headers={'X-Token': '$TOKEN'})
+sys.exit(0 if json.load(urllib.request.urlopen(req, timeout=2)).get('app') == 'darwish-smart-power' else 1)
+" 2>/dev/null; then
         echo
         echo "=============================================================="
         echo " Darwish Smart Power is running"
@@ -83,6 +121,10 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
         echo
         echo " In the browser: any user name, and the password above."
         echo " Run 'sudo bash $DIR/install.sh' again to see it later."
+        if systemctl is-active --quiet darwish-tunnel 2>/dev/null; then
+            echo
+            echo " Domain: run 'sudo bash $DIR/tunnel.sh' so it points to port $PORT."
+        fi
         echo "=============================================================="
         exit 0
     fi

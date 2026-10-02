@@ -8,8 +8,14 @@
 # ("darwish-tunnel"), so any tunnel already on this machine (n8n, ...) is left alone.
 set -euo pipefail
 
-HOST="${1:-power.darwish-tech.com}"
-PORT="${SP_WEB_PORT:-8090}"
+HOST="${1:-}"
+if [ -z "$HOST" ] && [ -f /etc/cloudflared/darwish-smart-power.yml ]; then
+    HOST="$(sed -n 's/^  - hostname: //p' /etc/cloudflared/darwish-smart-power.yml | head -1)"
+fi
+HOST="${HOST:-power.darwish-tech.com}"
+# the port install.sh chose for the server
+PORT="$(sed -n 's/^Environment=SP_WEB_PORT=//p' /etc/systemd/system/smartpower.service 2>/dev/null || true)"
+PORT="${PORT:-8095}"
 NAME="darwish-smart-power"
 CONF_DIR=/etc/cloudflared
 CONF="$CONF_DIR/$NAME.yml"
@@ -20,7 +26,13 @@ if [ "$(id -u)" -ne 0 ]; then
     echo "Run it with sudo:  sudo bash $0 $HOST"
     exit 1
 fi
-if ! python3 -c "import socket; socket.create_connection(('127.0.0.1', $PORT), 1).close()" 2>/dev/null; then
+SP_UNIT=/etc/systemd/system/smartpower.service
+SP_TOKEN="$(sed -n 's/^Environment=SP_TOKEN=//p' "$SP_UNIT" 2>/dev/null || true)"
+if ! python3 -c "
+import json, sys, urllib.request
+req = urllib.request.Request('http://127.0.0.1:$PORT/api/health', headers={'X-Token': '$SP_TOKEN'})
+sys.exit(0 if json.load(urllib.request.urlopen(req, timeout=2)).get('app') == 'darwish-smart-power' else 1)
+" 2>/dev/null; then
     echo "Darwish Smart Power is not answering on port $PORT. Run install.sh first."
     exit 1
 fi

@@ -13,7 +13,7 @@ User=mk
 WorkingDirectory=/home/mk/darwish-smart-power
 Environment=SP_TOKEN=change-me-to-a-long-random-token
 Environment=SP_PUBLIC_IP=192.168.1.116
-Environment=SP_WEB_PORT=8090
+Environment=SP_WEB_PORT=8095
 ExecStart=/usr/bin/python3 /home/mk/darwish-smart-power/smartpower.py serve
 Restart=always
 RestartSec=3
