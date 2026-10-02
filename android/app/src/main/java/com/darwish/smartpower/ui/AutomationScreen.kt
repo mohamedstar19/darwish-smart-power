@@ -334,7 +334,7 @@ private fun SceneEditor(strips: List<Strip>, initial: Scene?, onDismiss: () -> U
     var icon by remember { mutableStateOf(initial?.icon ?: SceneEmojis.first()) }
     // key "stripId/outlet" -> true (on) / false (off); missing = leave as it is
     var actions by remember {
-        mutableStateOf(initial?.actions?.associate { "${it.stripId}/${it.outlet}" to it.turnOn } ?: emptyMap())
+        mutableStateOf<Map<String, Boolean>>(initial?.actions?.associate { "${it.stripId}/${it.outlet}" to it.turnOn } ?: emptyMap())
     }
     AlertDialog(
         onDismissRequest = onDismiss,

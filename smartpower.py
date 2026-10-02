@@ -24,6 +24,7 @@ import json
 import os
 import re
 import socket
+import struct
 import sqlite3
 import sys
 import tempfile
@@ -52,7 +53,10 @@ QUEUE_TTL = 24 * 3600                    # commands for an offline strip are kep
 PIN_MAX_TRIES = 5                        # wrong PINs before a strip refuses PINs for a minute
 ICONS = ("plug", "kettle", "router", "tv", "ac", "lamp", "heater", "fan", "fridge",
          "washer", "charger", "computer", "speaker", "camera", "microwave", "iron")
-DEFAULT_SETTINGS = {"price_kwh": 1.5, "currency": "EGP", "max_temp_c": 60, "max_watts": 3000}
+DEFAULT_SETTINGS = {"price_kwh": 1.5, "currency": "EGP", "max_temp_c": 60, "max_watts": 3000, "alexa": True}
+SSDP_GROUP = "239.255.255.250"
+SSDP_PORT = 1900
+ALEXA_BASE_PORT = 52100                  # one small web server per outlet, like a real smart plug
 HERE = Path(__file__).resolve().parent
 # the Android app: a downloaded copy next to this file, or a local Gradle build
 APK_CANDIDATES = (HERE / "darwish-smart-power.apk", HERE / "android/app/build/outputs/apk/debug/app-debug.apk")
@@ -145,6 +149,7 @@ class Store:
         self.schedules: List[Dict[str, Any]] = []
         self.scenes: List[Dict[str, Any]] = []
         self.pending: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        self.alexa_ports: Dict[str, int] = {}
         self.settings: Dict[str, Any] = dict(DEFAULT_SETTINGS)
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -154,6 +159,7 @@ class Store:
             self.schedules = [normalise_schedule(x) for x in data.get("schedules", [])]
             self.scenes = list(data.get("scenes", []))
             self.pending = dict(data.get("pending", {}))
+            self.alexa_ports = dict(data.get("alexa_ports", {}))
             self.settings.update(data.get("settings", {}))
         except FileNotFoundError:
             pass
@@ -163,6 +169,7 @@ class Store:
     def save(self) -> None:
         data = json.dumps({"names": self.names, "timers": self.timers, "meta": self.meta,
                            "schedules": self.schedules, "scenes": self.scenes, "pending": self.pending,
+                           "alexa_ports": self.alexa_ports,
                            "settings": self.settings},
                           ensure_ascii=False, indent=1)
         fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), prefix=".smartpower-")
@@ -927,6 +934,8 @@ class Hub:
                 new[key] = value
         if "currency" in req:
             new["currency"] = str(req["currency"]).strip()[:8] or "EGP"
+        if "alexa" in req:
+            new["alexa"] = bool(req["alexa"])
         self.store.settings = new
         self.store.save()
         return 200, {"ok": True, "settings": new}
@@ -1243,6 +1252,209 @@ class WebHandler(BaseHTTPRequestHandler):
 
 # --------------------------------------------------------------------------- commands
 
+# --------------------------------------------------------------------------- Alexa (local, no cloud)
+
+def xml_escape(text: str) -> str:
+    return (text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;").replace("'", "&apos;"))
+
+
+class Alexa:
+    """Makes every outlet look like a Belkin WeMo smart plug on the home network.
+
+    An Echo finds them with "Alexa, discover devices" (SSDP on UDP 1900), then switches them over
+    plain HTTP, entirely inside the house. The device name Alexa hears is the outlet's name in the
+    app, and each strip also appears as one device for all of its outlets. Strips locked with a PIN
+    are left out, so the lock still means something.
+    """
+
+    def __init__(self, hub: "Hub", ip: str, ssdp_port: int = SSDP_PORT, base_port: int = ALEXA_BASE_PORT):
+        self.hub = hub
+        self.ip = ip
+        self.ssdp_port = ssdp_port
+        self.base_port = base_port
+        self.servers: Dict[str, asyncio.AbstractServer] = {}
+        self.transport: Optional[asyncio.DatagramTransport] = None
+
+    # ---- which devices exist
+
+    def devices(self) -> Dict[str, Dict[str, Any]]:
+        """key "MAC/outlet" -> {"name", "port", "serial", "mac", "outlet"}; outlet 0 = the whole strip."""
+        store = self.hub.store
+        strips = [x for x in self.hub.strips.values() if not store.locked(x.mac)]
+        out: Dict[str, Dict[str, Any]] = {}
+        for strip in strips:
+            strip_name = store.name(strip.mac, 0) or "مشترك %s" % strip.mac[-4:]
+            for n in (0,) + OUTLETS:
+                if n == 0:
+                    name = strip_name
+                else:
+                    name = store.name(strip.mac, n) or "%s %d" % (strip_name, n)
+                key = "%s/%d" % (strip.mac, n)
+                out[key] = {"name": name, "mac": strip.mac, "outlet": n, "port": self.port_for(key),
+                            "serial": hashlib.sha1(key.encode()).hexdigest()[:14].upper()}
+        return out
+
+    def port_for(self, key: str) -> int:
+        ports = self.hub.store.alexa_ports
+        if key not in ports:
+            used = set(ports.values())
+            port = self.base_port
+            while port in used:
+                port += 1
+            ports[key] = port
+            self.hub.store.save()
+        return ports[key]
+
+    def is_on(self, mac: str, outlet: int) -> bool:
+        strip = self.hub.strips.get(mac)
+        if strip is None:
+            return False
+        if outlet == 0:
+            return any(o.on for o in strip.outlets.values())
+        return strip.outlets[outlet].on
+
+    # ---- discovery
+
+    def answer(self, text: str, addr: Tuple[str, int]) -> None:
+        if "M-SEARCH" not in text or not self.hub.store.settings.get("alexa", True):
+            return
+        lowered = text.lower()
+        if "urn:belkin:device:**" in lowered:
+            st = "urn:Belkin:device:**"
+        elif "ssdp:all" in lowered or "upnp:rootdevice" in lowered:
+            st = "upnp:rootdevice"
+        else:
+            return
+        for dev in self.devices().values():
+            reply = ("HTTP/1.1 200 OK\r\n"
+                     "CACHE-CONTROL: max-age=86400\r\n"
+                     "DATE: %s\r\n"
+                     "EXT:\r\n"
+                     "LOCATION: http://%s:%d/setup.xml\r\n"
+                     "OPT: \"http://schemas.upnp.org/upnp/1/0/\"; ns=01\r\n"
+                     "01-NLS: %s\r\n"
+                     "SERVER: Unspecified, UPnP/1.0, Unspecified\r\n"
+                     "ST: %s\r\n"
+                     "USN: uuid:Socket-1_0-%s::%s\r\n"
+                     "X-User-Agent: redsonic\r\n\r\n") % (
+                time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime()), self.ip, dev["port"],
+                dev["serial"], st, dev["serial"], st)
+            if self.transport is not None:
+                self.transport.sendto(reply.encode("utf-8"), addr)
+
+    async def start_discovery(self) -> None:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, "SO_REUSEPORT"):
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except OSError:
+                pass
+        sock.bind(("", self.ssdp_port))
+        try:
+            group = struct.pack("4s4s", socket.inet_aton(SSDP_GROUP), socket.inet_aton(self.ip))
+            sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, group)
+        except OSError as err:
+            log("[alexa] could not join the discovery group (%s); Echo may not find the outlets" % err)
+        sock.setblocking(False)
+        alexa = self
+
+        class Discovery(asyncio.DatagramProtocol):
+            def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
+                alexa.answer(data.decode("utf-8", "replace"), addr)
+
+        self.transport, _ = await asyncio.get_running_loop().create_datagram_endpoint(Discovery, sock=sock)
+
+    # ---- the per-outlet "smart plug"
+
+    async def serve_device(self, key: str, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 10)
+            lines = head.decode("utf-8", "replace").split("\r\n")
+            method, path = (lines[0].split(" ") + ["", ""])[:2]
+            headers = {k.strip().lower(): v.strip() for k, _, v in (ln.partition(":") for ln in lines[1:] if ":" in ln)}
+            length = min(int(headers.get("content-length", "0") or 0), 64 * 1024)
+            body = (await asyncio.wait_for(reader.readexactly(length), 10)).decode("utf-8", "replace") if length else ""
+            status, ctype, payload = await self.device_reply(key, method, path, headers, body)
+            data = payload.encode("utf-8")
+            writer.write(("HTTP/1.1 %s\r\nCONTENT-TYPE: %s\r\nCONTENT-LENGTH: %d\r\nCONNECTION: close\r\n"
+                          "SERVER: Unspecified, UPnP/1.0, Unspecified\r\n\r\n" % (status, ctype, len(data))).encode() + data)
+            await writer.drain()
+        except (asyncio.TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError, ConnectionError, ValueError):
+            pass
+        finally:
+            writer.close()
+
+    async def device_reply(self, key: str, method: str, path: str, headers: Dict[str, str],
+                           body: str) -> Tuple[str, str, str]:
+        dev = self.devices().get(key)
+        if dev is None or not self.hub.store.settings.get("alexa", True):
+            return "404 Not Found", "text/plain", "gone"
+        if method == "GET" and path.startswith("/setup.xml"):
+            return "200 OK", 'text/xml; charset="utf-8"', (
+                '<?xml version="1.0"?><root xmlns="urn:Belkin:device-1-0"><specVersion><major>1</major><minor>0</minor>'
+                "</specVersion><device><deviceType>urn:Belkin:device:controllee:1</deviceType>"
+                "<friendlyName>%s</friendlyName><manufacturer>Belkin International Inc.</manufacturer>"
+                "<modelName>Socket</modelName><modelNumber>3.1415</modelNumber>"
+                "<modelDescription>Belkin Plugin Socket 1.0</modelDescription><UDN>uuid:Socket-1_0-%s</UDN>"
+                "<serialNumber>%s</serialNumber><binaryState>%d</binaryState><serviceList><service>"
+                "<serviceType>urn:Belkin:service:basicevent:1</serviceType><serviceId>urn:Belkin:serviceId:basicevent1</serviceId>"
+                "<controlURL>/upnp/control/basicevent1</controlURL><eventSubURL>/upnp/event/basicevent1</eventSubURL>"
+                "<SCPDURL>/eventservice.xml</SCPDURL></service></serviceList></device></root>"
+            ) % (xml_escape(dev["name"]), dev["serial"], dev["serial"], int(self.is_on(dev["mac"], dev["outlet"])))
+        if method == "GET" and path.startswith("/eventservice.xml"):
+            return "200 OK", 'text/xml; charset="utf-8"', (
+                '<?xml version="1.0"?><scpd xmlns="urn:Belkin:service-1-0"><actionList>'
+                "<action><name>SetBinaryState</name></action><action><name>GetBinaryState</name></action>"
+                "</actionList></scpd>")
+        if method == "POST" and path.startswith("/upnp/control/basicevent1"):
+            action = headers.get("soapaction", "")
+            if "SetBinaryState" in action:
+                m = re.search(r"<BinaryState>\s*(\d)", body)
+                on = bool(m and m.group(1) == "1")
+                # answer at once (Alexa gives up quickly); the switch itself runs right after
+                asyncio.ensure_future(self.hub.switch(dev["mac"], dev["outlet"], on, internal=True))
+                log("[alexa] %s -> %s" % (dev["name"], "on" if on else "off"))
+                return "200 OK", 'text/xml; charset="utf-8"', soap("SetBinaryState", int(on))
+            return "200 OK", 'text/xml; charset="utf-8"', soap("GetBinaryState", int(self.is_on(dev["mac"], dev["outlet"])))
+        return "404 Not Found", "text/plain", "not found"
+
+    async def reconcile(self) -> None:
+        """Start a small server for each new outlet and stop those that are gone."""
+        wanted = self.devices() if self.hub.store.settings.get("alexa", True) else {}
+        for key in list(self.servers):
+            if key not in wanted:
+                self.servers.pop(key).close()
+        for key, dev in wanted.items():
+            if key in self.servers:
+                continue
+            try:
+                self.servers[key] = await asyncio.start_server(
+                    lambda r, w, k=key: self.serve_device(k, r, w), "0.0.0.0", dev["port"])
+            except OSError as err:
+                log("[alexa] port %d busy for %s: %s" % (dev["port"], dev["name"], err))
+
+    async def run_forever(self) -> None:
+        try:
+            await self.start_discovery()
+        except OSError as err:
+            log("[alexa] discovery not available (UDP %d: %s); Alexa will not find the outlets" % (self.ssdp_port, err))
+        while True:
+            try:
+                await self.reconcile()
+            except Exception as err:
+                log("[alexa] %r" % (err,))
+            await asyncio.sleep(15)
+
+
+def soap(action: str, state: int) -> str:
+    return ('<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" '
+            's:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>'
+            '<u:%sResponse xmlns:u="urn:Belkin:service:basicevent:1"><BinaryState>%d</BinaryState>'
+            "</u:%sResponse></s:Body></s:Envelope>") % (action, state, action)
+
+
 def refresh_apk() -> None:
     """Download the newest Android app from the GitHub release if it changed, so phones get it from here."""
     target = APK_CANDIDATES[0]
@@ -1316,6 +1528,8 @@ async def serve(args) -> int:
     print("  Ctrl+C to stop", flush=True)
     async with strip_server:
         tasks = [hub.poll_forever(), hub.timers_forever(), hub.schedules_forever()]
+        if not args.no_alexa:
+            tasks.append(Alexa(hub, guess_lan_ip()).run_forever())
         if not args.no_app_download:
             tasks.append(apk_refresh_forever())
         await asyncio.gather(*tasks)
@@ -1583,6 +1797,54 @@ async def selftest() -> None:
     assert status == 200 and res["strip"]["outlets"][0]["timer"] and res["strip"]["outlets"][3]["timer"]
     web.shutdown()
 
+    # Alexa: an Echo discovers the outlets, reads their names and switches them
+    alexa = Alexa(hub, "127.0.0.1", ssdp_port=0, base_port=53100)
+    await alexa.start_discovery()
+    await alexa.reconcile()
+    assert len(alexa.servers) == 5                  # the strip itself + 4 outlets
+    echo = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    echo.settimeout(2)
+    echo.sendto(b'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\n'
+                b'MX: 2\r\nST: urn:Belkin:device:**\r\n\r\n', ("127.0.0.1", alexa.transport.get_extra_info("sockname")[1]))
+
+    def collect() -> List[str]:
+        found = []
+        try:
+            while len(found) < 5:
+                found.append(echo.recv(2048).decode())
+        except socket.timeout:
+            pass
+        return found
+    replies = await loop.run_in_executor(None, collect)
+    echo.close()
+    assert len(replies) == 5 and all("urn:Belkin:device:**" in r for r in replies)
+    locations = [re.search(r"LOCATION: (\S+)", r).group(1) for r in replies]
+
+    def fetch(url: str, body: Optional[str] = None, action: str = "") -> str:
+        req = urllib.request.Request(url, data=body.encode() if body else None,
+                                     headers={"SOAPACTION": '"urn:Belkin:service:basicevent:1#%s"' % action} if action else {})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.read().decode()
+    setups = {u: await loop.run_in_executor(None, fetch, u) for u in locations}
+    kettle = next(u for u, x in setups.items() if "<friendlyName>Kettle</friendlyName>" in x)
+    control = kettle.replace("/setup.xml", "/upnp/control/basicevent1")
+    relays[1] = True
+    body = ('<?xml version="1.0"?><s:Envelope><s:Body><u:SetBinaryState xmlns:u="urn:Belkin:service:basicevent:1">'
+            '<BinaryState>0</BinaryState></u:SetBinaryState></s:Body></s:Envelope>')
+    assert "<BinaryState>0</BinaryState>" in await loop.run_in_executor(None, fetch, control, body, "SetBinaryState")
+    for _ in range(30):
+        await asyncio.sleep(0.1)
+        if not relays[1]:
+            break
+    assert not relays[1]
+    got = await loop.run_in_executor(None, fetch, control, "<x/>", "GetBinaryState")
+    assert "<BinaryState>0</BinaryState>" in got
+    hub.store.set_pin("A1B2C3D4E5F6", "9999")       # a locked strip is hidden from Alexa
+    await alexa.reconcile()
+    assert not alexa.servers
+    hub.store.set_pin("A1B2C3D4E5F6", "")
+    alexa.transport.close()
+
     strip_task.cancel()
     writer.close()
     await asyncio.sleep(0.1)
@@ -1607,7 +1869,7 @@ async def selftest() -> None:
     writer.close()
     srv.close()
     print("selftest OK: protocol, switching, button events, names, timers, energy history, rooms/icons, "
-          "schedules, cycles, scenes, PIN locks, offline queue, alerts, settings, web API + token")
+          "schedules, cycles, scenes, PIN locks, offline queue, alerts, settings, Alexa, web API + token")
 
 
 # --------------------------------------------------------------------------- main
@@ -1624,6 +1886,8 @@ def main() -> int:
     s.add_argument("--public-ip", default=os.environ.get("SP_PUBLIC_IP", ""),
                    help="address shown in hints, e.g. your VPS public IP (default: auto-detect)")
     s.add_argument("--bind", default="0.0.0.0", help="interface to listen on (default all)")
+    s.add_argument("--no-alexa", action="store_true",
+                   help="do not offer the outlets to Amazon Echo devices on the home network")
     s.add_argument("--no-app-download", action="store_true",
                    help="do not fetch the Android app from GitHub to serve it at /app.apk")
     s.add_argument("--data", default=os.environ.get("SP_DATA", str(HERE / "smartpower-data.json")),

@@ -98,7 +98,9 @@ systemctl restart smartpower
 if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
     ufw allow "$PORT/tcp" >/dev/null
     ufw allow 10086/tcp >/dev/null      # the power strip connects to this port
-    echo "    firewall: opened $PORT and 10086"
+    ufw allow 1900/udp >/dev/null       # Alexa: Echo devices look for the outlets here
+    ufw allow 52100:52199/tcp >/dev/null  # Alexa: one small endpoint per outlet
+    echo "    firewall: opened $PORT, 10086 and the Alexa ports"
 fi
 
 echo "4/4 checking ..."
