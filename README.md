@@ -27,13 +27,16 @@ cd ~ && { [ -d darwish-smart-power ] || git clone https://github.com/mohamedstar
 
 | إيه | من البيت | من أي مكان (Cloudflare Tunnel) |
 |---|---|---|
-| لوحة التحكم | `http://192.168.1.116:8095/` | `https://power.darwish-tech.com/` |
-| الصفحة التعريفية | `http://192.168.1.116:8095/welcome` | `https://power.darwish-tech.com/welcome` |
-| تحميل التطبيق | `http://192.168.1.116:8095/app.apk` | `https://power.darwish-tech.com/app.apk` |
+| الصفحة التعريفية | `http://192.168.1.116:8096/` | `https://power.darwish-tech.com/` |
+| لوحة التحكم (PWA) | `http://192.168.1.116:8096/panel` | `https://power.darwish-tech.com/panel` |
+| تحميل التطبيق | `http://192.168.1.116:8096/app.apk` | `https://power.darwish-tech.com/app.apk` |
+
+(على السيرفر ده 8095 طلع محجوز كمان، فـ `install.sh` اختار **8096**.)
 
 - التطبيق متظبط إنه يتصل بـ `https://power.darwish-tech.com` لوحده، وده شغال من البيت ومن برّه.
   كل اللي عليك تكتب الرمز (token) في الإعدادات.
-- علشان رابط `app.apk` يشتغل: نزّل الـ APK من صفحة الـ Releases في GitHub وحطه جنب `smartpower.py` باسم `darwish-smart-power.apk`.
+- `app.apk`: السيرفر بينزّل آخر نسخة من التطبيق من GitHub لوحده (كل 6 ساعات لو اتغيرت) ويقدّمها للعملاء من موقعك.
+- **تحديث السيرفر** بعد أي تطوير: `cd ~/darwish-smart-power && git pull -q && sudo systemctl restart smartpower`
 - **ربط الدومين بخطوة واحدة** (على السيرفر):
   `cd ~/darwish-smart-power && git pull -q && sudo bash tunnel.sh power.darwish-tech.com`
   السكربت بيثبّت `cloudflared`، ويطبع رابط واحد تفتحه وتختار الدومين وتدوس Authorize، وبعدها بيعمل الـ tunnel
@@ -44,14 +47,28 @@ cd ~ && { [ -d darwish-smart-power ] || git clone https://github.com/mohamedstar
 
 ## المميزات
 
-- تشغيل/إطفاء كل مخرج لوحده، أو الكل مرة واحدة
+- تشغيل/إطفاء كل مخرج لوحده، أو أكتر من مخرج، أو الكل مرة واحدة
 - استهلاك لحظي بالوات، والطاقة بالـ kWh، والجهد والتيار، والحرارة، وقوة إشارة الواي فاي
-- **أسماء للمخارج** (مثلاً "الغلاية"، "التكييف")، محفوظة على السيرفر
-- **مؤقت**: "اطفي بعد ساعة" أو "شغّل بعد 30 دقيقة"، ويشتغل على السيرفر حتى لو الموبايل مقفول
-- **إعداد المشترك من التطبيق نفسه**: من غير كمبيوتر ومن غير Termux
-- لو حد داس على زرار المشترك بإيده، الحالة بتتحدث على طول
-- حماية برمز (token) لو السيرفر مفتوح على الإنترنت
-- التطبيق عربي وإنجليزي (بيتبع لغة الموبايل، أو تختار من الإعدادات)
+- **الاستهلاك والفاتورة**: رسم لليوم/الأسبوع/الشهر، والتكلفة بالجنيه حسب سعر الكيلووات، واستهلاك كل جهاز
+- **أسماء وأيقونات للمخارج**، **غرف** للمشتركات، و**مفضلة**
+- **جداول مواعيد** (الساعة كذا في أيام معينة)، **تشغيل دوري** (اشتغل 10 دقايق واطفي 50 وكرّر)، و**مؤقت** لمرة واحدة، وكله شغال على السيرفر حتى لو الموبايل مقفول
+- **المشاهد**: مجموعة مخارج تتشغل وتطفي مع بعض بضغطة
+- **أوامر متأجلة**: لو المشترك مش متصل، الأمر يتنفذ أول ما يرجع
+- **قفل المشترك بـ PIN** (السيرفر نفسه بيطلبه) مع فتحه بالبصمة، و**قفل التطبيق كله بالبصمة**
+- **تنبيهات**: المشترك فصل أو رجع، المخرج سخن، استهلاك عالي
+- **أليكسا** جوه البيت من غير سحابة: "أليكسا، شغّلي الغلاية"
+- **إعداد المشترك من التطبيق نفسه**، والتحديث اللحظي لو حد داس على زرار المشترك
+- **لوحة تحكم على الويب** تتسطّب على أي موبايل (PWA)، حتى الآيفون
+- عربي وإنجليزي في التطبيق والموقع
+
+## أليكسا
+
+1. اتأكد إن سماعة Echo على نفس واي فاي البيت اللي فيه السيرفر.
+2. قول: **"أليكسا، ابحثي عن الأجهزة"** (أو من تطبيق Alexa: الأجهزة ← + ← إضافة جهاز ← Other ← Discover).
+3. كل مخرج هيظهر باسمه اللي في التطبيق، وكل مشترك كجهاز واحد لكل مخارجه. لو غيّرت اسم، اعمل بحث تاني.
+4. المشتركات المقفولة بـ PIN مش بتظهر لأليكسا. ولو عايز توقف الخاصية: `--no-alexa`.
+
+ملحوظة: أليكسا بتلاقي الأجهزة عن طريق الشبكة المحلية (UDP 1900 وبورتات 52100 وطالع)، و`install.sh` بيفتحهم لو الـ firewall شغال.
 
 ## الفكرة ببساطة
 
@@ -139,6 +156,13 @@ a one-file Python server with a built-in web page, plus a native Android app.
 - **Strip setup from the app**: the phone sends the Wi-Fi and server IP to the strip itself
 - Physical button presses on the strip show up immediately
 - Optional token for servers reachable from the internet
+- Energy history and bill (day / week / month), rooms, icons, favourites
+- Schedules, repeating on/off cycles, one-off timers and scenes, all run by the server
+- Commands for an offline strip are queued and run when it is back
+- Per-strip PIN enforced by the server (fingerprint unlock in the app), app-wide fingerprint lock
+- Alerts (offline, hot outlet, high power) as phone notifications
+- Local Alexa control: outlets appear to Echo devices as smart plugs (no cloud, no skill)
+- Installable web control panel (PWA) at /panel
 - Arabic and English in both the app and the web page
 
 **Android app download:** https://github.com/mohamedstar19/darwish-smart-power/releases/latest/download/darwish-smart-power.apk
@@ -166,11 +190,18 @@ POST bodies must be JSON (`Content-Type: application/json`).
 |---|---|---|
 | GET | `/api/state` | all strips, outlets, readings, names and timers |
 | GET | `/api/health` | `{"ok": true, "version": "…"}`, used by the app's Test button |
-| POST | `/api/switch` | `{"strip": "<id>", "outlet": 0-4, "on": true}`, where outlet `0` = all; waits for the strip to confirm |
+| POST | `/api/switch` | `{"strip": "<id>", "outlets": [1, 3], "on": true}` (or `"outlet": 0-4`, `0` = all); waits for the strip to confirm, 202 + queued when it is offline |
 | POST | `/api/rename` | `{"strip": "<id>", "outlet": 0-4, "name": "Kettle"}`, where outlet `0` = the strip; empty name = default |
 | POST | `/api/timer` | `{"strip": "<id>", "outlet": 0-4, "minutes": 30, "on": false}`; `minutes: 0` cancels |
 | GET | `/smartpower.py`, `/app.apk` | public downloads (no token), for setting up a new phone or laptop |
-| GET | `/welcome` | public introduction page (from `website/index.html`); its download button points to `/app.apk` when the APK is next to the server |
+| GET | `/api/history?range=day\|week\|month` | usage buckets, total kWh, cost, per-outlet breakdown |
+| GET | `/api/events?after=ID` | alerts (offline, online, temp, power) |
+| POST | `/api/meta` | `{"strip", "outlet", "room"?, "icon"?, "favorite"?}` |
+| POST | `/api/schedules/save`, `/delete` | `{"strip", "outlets": [..], "kind": "time", "on", "time": "HH:MM", "days": [0-6]}` or `"kind": "cycle", "on_minutes", "off_minutes"` |
+| POST | `/api/scenes/save`, `/delete`, `/run` | `{"name", "icon", "actions": [{"strip", "outlet", "on"}]}` |
+| POST | `/api/lock` | `{"strip", "pin", "old_pin"?}`; empty pin removes it. Locked strips need `"pin"` on switch/timer/schedule calls |
+| POST | `/api/settings` | `{"price_kwh", "currency", "max_temp_c", "max_watts", "alexa"}` |
+| GET | `/`, `/panel` | public introduction page and the control panel (asks for the password itself) |
 
 ### Strip protocol (TCP 10086, CRLF-terminated text lines)
 
