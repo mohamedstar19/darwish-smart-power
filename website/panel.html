@@ -95,10 +95,14 @@ input:focus{border-color:var(--cyan)}
 .toast.show{transform:none;opacity:1;visibility:visible}
 .install{display:none}
 .room{color:var(--soft);font-size:13px;font-weight:600;margin:20px 6px 8px}
+.credit{text-align:center;color:var(--faint);font-size:12px;padding:8px 16px 28px}
+.credit a{color:var(--cyan);font-weight:700;text-decoration:none}
 </style>
 </head>
 <body>
 <div class="wrap" id="root"></div>
+<footer class="credit"><span data-credit>تطوير</span> <a href="https://darwish-tech.com" target="_blank" rel="noopener">Darwish Tech</a>
+  · <a href="https://darwish-tech.com" target="_blank" rel="noopener">darwish-tech.com</a></footer>
 <div class="toast" id="toast"></div>
 <script>
 const L = {
@@ -144,6 +148,7 @@ async function api(path, body) {
 }
 
 function renderLogin(msg) {
+  credit();
   document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
   document.getElementById("root").innerHTML = `<div class="login glass">
       <img src="/icons/icon-192.png" alt=""><h2 style="margin:4px 0">Darwish Smart Power</h2>
@@ -171,7 +176,9 @@ function spark(hours) {
     <path d="${d} L${w} ${h} L0 ${h} Z" fill="url(#sg)"/><path d="${d}" fill="none" stroke="#4fd1ff" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
 }
 
+function credit() { const c = document.querySelector("[data-credit]"); if (c) c.textContent = lang === "ar" ? "تطوير" : "Developed by"; }
 function render() {
+  credit();
   document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
   const s = state, cur = s.settings && s.settings.currency === "EGP" ? t("cost") : (s.settings && s.settings.currency) || "";
   const watts = s.strips.reduce((a, x) => a + x.watts, 0), hour = new Date().getHours();
