@@ -150,6 +150,9 @@ class Store:
         self.scenes: List[Dict[str, Any]] = []
         self.pending: Dict[str, Dict[str, Dict[str, Any]]] = {}
         self.alexa_ports: Dict[str, int] = {}
+        # family members: {"id", "name", "role": "control"|"view", "strips": [MAC, ...] (empty = all),
+        #                  "token_hash", "created"}; the server token itself is the owner
+        self.users: List[Dict[str, Any]] = []
         self.settings: Dict[str, Any] = dict(DEFAULT_SETTINGS)
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -160,6 +163,7 @@ class Store:
             self.scenes = list(data.get("scenes", []))
             self.pending = dict(data.get("pending", {}))
             self.alexa_ports = dict(data.get("alexa_ports", {}))
+            self.users = list(data.get("users", []))
             self.settings.update(data.get("settings", {}))
         except FileNotFoundError:
             pass
@@ -169,7 +173,7 @@ class Store:
     def save(self) -> None:
         data = json.dumps({"names": self.names, "timers": self.timers, "meta": self.meta,
                            "schedules": self.schedules, "scenes": self.scenes, "pending": self.pending,
-                           "alexa_ports": self.alexa_ports,
+                           "alexa_ports": self.alexa_ports, "users": self.users,
                            "settings": self.settings},
                           ensure_ascii=False, indent=1)
         fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), prefix=".smartpower-")
@@ -248,6 +252,13 @@ class Store:
             return True
         return False
 
+    def user_by_token(self, token: str) -> Optional[Dict[str, Any]]:
+        digest = hashlib.sha256(token.encode()).hexdigest()
+        for user in self.users:
+            if hmac.compare_digest(user.get("token_hash", ""), digest):
+                return user
+        return None
+
     # PIN locks: meta[mac]["pin"] = "salt$sha256(salt + pin)"
     def locked(self, mac: str) -> bool:
         return bool(self.meta.get(mac, {}).get("pin"))
@@ -300,6 +311,16 @@ def normalise_schedule(sched: Dict[str, Any]) -> Dict[str, Any]:
         sched["outlets"] = [int(sched.pop("outlet", 0))]
     sched.setdefault("kind", "time")
     return sched
+
+
+OWNER = {"role": "owner", "name": None, "id": None, "strips": None}
+ROLES = ("control", "view")
+OWNER_ONLY = ("/api/users", "/api/settings", "/api/lock")
+
+
+def may_see(who: Dict[str, Any], mac: str) -> bool:
+    """A member limited to some strips sees only those; the owner and unlimited members see all."""
+    return who["strips"] is None or mac.upper() in who["strips"]
 
 
 def outlet_list(req: Dict[str, Any]) -> List[int]:
@@ -582,6 +603,7 @@ class Hub:
         self.schedule_fired: Dict[str, str] = {}
         self.cycle_phase: Dict[str, bool] = {}
         self.pin_failures: Dict[str, Tuple[int, float]] = {}
+        self.user_seen: Dict[str, float] = {}
 
     @staticmethod
     def label(strip: Strip) -> str:
@@ -681,8 +703,8 @@ class Hub:
             "last_event": self.history.last_event_id(),
         }
 
-    async def history_report(self, rng: str, strip_id: Optional[str] = None,
-                             now: Optional[float] = None) -> Tuple[int, Dict[str, Any]]:
+    async def history_report(self, rng: str, strip_id: Optional[str] = None, now: Optional[float] = None,
+                             allowed: Optional[set] = None) -> Tuple[int, Dict[str, Any]]:
         now = time.time() if now is None else now
         mac = None
         if strip_id:
@@ -703,6 +725,8 @@ class Hub:
         by_outlet: Dict[Tuple[str, int], float] = {}
         first_day = datetime.date.fromtimestamp(start)
         for m, outlet, hour, wh in self.history.rows_since(start, mac):
+            if allowed is not None and m not in allowed:
+                continue
             if rng == "day":
                 index = int((hour - start) // 3600)
             else:
@@ -724,6 +748,95 @@ class Hub:
 
     async def events(self, after: int) -> Dict[str, Any]:
         return {"events": self.history.events_after(after), "last_id": self.history.last_event_id()}
+
+    # ---- family members
+
+    def user_json(self, user: Dict[str, Any]) -> Dict[str, Any]:
+        return {"id": user["id"], "name": user["name"], "role": user["role"], "strips": user.get("strips", []),
+                "created": user.get("created", 0), "last_seen": int(self.user_seen.get(user["id"], 0))}
+
+    async def users(self) -> Dict[str, Any]:
+        return {"users": [self.user_json(u) for u in self.store.users]}
+
+    def check_user_fields(self, req: Dict[str, Any], user: Dict[str, Any]) -> Optional[Tuple[int, Dict[str, Any]]]:
+        if "name" in req:
+            name = str(req.get("name") or "").strip()[:30]
+            if not name:
+                return 400, {"error": "the family member needs a name"}
+            user["name"] = name
+        if "role" in req:
+            if req["role"] not in ROLES:
+                return 400, {"error": "role must be control or view"}
+            user["role"] = req["role"]
+        if "strips" in req:
+            strips = [str(x).upper() for x in (req.get("strips") or [])]
+            unknown = [x for x in strips if x not in self.strips]
+            if unknown:
+                return 400, {"error": "unknown strip %s" % unknown[0]}
+            user["strips"] = sorted(set(strips))
+        return None
+
+    async def add_user(self, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        user: Dict[str, Any] = {"id": os.urandom(4).hex(), "name": "", "role": "control", "strips": [],
+                                "created": int(time.time())}
+        error = self.check_user_fields({"name": req.get("name", ""), **req}, user)
+        if error:
+            return error
+        token = base64.urlsafe_b64encode(os.urandom(12)).decode().rstrip("=")
+        user["token_hash"] = hashlib.sha256(token.encode()).hexdigest()
+        self.store.users.append(user)
+        self.store.save()
+        # the token is shown this once; only its hash is kept
+        return 200, {"ok": True, "user": self.user_json(user), "token": token, **(await self.users())}
+
+    async def update_user(self, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        user = next((u for u in self.store.users if u["id"] == req.get("id")), None)
+        if user is None:
+            return 404, {"error": "unknown family member"}
+        changed = dict(user)
+        error = self.check_user_fields(req, changed)
+        if error:
+            return error
+        reply: Dict[str, Any] = {"ok": True}
+        if req.get("new_token"):
+            token = base64.urlsafe_b64encode(os.urandom(12)).decode().rstrip("=")
+            changed["token_hash"] = hashlib.sha256(token.encode()).hexdigest()
+            reply["token"] = token
+        user.update(changed)
+        self.store.save()
+        reply["user"] = self.user_json(user)
+        reply.update(await self.users())
+        return 200, reply
+
+    async def delete_user(self, user_id: str) -> Tuple[int, Dict[str, Any]]:
+        before = len(self.store.users)
+        self.store.users = [u for u in self.store.users if u["id"] != user_id]
+        if len(self.store.users) == before:
+            return 404, {"error": "unknown family member"}
+        self.store.save()
+        return 200, {"ok": True, **(await self.users())}
+
+    def filter_for(self, who: Dict[str, Any], snap: Dict[str, Any]) -> Dict[str, Any]:
+        """What a member limited to some strips may see of /api/state."""
+        snap["me"] = {"role": who["role"], "name": who["name"], "strips": sorted(who["strips"]) if who["strips"] else []}
+        if who["strips"] is None:
+            return snap
+        snap["strips"] = [x for x in snap["strips"] if may_see(who, x["id"])]
+        snap["schedules"] = [x for x in snap["schedules"] if may_see(who, x["strip"])]
+        snap["scenes"] = [x for x in snap["scenes"] if all(may_see(who, a["strip"]) for a in x["actions"])]
+        # today's totals for just their strips
+        kwh = sum(x["today_kwh"] for x in snap["strips"])
+        snap["today"] = {"kwh": round(kwh, 3), "cost": self.cost(kwh), "hours": snap["today"]["hours"]}
+        snap["month"] = {"kwh": 0.0, "cost": 0.0}
+        return snap
+
+    def scene_strips(self, scene_id: str) -> List[str]:
+        scene = next((x for x in self.store.scenes if x.get("id") == scene_id), None)
+        return [a["strip"] for a in scene["actions"]] if scene else []
+
+    def schedule_strip(self, sched_id: str) -> Optional[str]:
+        sched = next((x for x in self.store.schedules if x.get("id") == sched_id), None)
+        return sched["strip"] if sched else None
 
     def find(self, strip_id: Any) -> Optional[Strip]:
         return self.strips.get(str(strip_id).upper())
@@ -1081,9 +1194,24 @@ class WebHandler(BaseHTTPRequestHandler):
     # ---- helpers
 
     def token_ok(self) -> bool:
-        expected = self.server.token
-        if not expected:
-            return True
+        return self.who() is not None
+
+    def who(self) -> Optional[Dict[str, Any]]:
+        """The owner (server token, or no token set), a family member (their own token), or None."""
+        if not self.server.token:
+            return OWNER
+        offered = self.offered_tokens()
+        if any(o and hmac.compare_digest(o.encode(), self.server.token.encode()) for o in offered):
+            return OWNER
+        for o in offered:
+            user = self.server.hub.store.user_by_token(o) if o else None
+            if user:
+                self.server.hub.user_seen[user["id"]] = time.time()
+                return {"role": user["role"], "name": user["name"], "id": user["id"],
+                        "strips": set(user.get("strips") or []) or None}
+        return None
+
+    def offered_tokens(self) -> List[str]:
         offered = [self.headers.get("X-Token", "")]
         auth = self.headers.get("Authorization", "")
         if auth[:7].lower() == "bearer ":
@@ -1094,7 +1222,7 @@ class WebHandler(BaseHTTPRequestHandler):
             except (ValueError, UnicodeDecodeError):
                 pass
         offered += parse_qs(urlsplit(self.path).query).get("token", [])
-        return any(o and hmac.compare_digest(o.encode(), expected.encode()) for o in offered)
+        return offered
 
     def reply(self, code: int, body: bytes, ctype: str, extra: Optional[Dict[str, str]] = None) -> None:
         self.send_response(code)
@@ -1162,33 +1290,55 @@ class WebHandler(BaseHTTPRequestHandler):
             return
         if self.send_static(path):                  # public: website, control panel (asks for the password), PWA files
             return
-        if not self.token_ok():
+        who = self.who()
+        if who is None:
             self.deny()
             return
+        hub = self.server.hub
         if path == "/api/state":
-            snap = self.server.run_on_loop(self.server.hub.snapshot())
+            snap = hub.filter_for(who, self.server.run_on_loop(hub.snapshot()))
             snap["server"] = {"ip": self.server.public_ip, "strip_port": STRIP_PORT, "version": VERSION}
             self.reply_json(200, snap)
+        elif path == "/api/me":
+            self.reply_json(200, {"role": who["role"], "name": who["name"]})
+        elif path == "/api/users":
+            if who["role"] != "owner":
+                self.reply_json(403, {"error": "only the owner manages family members"})
+            else:
+                self.reply_json(200, self.server.run_on_loop(hub.users()))
         elif path == "/api/health":
             self.reply_json(200, {"ok": True, "app": "darwish-smart-power", "version": VERSION})
         elif path == "/api/history":
             query = parse_qs(urlsplit(self.path).query)
-            code, body = self.server.run_on_loop(self.server.hub.history_report(
-                query.get("range", ["day"])[0], query.get("strip", [None])[0]))
+            strip = query.get("strip", [None])[0]
+            if strip and not may_see(who, strip):
+                self.reply_json(403, {"error": "this strip is not shared with you"})
+                return
+            code, body = self.server.run_on_loop(hub.history_report(
+                query.get("range", ["day"])[0], strip, allowed=who["strips"]))
             self.reply_json(code, body)
         elif path == "/api/events":
             try:
                 after = int(parse_qs(urlsplit(self.path).query).get("after", ["0"])[0])
             except ValueError:
                 after = 0
-            self.reply_json(200, self.server.run_on_loop(self.server.hub.events(after)))
+            events = self.server.run_on_loop(hub.events(after))
+            events["events"] = [e for e in events["events"] if may_see(who, e["strip"])]
+            self.reply_json(200, events)
         else:
             self.reply_json(404, {"error": "not found"})
 
     def do_POST(self):
         path = urlsplit(self.path).path
-        if not self.token_ok():
+        who = self.who()
+        if who is None:
             self.deny()
+            return
+        if who["role"] == "view":
+            self.reply_json(403, {"error": "view only", "view_only": True})
+            return
+        if who["role"] != "owner" and path.startswith(OWNER_ONLY):
+            self.reply_json(403, {"error": "only the owner can change this"})
             return
         # JSON only: browsers cannot send this cross-site without a CORS preflight, which we never grant
         if not self.headers.get("Content-Type", "").lower().startswith("application/json"):
@@ -1211,9 +1361,27 @@ class WebHandler(BaseHTTPRequestHandler):
         hub = self.server.hub
         strip_id = str(req.get("strip", ""))
         pin = req.get("pin")
+        # a member shared only some strips may touch only those
+        if who["strips"] is not None:
+            touched = [strip_id] if strip_id else []
+            if path.startswith("/api/scenes/") and path != "/api/scenes/save":
+                touched = hub.scene_strips(str(req.get("id", "")))
+            elif path == "/api/scenes/save":
+                touched = [str(a.get("strip", "")) for a in req.get("actions", []) if isinstance(a, dict)]
+            elif path == "/api/schedules/delete":
+                touched = [hub.schedule_strip(str(req.get("id", ""))) or ""]
+            if not all(may_see(who, x) for x in touched):
+                self.reply_json(403, {"error": "this strip is not shared with you"})
+                return
         try:
             outlets = outlet_list(req) if "outlets" in req else None
-            if path == "/api/meta":
+            if path == "/api/users/add":
+                code, body = self.server.run_on_loop(hub.add_user(req))
+            elif path == "/api/users/update":
+                code, body = self.server.run_on_loop(hub.update_user(req))
+            elif path == "/api/users/delete":
+                code, body = self.server.run_on_loop(hub.delete_user(str(req.get("id", ""))))
+            elif path == "/api/meta":
                 code, body = self.server.run_on_loop(hub.set_meta(strip_id, outlet, req))
             elif path == "/api/schedules/save":
                 code, body = self.server.run_on_loop(hub.save_schedule(req))
@@ -1795,6 +1963,38 @@ async def selftest() -> None:
     assert status == 200 and not any(relays[n] for n in OUTLETS)
     status, res = await loop.run_in_executor(None, http, "/api/timer", {"strip": S, "outlets": [1, 4], "minutes": 30, "on": True})
     assert status == 200 and res["strip"]["outlets"][0]["timer"] and res["strip"]["outlets"][3]["timer"]
+    # family sharing: members get their own token, a role and optionally only some strips
+    hub.strips["B2B2B2B2B2B2"] = Strip("B2B2B2B2B2B2")          # a second (offline) strip
+    status, res = await loop.run_in_executor(None, http, "/api/users/add", {"name": "Mona", "role": "view"})
+    assert status == 200 and res["user"]["role"] == "view" and len(res["token"]) >= 16
+    viewer = res["token"]
+    status, state = await loop.run_in_executor(None, http, "/api/state", None, viewer)
+    assert status == 200 and state["me"]["role"] == "view" and len(state["strips"]) == 2
+    status, _ = await loop.run_in_executor(None, http, "/api/switch", {"strip": S, "outlet": 1, "on": True}, viewer)
+    assert status == 403
+    status, res = await loop.run_in_executor(None, http, "/api/users/add",
+                                             {"name": "Omar", "role": "control", "strips": [S.lower()]})
+    assert status == 200 and res["user"]["strips"] == [S]
+    kid, kid_id = res["token"], res["user"]["id"]
+    status, state = await loop.run_in_executor(None, http, "/api/state", None, kid)
+    assert [x["id"] for x in state["strips"]] == [S] and state["me"]["name"] == "Omar"
+    assert (await loop.run_in_executor(None, http, "/api/switch", {"strip": S, "outlets": [4], "on": True}, kid))[0] == 200
+    assert relays[4]
+    assert (await loop.run_in_executor(None, http, "/api/switch", {"strip": "B2B2B2B2B2B2", "outlet": 1, "on": True}, kid))[0] == 403
+    assert (await loop.run_in_executor(None, http, "/api/settings", {"price_kwh": 9}, kid))[0] == 403
+    assert (await loop.run_in_executor(None, http, "/api/lock", {"strip": S, "pin": "1234"}, kid))[0] == 403
+    assert (await loop.run_in_executor(None, http, "/api/users", None, kid))[0] == 403
+    status, res = await loop.run_in_executor(None, http, "/api/users")
+    assert status == 200 and {u["name"] for u in res["users"]} == {"Mona", "Omar"}
+    assert next(u for u in res["users"] if u["name"] == "Omar")["last_seen"] > 0
+    assert (await loop.run_in_executor(None, http, "/api/users/add", {"name": "X", "role": "boss"}))[0] == 400
+    status, res = await loop.run_in_executor(None, http, "/api/users/update", {"id": kid_id, "new_token": True})
+    assert status == 200 and res["token"] != kid
+    assert (await loop.run_in_executor(None, http, "/api/state", None, kid))[0] == 401   # the old token stops working
+    assert (await loop.run_in_executor(None, http, "/api/state", None, res["token"]))[0] == 200
+    status, res = await loop.run_in_executor(None, http, "/api/users/delete", {"id": kid_id})
+    assert status == 200 and [u["name"] for u in res["users"]] == ["Mona"]
+    del hub.strips["B2B2B2B2B2B2"]
     web.shutdown()
 
     # Alexa: an Echo discovers the outlets, reads their names and switches them
@@ -1869,7 +2069,7 @@ async def selftest() -> None:
     writer.close()
     srv.close()
     print("selftest OK: protocol, switching, button events, names, timers, energy history, rooms/icons, "
-          "schedules, cycles, scenes, PIN locks, offline queue, alerts, settings, Alexa, web API + token")
+          "schedules, cycles, scenes, PIN locks, offline queue, alerts, settings, Alexa, family sharing, web API + token")
 
 
 # --------------------------------------------------------------------------- main

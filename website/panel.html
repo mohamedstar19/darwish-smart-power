@@ -112,14 +112,16 @@ const L = {
        login: "ادخل باسورد السيرفر", enter: "دخول", wrong: "الباسورد غلط", unreachable: "السيرفر مش بيرد", logout: "خروج",
        none: "مفيش مشترك متصل لسه. اعمل إعداد للمشترك من تطبيق الأندرويد.", pin: "المشترك ده مقفول. ادخل الـ PIN:", wrongPin: "الـ PIN غلط",
        queued: "المشترك مش متصل، الأمر هيتنفذ أول ما يرجع", done: "تم", fail: "فشل: ", install: "تثبيت", other: "بدون غرفة",
-       iosHint: "على الآيفون: زرار المشاركة ← إضافة إلى الشاشة الرئيسية", cost: "ج.م", waiting: "مستني يرجع"},
+       iosHint: "على الآيفون: زرار المشاركة ← إضافة إلى الشاشة الرئيسية", cost: "ج.م", waiting: "مستني يرجع",
+       viewOnly: "صلاحية مشاهدة بس", hi: "أهلاً"},
   en: {lang: "العربية", hello_m: "Good morning", hello_e: "Good evening", now: "Using now", today: "Today", month: "This month",
        scenes: "Scenes", strip: "Strip", outlet: "Outlet", online: "online", offline: "offline", allOn: "All on", allOff: "All off",
        timer: "Timer", rename: "New name (empty = default):", timerAsk: "Switch after how many minutes? (0 = cancel)", turnsOn: "on at", turnsOff: "off at",
        login: "Enter the server password", enter: "Sign in", wrong: "Wrong password", unreachable: "The server is not answering", logout: "Sign out",
        none: "No strip connected yet. Set one up from the Android app.", pin: "This strip is locked. Enter its PIN:", wrongPin: "Wrong PIN",
        queued: "The strip is offline; it will run when it is back", done: "Done", fail: "Failed: ", install: "Install", other: "No room",
-       iosHint: "On iPhone: Share → Add to Home Screen", cost: "EGP", waiting: "waiting"}
+       iosHint: "On iPhone: Share → Add to Home Screen", cost: "EGP", waiting: "waiting",
+       viewOnly: "View only", hi: "Hi"}
 };
 const ICON = {plug:"🔌",kettle:"☕",router:"📶",tv:"📺",ac:"❄️",lamp:"💡",heater:"🔥",fan:"🌀",fridge:"🧊",washer:"🧺",charger:"🔋",
               computer:"💻",speaker:"🔊",camera:"📷",microwave:"🍲",iron:"👔"};
@@ -185,7 +187,7 @@ function render() {
   const rooms = {};
   s.strips.forEach(x => (rooms[x.room || ""] = rooms[x.room || ""] || []).push(x));
   let html = `<header><img src="/icons/icon-192.png" alt=""><div class="t"><h1 dir="ltr" style="text-align:start">Darwish Power</h1>
-      <div class="hello">${hour < 12 ? t("hello_m") : t("hello_e")}</div></div>
+      <div class="hello">${s.me && s.me.name ? t("hi") + " " + esc(s.me.name) : (hour < 12 ? t("hello_m") : t("hello_e"))}${readOnly() ? " · 👁 " + t("viewOnly") : ""}</div></div>
       <button class="icon-btn install" id="install">${t("install")}</button>
       <button class="icon-btn" id="lang">${t("lang")}</button><button class="icon-btn" id="logout">${t("logout")}</button></header>
     <section class="hero glass"><div class="label">${t("now")}</div>
@@ -234,6 +236,8 @@ function stripHtml(x) {
     }).join("")}</div></section>`;
 }
 
+function readOnly() { return !!(state && state.me && state.me.role === "view"); }
+
 async function withPin(stripId, fn) {
   try { return await fn(pins[stripId]); }
   catch (e) {
@@ -245,6 +249,7 @@ async function withPin(stripId, fn) {
 }
 
 document.addEventListener("click", async ev => {
+  if (readOnly() && ev.target.closest("[data-sw],[data-timer],[data-more],[data-scene]")) { toast("👁 " + t("viewOnly")); return; }
   const more = ev.target.closest("[data-more]");
   if (more) {
     ev.stopPropagation();
