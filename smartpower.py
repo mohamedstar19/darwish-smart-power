@@ -769,7 +769,10 @@ class Hub:
         denied = self.check_pin(strip, pin)
         if denied:
             return denied
-        for n in (outlets if outlets is not None else [outlet]):
+        targets = outlets if outlets is not None else [outlet]
+        if minutes <= 0 and 0 in targets:
+            targets = [0] + list(OUTLETS)                # "cancel for all" clears every timer of the strip
+        for n in targets:
             if minutes <= 0:
                 self.store.clear_timer(strip.mac, n)
             else:
