@@ -40,7 +40,7 @@ class Prefs(context: Context) {
 
     companion object {
         /** The home server this app was made for; can be changed in Settings. */
-        const val DEFAULT_SERVER_IP = "192.168.1.116"
+        const val DEFAULT_SERVER_IP = "41.38.141.215"   // the server's fixed internet IP: strips anywhere reach it
 
         /** Works at home and outside (Cloudflare Tunnel), whatever port the server uses. */
         const val DEFAULT_ADDRESS = "https://power.darwish-tech.com"

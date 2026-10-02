@@ -33,6 +33,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darwish.smartpower.R
 import com.darwish.smartpower.data.Prefs
 import com.darwish.smartpower.data.SetupProblem
@@ -55,7 +57,13 @@ import kotlinx.coroutines.launch
 @Composable
 fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val state by vm.state.collectAsStateWithLifecycle()
     var serverIp by rememberSaveable { mutableStateOf(vm.suggestedServerIp()) }
+    var serverIpEdited by rememberSaveable { mutableStateOf(false) }
+    // the server reports its address once connected; follow it until the user types their own
+    LaunchedEffect(state.server?.serverIp) {
+        if (!serverIpEdited) serverIp = vm.suggestedServerIp()
+    }
     var ssid by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var showPassword by rememberSaveable { mutableStateOf(false) }
@@ -96,7 +104,7 @@ fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Uni
 
             OutlinedTextField(
                 value = serverIp,
-                onValueChange = { serverIp = it.trim(); result = null },
+                onValueChange = { serverIp = it.trim(); serverIpEdited = true; result = null },
                 label = { Text(stringResource(R.string.setup_server_ip)) },
                 placeholder = { Text(Prefs.DEFAULT_SERVER_IP) },
                 supportingText = { Text(stringResource(R.string.setup_server_ip_hint)) },
