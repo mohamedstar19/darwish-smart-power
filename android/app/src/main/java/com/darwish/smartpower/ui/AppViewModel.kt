@@ -177,7 +177,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Best guess for the IP the strip should dial: what the server reports, else the saved host. */
     fun suggestedServerIp(): String =
-        _state.value.serverIp ?: prefs.address?.host?.takeIf { it.all { c -> c.isDigit() || c == '.' } }.orEmpty()
+        _state.value.serverIp ?: prefs.address?.host?.takeIf { it.all { c -> c.isDigit() || c == '.' } } ?: Prefs.DEFAULT_SERVER_IP
 
     companion object {
         fun key(stripId: String, outlet: Int) = "$stripId/$outlet"
