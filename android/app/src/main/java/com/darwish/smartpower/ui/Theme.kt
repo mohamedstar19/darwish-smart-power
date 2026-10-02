@@ -1,55 +1,160 @@
 package com.darwish.smartpower.ui
 
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.ColorScheme
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
-private val Light = lightColorScheme(
-    primary = Color(0xFFB83F0C),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFDBCC),
-    onPrimaryContainer = Color(0xFF3A0B00),
-    secondary = Color(0xFF2B7A3B),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFC7EFCB),
-    onSecondaryContainer = Color(0xFF00210A),
-    background = Color(0xFFFBF8F4),
-    surface = Color(0xFFFBF8F4),
-    surfaceVariant = Color(0xFFF0E9E2),
+/** The "dark glass" look: a deep gradient with translucent cards and glowing accents. */
+@Immutable
+object Glass {
+    val Night = Color(0xFF070B18)
+    val Deep = Color(0xFF111833)
+    val Violet = Color(0xFF231446)
+    val Teal = Color(0xFF0B3340)
+
+    val Fill = Color(0x14FFFFFF)          // 8% white
+    val FillStrong = Color(0x24FFFFFF)    // 14% white
+    val Stroke = Color(0x26FFFFFF)        // 15% white
+
+    val Text = Color(0xFFF3F6FF)
+    val TextSoft = Color(0xFFA9B2CF)
+    val TextFaint = Color(0xFF6E7899)
+
+    val Cyan = Color(0xFF4FD1FF)
+    val Green = Color(0xFF3EE6A0)
+    val Amber = Color(0xFFFFB547)
+    val Pink = Color(0xFFFF6B9A)
+    val Red = Color(0xFFFF6B6B)
+    val Purple = Color(0xFFA78BFA)
+
+    val OnGlow = Brush.linearGradient(listOf(Color(0xFF1ED8A0), Color(0xFF14A9E0)))
+    val Accent = Brush.linearGradient(listOf(Cyan, Purple))
+    val Warm = Brush.linearGradient(listOf(Amber, Pink))
+
+    val Card = RoundedCornerShape(24.dp)
+    val Tile = RoundedCornerShape(20.dp)
+    val Chip = RoundedCornerShape(50)
+}
+
+private val Scheme = darkColorScheme(
+    primary = Glass.Cyan,
+    onPrimary = Color(0xFF00222E),
+    primaryContainer = Color(0xFF103A4D),
+    onPrimaryContainer = Glass.Text,
+    secondary = Glass.Green,
+    onSecondary = Color(0xFF00281A),
+    secondaryContainer = Color(0xFF0E3B2E),
+    onSecondaryContainer = Glass.Text,
+    tertiary = Glass.Amber,
+    background = Glass.Night,
+    onBackground = Glass.Text,
+    surface = Glass.Deep,
+    onSurface = Glass.Text,
+    surfaceVariant = Color(0xFF1C2445),
+    onSurfaceVariant = Glass.TextSoft,
+    surfaceContainerHigh = Color(0xFF1A2142),
+    surfaceContainer = Color(0xFF151C3A),
+    surfaceContainerLow = Color(0xFF121834),
+    outline = Glass.Stroke,
+    outlineVariant = Color(0x1AFFFFFF),
+    error = Glass.Red,
+    errorContainer = Color(0xFF4A1620),
+    onErrorContainer = Color(0xFFFFDADA),
 )
 
-private val Dark = darkColorScheme(
-    primary = Color(0xFFFFB597),
-    onPrimary = Color(0xFF5E1800),
-    primaryContainer = Color(0xFF842B00),
-    onPrimaryContainer = Color(0xFFFFDBCC),
-    secondary = Color(0xFF8FD99A),
-    onSecondary = Color(0xFF003915),
-    secondaryContainer = Color(0xFF115225),
-    onSecondaryContainer = Color(0xFFC7EFCB),
-    background = Color(0xFF15120F),
-    surface = Color(0xFF15120F),
-    surfaceVariant = Color(0xFF2A2420),
-)
+private val Type = Typography().let { t ->
+    t.copy(
+        displaySmall = t.displaySmall.copy(fontWeight = FontWeight.Bold, letterSpacing = (-1).sp),
+        headlineMedium = t.headlineMedium.copy(fontWeight = FontWeight.Bold),
+        titleLarge = t.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+        titleMedium = t.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+    )
+}
 
-/** Material You colours on Android 12+, the brand orange everywhere else. */
 @Composable
 fun DarwishTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
-    val context = LocalContext.current
-    val scheme: ColorScheme = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        dark -> Dark
-        else -> Light
-    }
-    MaterialTheme(colorScheme = scheme, content = content)
+    MaterialTheme(colorScheme = Scheme, typography = Type, content = content)
 }
+
+/** Full-screen gradient with two soft colour blobs behind everything. */
+@Composable
+fun GlassBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Glass.Deep, Glass.Night, Glass.Night)))
+            .background(Brush.radialGradient(listOf(Glass.Violet.copy(alpha = 0.85f), Color.Transparent), radius = 900f))
+            .background(
+                Brush.radialGradient(
+                    listOf(Glass.Teal.copy(alpha = 0.7f), Color.Transparent),
+                    center = androidx.compose.ui.geometry.Offset(1400f, 2200f),
+                    radius = 1100f,
+                )
+            ),
+        content = content,
+    )
+}
+
+/** A translucent card. [glow] draws a coloured border, e.g. for something that is on. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun GlassCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = Glass.Card,
+    fill: Brush? = null,
+    glow: Brush? = null,
+    padding: Dp = 16.dp,
+    onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    var m = modifier
+        .clip(shape)
+        .background(fill ?: Brush.linearGradient(listOf(Glass.FillStrong, Glass.Fill)))
+        .border(BorderStroke(1.dp, glow ?: Brush.linearGradient(listOf(Glass.Stroke, Color(0x0DFFFFFF)))), shape)
+    if (onClick != null || onLongClick != null) {
+        m = m.combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick)
+    }
+    Column(m.padding(padding), content = content)
+}
+
+/** Small rounded label. */
+@Composable
+fun GlassPill(text: String, modifier: Modifier = Modifier, color: Color = Glass.TextSoft, fill: Color = Glass.Fill) {
+    Surface(modifier = modifier, color = fill, contentColor = color, shape = Glass.Chip) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+        )
+    }
+}
+
+val SectionTitleStyle: TextStyle
+    @Composable get() = MaterialTheme.typography.titleMedium.copy(color = Glass.Text)

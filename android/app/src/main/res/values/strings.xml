@@ -75,12 +75,12 @@
     <string name="lang_en" translatable="false">English</string>
     <string name="section_setup">New strip</string>
     <string name="setup_intro">Connect a new or reset strip to your Wi-Fi and to this server, right from your phone.</string>
-    <string name="about">Darwish Smart Power controls MTTL-W01 power strips through your own server. No cloud account is needed.</string>
+    <string name="about">Darwish Smart Power controls MTTL-W01 power strips through your own server. Developed by Darwish Tech · darwish-tech.com</string>
 
     <!-- strip setup -->
     <string name="setup_title">Set up a strip</string>
     <string name="setup_step1">Hold the strip\'s main button for about 10 seconds until the light blinks fast.</string>
-    <string name="setup_step2">In the phone\'s Wi-Fi settings join the network TONLY_TAP_XXXXXXX. Its password is LGU_ followed by the same 7 characters. If Android says there is no internet, choose to stay connected.</string>
+    <string name="setup_step2">In the phone\'s Wi-Fi settings join the network that starts with TONLY_TAP_ (e.g. TONLY_TAP_91C0C4C). Its password is LGU_ followed by the same letters and numbers that come after TONLY_TAP_ (in the example: LGU_91C0C4C). If Android says there is no internet, choose to stay connected.</string>
     <string name="setup_step3">Come back here, fill in the fields below and tap Send.</string>
     <string name="setup_step4">When it says done, switch the phone back to your home Wi-Fi. The strip appears on the home screen within a minute.</string>
     <string name="setup_server_ip">Server IP</string>
@@ -98,4 +98,151 @@
     <string name="setup_bad_ssid">The strip cannot accept a Wi-Fi name that contains \":\".</string>
     <string name="setup_empty_password">Enter the Wi-Fi password.</string>
     <string name="setup_bad_password">The strip cannot accept a Wi-Fi password that contains \":\".</string>
+
+    <!-- 2.0: tabs and home -->
+    <string name="tab_home">Home</string>
+    <string name="tab_energy">Energy</string>
+    <string name="tab_automation">Automation</string>
+    <string name="tab_settings">Settings</string>
+    <string name="hello_morning">Good morning</string>
+    <string name="hello_evening">Good evening</string>
+    <string name="alerts">Alerts</string>
+    <string name="alerts_empty">No alerts yet. You will see here when a strip goes offline, gets too hot or draws too much power.</string>
+    <string name="using_now">Using now</string>
+    <string name="today">Today</string>
+    <string name="today_cost">Today\'s cost</string>
+    <string name="month_cost">This month</string>
+    <string name="today_short">Today %1$s</string>
+    <string name="strips_online">%1$d of %2$d strips online</string>
+    <string name="scenes">Scenes</string>
+    <string name="favorites">Favourites</string>
+    <string name="favorite">Favourite</string>
+    <string name="no_room">Other</string>
+    <string name="waiting_for_strip">runs when it is back</string>
+    <string name="currency_egp">EGP</string>
+    <string name="icon">Icon</string>
+    <string name="rename_strip">Rename the strip</string>
+    <string name="room">Room</string>
+    <string name="room_custom">Another room</string>
+    <string name="room_living">Living room</string>
+    <string name="room_kitchen">Kitchen</string>
+    <string name="room_bedroom">Bedroom</string>
+    <string name="room_office">Office</string>
+    <string name="icon_plug">Plug</string>
+    <string name="icon_kettle">Kettle</string>
+    <string name="icon_router">Router</string>
+    <string name="icon_tv">TV</string>
+    <string name="icon_ac">AC</string>
+    <string name="icon_lamp">Lamp</string>
+    <string name="icon_heater">Heater</string>
+    <string name="icon_fan">Fan</string>
+    <string name="icon_fridge">Fridge</string>
+    <string name="icon_washer">Washer</string>
+    <string name="icon_charger">Charger</string>
+    <string name="icon_computer">Computer</string>
+    <string name="icon_speaker">Speaker</string>
+    <string name="icon_camera">Camera</string>
+    <string name="icon_microwave">Microwave</string>
+    <string name="icon_iron">Iron</string>
+
+    <!-- energy -->
+    <string name="energy_sub">Consumption and bill from the strips\' own meters.</string>
+    <string name="range_day">Today</string>
+    <string name="range_week">7 days</string>
+    <string name="range_month">30 days</string>
+    <string name="energy_used">Used</string>
+    <string name="energy_cost">Cost</string>
+    <string name="energy_by_device">By device</string>
+    <string name="energy_empty">No usage recorded yet for this period. It is counted from the moment the server is running.</string>
+    <string name="price_note">Price: %1$s per kWh (change it in Settings)</string>
+
+    <!-- automation -->
+    <string name="automation_sub">Runs on the server, even when your phone is off.</string>
+    <string name="automation_no_strips">Set up a strip first.</string>
+    <string name="kind_schedule">Schedules</string>
+    <string name="kind_timer">Timers</string>
+    <string name="kind_cycle">Cycles</string>
+    <string name="schedules_and_cycles">Schedules and cycles</string>
+    <string name="active_timers">Running timers</string>
+    <string name="scenes_empty">No scenes yet. A scene switches several outlets at once, e.g. "Movie night".</string>
+    <string name="scene_count">%1$d outlets</string>
+    <string name="add">Add</string>
+    <string name="edit">Edit</string>
+    <string name="delete">Delete</string>
+    <string name="new_schedule">Schedule</string>
+    <string name="new_cycle">Repeating cycle</string>
+    <string name="new_scene">Scene</string>
+    <string name="edit_scene">Edit scene</string>
+    <string name="strip">Strip</string>
+    <string name="outlets">Outlets</string>
+    <string name="all_outlets">All</string>
+    <string name="at_time">At</string>
+    <string name="on_days">On</string>
+    <string name="every_day">Every day</string>
+    <string name="day_sat">Sat</string>
+    <string name="day_sun">Sun</string>
+    <string name="day_mon">Mon</string>
+    <string name="day_tue">Tue</string>
+    <string name="day_wed">Wed</string>
+    <string name="day_thu">Thu</string>
+    <string name="day_fri">Fri</string>
+    <string name="cycle_explain">Switches on for a while, then off for a while, and repeats. Good for heaters, fans and pumps.</string>
+    <string name="cycle_on_minutes">On (minutes)</string>
+    <string name="cycle_off_minutes">Off (minutes)</string>
+    <string name="cycle_line">On %1$s · off %2$s</string>
+    <string name="cycle_now_on">On now · switches off at %1$s</string>
+    <string name="cycle_now_off">Off now · switches on at %1$s</string>
+    <string name="scene_name">Scene name</string>
+    <string name="scene_name_hint">Movie night</string>
+    <string name="scene_explain">Choose what each outlet should do. Outlets you leave unselected stay as they are.</string>
+    <string name="timer_title_simple">One-off timer</string>
+    <string name="cancel_timers">Cancel all timers</string>
+    <string name="note_saved">Saved.</string>
+    <string name="note_scene_ran">%1$s done.</string>
+    <string name="note_queued">The strip is offline. It will do this as soon as it is back.</string>
+
+    <!-- PIN and app lock -->
+    <string name="pin">PIN</string>
+    <string name="pin_title">PIN for %1$s</string>
+    <string name="pin_wrong">Wrong PIN.</string>
+    <string name="pin_too_many">Too many wrong PINs. Wait a minute.</string>
+    <string name="pin_use_fingerprint">Unlock with my fingerprint next time</string>
+    <string name="pin_old">Current PIN</string>
+    <string name="pin_new">New PIN (4–8 digits)</string>
+    <string name="pin_new_or_empty">New PIN (empty = remove the lock)</string>
+    <string name="unlock">Unlock</string>
+    <string name="lock_set">Lock with a PIN</string>
+    <string name="lock_change">Change or remove the PIN</string>
+    <string name="lock_remove">Remove lock</string>
+    <string name="lock_explain">Nobody can switch this strip, set its timers or schedules without the PIN, not even from the website. Your own schedules keep running.</string>
+    <string name="note_locked">The strip is locked.</string>
+    <string name="note_unlocked">The lock was removed.</string>
+    <string name="lock_title">Darwish Smart Power is locked</string>
+    <string name="lock_body">Use your fingerprint or your phone\'s screen lock to open it.</string>
+    <string name="lock_unlock">Unlock</string>
+
+    <!-- settings -->
+    <string name="section_bill">Bill</string>
+    <string name="price_per_kwh">Price per kWh (%1$s)</string>
+    <string name="price_hint">Use the price on your electricity bill. It is used for every cost shown in the app.</string>
+    <string name="section_alert_limits">Alert when</string>
+    <string name="max_temp">Outlet hotter than (°C)</string>
+    <string name="max_watts">Strip uses more than (W)</string>
+    <string name="section_phone">This phone</string>
+    <string name="notifications">Notifications</string>
+    <string name="notifications_hint">Strip offline, too hot or too much power. Checked every 15 minutes in the background.</string>
+    <string name="app_lock">Lock the app</string>
+    <string name="app_lock_hint">Ask for the fingerprint every time the app opens.</string>
+    <string name="developed_by">Developed by</string>
+
+    <!-- notifications -->
+    <string name="notif_channel">Strip alerts</string>
+    <string name="notif_offline_title">Strip offline</string>
+    <string name="notif_offline">%1$s lost its connection.</string>
+    <string name="notif_online_title">Strip back online</string>
+    <string name="notif_online">%1$s is connected again.</string>
+    <string name="notif_temp_title">Outlet too hot</string>
+    <string name="notif_temp">%1$s on %2$s is at %3$s°C.</string>
+    <string name="notif_power_title">High power</string>
+    <string name="notif_power">%1$s is drawing %2$s W.</string>
 </resources>

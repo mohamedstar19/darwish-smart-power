@@ -5,13 +5,21 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.darwish.smartpower.R
+import com.darwish.smartpower.data.AlertEvent
+import com.darwish.smartpower.data.EnergyReport
 import com.darwish.smartpower.data.Prefs
+import com.darwish.smartpower.data.Scene
+import com.darwish.smartpower.data.Schedule
 import com.darwish.smartpower.data.ServerAddress
 import com.darwish.smartpower.data.ServerClient
 import com.darwish.smartpower.data.ServerException
+import com.darwish.smartpower.data.ServerSettings
+import com.darwish.smartpower.data.ServerState
 import com.darwish.smartpower.data.SetupResult
 import com.darwish.smartpower.data.Strip
 import com.darwish.smartpower.data.StripSetup
+import com.darwish.smartpower.data.SwitchOutcome
+import com.darwish.smartpower.notify.AlertNotifier
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,30 +36,47 @@ enum class Problem { NOT_CONFIGURED, UNREACHABLE, BAD_TOKEN, SERVER }
 data class UiState(
     val addressText: String = "",
     val token: String = "",
-    val strips: List<Strip> = emptyList(),
-    val serverIp: String? = null,
+    val server: ServerState? = null,
     val loaded: Boolean = false,
     val problem: Problem? = null,
     /** "stripId/outlet" keys with a command still running. */
     val pending: Set<String> = emptySet(),
-)
+    val report: EnergyReport? = null,
+    val reportRange: String = "day",
+    val alerts: List<AlertEvent> = emptyList(),
+) {
+    val strips: List<Strip> get() = server?.strips.orEmpty()
+}
 
 /** A one-off message for the snackbar. */
 data class Note(@param:StringRes val text: Int, val arg: String? = null)
 
+/** The server asked for a strip's PIN; [retry] repeats the action with it. */
+class PinRequest(val stripId: String, val stripName: String, val wrong: Boolean, val retry: suspend (String) -> Unit)
+
 class AppViewModel(app: Application) : AndroidViewModel(app) {
-    private val prefs = Prefs(app)
+    val prefs = Prefs(app)
     private val setup = StripSetup(app)
 
     private val _state = MutableStateFlow(UiState(addressText = prefs.addressText, token = prefs.token))
     val state: StateFlow<UiState> = _state.asStateFlow()
 
+    private val _pinRequest = MutableStateFlow<PinRequest?>(null)
+    val pinRequest: StateFlow<PinRequest?> = _pinRequest.asStateFlow()
+
     private val notes = Channel<Note>(Channel.BUFFERED)
     val messages = notes.receiveAsFlow()
 
+    /** PINs typed in this session, so a locked strip asks only once. */
+    private val sessionPins = mutableMapOf<String, String>()
+
     private fun client(): ServerClient? = prefs.address?.let { ServerClient(it, prefs.token) }
 
-    /** Runs while the home screen is visible. */
+    private fun pinFor(stripId: String): String? = sessionPins[stripId] ?: prefs.savedPin(stripId)
+
+    // ---- polling
+
+    /** Runs while the app is visible. */
     suspend fun pollForever() {
         while (true) {
             refresh()
@@ -62,18 +87,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun refresh() {
         val client = client()
         if (client == null) {
-            _state.update { it.copy(problem = Problem.NOT_CONFIGURED, strips = emptyList(), loaded = true) }
+            _state.update { it.copy(problem = Problem.NOT_CONFIGURED, server = null, loaded = true) }
             return
         }
         try {
             val server = client.state()
             _state.update { s ->
-                s.copy(
-                    strips = server.strips.map { keepPending(it, s) },
-                    serverIp = server.serverIp,
-                    loaded = true,
-                    problem = null,
-                )
+                s.copy(server = server.copy(strips = server.strips.map { keepPending(it, s) }), loaded = true, problem = null)
+            }
+            if (prefs.notifications && server.lastEventId > prefs.lastNotifiedEvent) {
+                viewModelScope.launch { runCatching { AlertNotifier.check(getApplication<Application>()) } }
             }
         } catch (e: Exception) {
             _state.update { it.copy(problem = problemOf(e), loaded = true) }
@@ -90,26 +113,74 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         })
     }
 
+    private fun replaceStrip(strip: Strip) = _state.update { s ->
+        s.copy(server = s.server?.copy(strips = s.strips.map { if (it.id == strip.id) strip else it }))
+    }
+
+    private fun stripName(id: String): String =
+        _state.value.strips.firstOrNull { it.id == id }?.name ?: id.takeLast(6)
+
+    // ---- actions that may need a strip's PIN
+
+    /**
+     * Runs [block] with the PIN we know for [stripId]. When the server says the strip is locked,
+     * asks for the PIN (fingerprint first if one is saved) and runs it again.
+     */
+    private fun guarded(stripId: String, block: suspend (ServerClient, String?) -> Unit) {
+        val client = client() ?: return
+        viewModelScope.launch {
+            try {
+                block(client, pinFor(stripId))
+            } catch (e: ServerException) {
+                if (e.pinNeeded && e.code == 403) askPin(stripId, wrong = pinFor(stripId) != null) { pin -> block(client, pin) }
+                else notes.send(noteOf(e))
+            } catch (e: Exception) {
+                notes.send(noteOf(e))
+            }
+        }
+    }
+
+    private fun askPin(stripId: String, wrong: Boolean, action: suspend (String) -> Unit) {
+        sessionPins.remove(stripId)
+        _pinRequest.value = PinRequest(stripId, stripName(stripId), wrong) { pin ->
+            try {
+                action(pin)
+                sessionPins[stripId] = pin
+                _pinRequest.value = null
+            } catch (e: ServerException) {
+                if (e.pinNeeded && e.code == 403) {
+                    _pinRequest.value = PinRequest(stripId, stripName(stripId), true, _pinRequest.value!!.retry)
+                } else {
+                    _pinRequest.value = null
+                    notes.send(noteOf(e))
+                }
+            }
+        }
+    }
+
+    fun dismissPin() { _pinRequest.value = null }
+
     fun switch(stripId: String, outlet: Int, on: Boolean) {
         val k = key(stripId, outlet)
         if (k in _state.value.pending) return                    // one command per outlet at a time
-        val client = client() ?: return
         _state.update { s ->
             s.copy(
                 pending = s.pending + k,
-                strips = s.strips.map { strip ->
+                server = s.server?.copy(strips = s.strips.map { strip ->
                     if (strip.id != stripId) strip
                     else strip.copy(outlets = strip.outlets.map { if (outlet == 0 || it.index == outlet) it.copy(on = on) else it })
-                },
+                }),
             )
         }
-        viewModelScope.launch {
+        guarded(stripId) { client, pin ->
             try {
-                val (strip, confirmed) = client.switch(stripId, outlet, on)
-                _state.update { s -> s.copy(strips = s.strips.map { if (it.id == strip.id) strip else it }) }
-                if (!confirmed) notes.send(Note(R.string.note_not_confirmed))
-            } catch (e: Exception) {
-                notes.send(noteOf(e))
+                val (strip, outcome) = client.switch(stripId, listOf(outlet), on, pin)
+                replaceStrip(strip)
+                when (outcome) {
+                    SwitchOutcome.QUEUED -> notes.send(Note(R.string.note_queued))
+                    SwitchOutcome.UNCONFIRMED -> notes.send(Note(R.string.note_not_confirmed))
+                    SwitchOutcome.CONFIRMED -> Unit
+                }
             } finally {
                 _state.update { it.copy(pending = it.pending - k) }
                 refresh()
@@ -117,17 +188,94 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun rename(stripId: String, outlet: Int, name: String) = act { client ->
-        replace(client.rename(stripId, outlet, name.trim()))
+    fun rename(stripId: String, outlet: Int, name: String) = guarded(stripId) { client, _ ->
+        replaceStrip(client.rename(stripId, outlet, name.trim()))
     }
 
-    fun setTimer(stripId: String, outlet: Int, minutes: Int, turnOn: Boolean) = act { client ->
-        replace(client.timer(stripId, outlet, minutes, turnOn))
+    fun setTimer(stripId: String, outlets: List<Int>, minutes: Int, turnOn: Boolean) = guarded(stripId) { client, pin ->
+        replaceStrip(client.timer(stripId, outlets, minutes, turnOn, pin))
         notes.send(Note(if (minutes == 0) R.string.note_timer_cancelled else R.string.note_timer_set))
     }
 
-    private fun replace(strip: Strip) =
-        _state.update { s -> s.copy(strips = s.strips.map { if (it.id == strip.id) strip else it }) }
+    fun setRoom(stripId: String, room: String) = guarded(stripId) { client, _ ->
+        replaceStrip(client.setMeta(stripId, 0, room = room.trim()))
+    }
+
+    fun setOutletLook(stripId: String, outlet: Int, icon: String? = null, favorite: Boolean? = null) = guarded(stripId) { client, _ ->
+        replaceStrip(client.setMeta(stripId, outlet, icon = icon, favorite = favorite))
+    }
+
+    /** Sets or changes the PIN ([oldPin] when it is already locked); an empty [pin] removes it. */
+    fun setLock(stripId: String, pin: String, oldPin: String?, useFingerprint: Boolean) {
+        val client = client() ?: return
+        viewModelScope.launch {
+            try {
+                replaceStrip(client.setLock(stripId, pin, oldPin))
+                sessionPins.remove(stripId)
+                prefs.savePin(stripId, if (pin.isNotEmpty() && useFingerprint) pin else null)
+                if (pin.isNotEmpty()) sessionPins[stripId] = pin
+                notes.send(Note(if (pin.isEmpty()) R.string.note_unlocked else R.string.note_locked))
+            } catch (e: Exception) {
+                notes.send(if (e is ServerException && e.code == 403) Note(R.string.pin_wrong) else noteOf(e))
+            }
+        }
+    }
+
+    fun rememberPinForFingerprint(stripId: String, pin: String) = prefs.savePin(stripId, pin)
+
+    // ---- schedules, cycles, scenes
+
+    fun saveSchedule(schedule: Schedule) = guarded(schedule.stripId) { client, pin ->
+        val list = client.saveSchedule(schedule, pin)
+        _state.update { s -> s.copy(server = s.server?.copy(schedules = list)) }
+        notes.send(Note(R.string.note_saved))
+    }
+
+    fun deleteSchedule(schedule: Schedule) = guarded(schedule.stripId) { client, pin ->
+        val list = client.deleteSchedule(schedule.id, pin)
+        _state.update { s -> s.copy(server = s.server?.copy(schedules = list)) }
+    }
+
+    fun saveScene(scene: Scene) = act { client ->
+        val list = client.saveScene(scene)
+        _state.update { s -> s.copy(server = s.server?.copy(scenes = list)) }
+        notes.send(Note(R.string.note_saved))
+    }
+
+    fun deleteScene(scene: Scene) = act { client ->
+        val list = client.deleteScene(scene.id)
+        _state.update { s -> s.copy(server = s.server?.copy(scenes = list)) }
+    }
+
+    fun runScene(scene: Scene) {
+        val firstLocked = scene.actions.map { it.stripId }.firstOrNull { id -> _state.value.strips.any { it.id == id && it.locked } }
+        guarded(firstLocked ?: scene.actions.firstOrNull()?.stripId ?: return) { client, pin ->
+            client.runScene(scene.id, pin)
+            notes.send(Note(R.string.note_scene_ran, scene.name))
+            refresh()
+        }
+    }
+
+    // ---- energy, alerts, server settings
+
+    fun loadReport(range: String) {
+        _state.update { it.copy(reportRange = range) }
+        act { client ->
+            val report = client.history(range)
+            _state.update { if (it.reportRange == range) it.copy(report = report) else it }
+        }
+    }
+
+    fun loadAlerts() = act { client ->
+        val (events, _) = client.events(0)
+        _state.update { it.copy(alerts = events) }
+    }
+
+    fun saveServerSettings(settings: ServerSettings) = act { client ->
+        val saved = client.updateSettings(settings)
+        _state.update { s -> s.copy(server = s.server?.copy(settings = saved)) }
+        notes.send(Note(R.string.note_saved))
+    }
 
     private fun act(block: suspend (ServerClient) -> Unit) {
         val client = client() ?: return
@@ -140,7 +288,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---- settings
+    // ---- connection settings
 
     /** Saves the address and token; returns false when the address cannot be used. */
     fun saveSettings(addressText: String, token: String): Boolean {
@@ -148,7 +296,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.addressText = address.display()
         prefs.token = token.trim()
         _state.update {
-            it.copy(addressText = prefs.addressText, token = prefs.token, strips = emptyList(), loaded = false, problem = null)
+            it.copy(addressText = prefs.addressText, token = prefs.token, server = null, loaded = false, problem = null)
         }
         viewModelScope.launch {
             notes.send(Note(R.string.settings_saved))
@@ -170,6 +318,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun setNotifications(on: Boolean) {
+        prefs.notifications = on
+        AlertNotifier.schedule(getApplication<Application>(), on)
+    }
+
     // ---- strip setup
 
     suspend fun provision(serverIp: String, ssid: String, password: String): SetupResult =
@@ -177,7 +330,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Best guess for the IP the strip should dial: what the server reports, else the saved host. */
     fun suggestedServerIp(): String =
-        _state.value.serverIp ?: prefs.address?.host?.takeIf { it.all { c -> c.isDigit() || c == '.' } } ?: Prefs.DEFAULT_SERVER_IP
+        _state.value.server?.serverIp ?: prefs.address?.host?.takeIf { it.all { c -> c.isDigit() || c == '.' } }
+        ?: Prefs.DEFAULT_SERVER_IP
 
     companion object {
         fun key(stripId: String, outlet: Int) = "$stripId/$outlet"
@@ -192,6 +346,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         fun noteOf(e: Exception): Note = when {
             e is ServerException && e.code == 401 -> Note(R.string.problem_bad_token)
             e is ServerException && e.code == 503 -> Note(R.string.note_strip_offline)
+            e is ServerException && e.code == 429 -> Note(R.string.pin_too_many)
             e is ServerException -> Note(R.string.note_server_error, e.message ?: "HTTP ${e.code}")
             e is IOException -> Note(R.string.problem_unreachable)
             else -> Note(R.string.note_server_error, e.message ?: e.javaClass.simpleName)

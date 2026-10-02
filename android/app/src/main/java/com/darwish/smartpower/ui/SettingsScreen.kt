@@ -1,39 +1,36 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
 package com.darwish.smartpower.ui
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,60 +40,56 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darwish.smartpower.BuildConfig
 import com.darwish.smartpower.R
-import com.darwish.smartpower.data.Prefs
+import com.darwish.smartpower.security.Biometric
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Unit, onSetup: () -> Unit) {
+fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val uri = LocalUriHandler.current
     var address by rememberSaveable { mutableStateOf(state.addressText) }
     var token by rememberSaveable { mutableStateOf(state.token) }
     var showToken by rememberSaveable { mutableStateOf(false) }
     var addressError by remember { mutableStateOf(false) }
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
+    var notify by remember { mutableStateOf(vm.prefs.notifications) }
+    var appLock by remember { mutableStateOf(vm.prefs.appLock) }
+    val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notify = granted
+        vm.setNotifications(granted)
+    }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.settings)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
-                },
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-    ) { padding ->
-        Column(
-            Modifier
-                .padding(padding)
-                .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            SectionTitle(stringResource(R.string.section_server))
+    Column(
+        Modifier.imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(stringResource(R.string.tab_settings), style = MaterialTheme.typography.headlineMedium)
+
+        // ---- connection
+        GlassCard(Modifier.fillMaxWidth()) {
+            CardTitle("🌐", stringResource(R.string.section_server))
             OutlinedTextField(
                 value = address,
                 onValueChange = { address = it; addressError = false; testResult = null },
                 label = { Text(stringResource(R.string.server_address)) },
-                placeholder = { Text(Prefs.DEFAULT_ADDRESS) },
-                supportingText = {
-                    Text(stringResource(if (addressError) R.string.settings_bad_address else R.string.server_address_hint))
-                },
+                placeholder = { Text(com.darwish.smartpower.data.Prefs.DEFAULT_ADDRESS) },
+                supportingText = { Text(stringResource(if (addressError) R.string.settings_bad_address else R.string.server_address_hint)) },
                 isError = addressError,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -111,73 +104,159 @@ fun SettingsScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> 
                 visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 trailingIcon = {
-                    TextButton(onClick = { showToken = !showToken }) {
-                        Text(stringResource(if (showToken) R.string.hide else R.string.show))
-                    }
+                    TextButton(onClick = { showToken = !showToken }) { Text(stringResource(if (showToken) R.string.hide else R.string.show)) }
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = {
-                    if (vm.saveSettings(address, token)) onBack() else addressError = true
-                }) { Text(stringResource(R.string.save)) }
-                OutlinedButton(
-                    enabled = !testing,
-                    onClick = {
-                        testing = true
-                        testResult = null
-                        scope.launch {
-                            testResult = vm.test(address, token).format(context)
-                            testing = false
-                        }
-                    },
-                ) { Text(stringResource(R.string.test)) }
+                Button(onClick = { if (!vm.saveSettings(address, token)) addressError = true }) { Text(stringResource(R.string.save)) }
+                OutlinedButton(enabled = !testing, onClick = {
+                    testing = true
+                    testResult = null
+                    scope.launch {
+                        testResult = vm.test(address, token).format(context)
+                        testing = false
+                    }
+                }) { Text(stringResource(R.string.test), color = Glass.Text) }
                 if (testing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
             }
-            testResult?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-
-            HorizontalDivider()
-            SectionTitle(stringResource(R.string.section_language))
-            LanguagePicker()
-
-            HorizontalDivider()
-            SectionTitle(stringResource(R.string.section_setup))
-            Text(stringResource(R.string.setup_intro), style = MaterialTheme.typography.bodyMedium)
-            OutlinedButton(onClick = onSetup) { Text(stringResource(R.string.setup_strip)) }
-
-            HorizontalDivider()
-            Text(stringResource(R.string.about), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            testResult?.let { Spacer(Modifier.height(8.dp)); Text(it, color = Glass.TextSoft) }
         }
+
+        // ---- bill and alert limits (kept on the server)
+        state.server?.settings?.let { current ->
+            var price by remember(current) { mutableStateOf(number(current.pricePerKwh, 2)) }
+            var maxTemp by remember(current) { mutableStateOf(current.maxTempC.toInt().toString()) }
+            var maxWatts by remember(current) { mutableStateOf(current.maxWatts.toInt().toString()) }
+            GlassCard(Modifier.fillMaxWidth()) {
+                CardTitle("💰", stringResource(R.string.section_bill))
+                NumberField(price, stringResource(R.string.price_per_kwh, currencyLabel(current.currency)), decimal = true) { price = it }
+                Spacer(Modifier.height(4.dp))
+                Text(stringResource(R.string.price_hint), color = Glass.TextFaint, style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.height(10.dp))
+                CardTitle("🚨", stringResource(R.string.section_alert_limits))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    NumberField(maxTemp, stringResource(R.string.max_temp), Modifier.weight(1f)) { maxTemp = it }
+                    NumberField(maxWatts, stringResource(R.string.max_watts), Modifier.weight(1f)) { maxWatts = it }
+                }
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = {
+                    vm.saveServerSettings(current.copy(
+                        pricePerKwh = price.toDoubleOrNull() ?: current.pricePerKwh,
+                        maxTempC = maxTemp.toDoubleOrNull() ?: current.maxTempC,
+                        maxWatts = maxWatts.toDoubleOrNull() ?: current.maxWatts,
+                    ))
+                }) { Text(stringResource(R.string.save)) }
+            }
+        }
+
+        // ---- this phone
+        GlassCard(Modifier.fillMaxWidth()) {
+            CardTitle("📱", stringResource(R.string.section_phone))
+            SwitchRow(stringResource(R.string.notifications), stringResource(R.string.notifications_hint), notify) { on ->
+                if (on && Build.VERSION.SDK_INT >= 33) {
+                    askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    notify = on
+                    vm.setNotifications(on)
+                }
+            }
+            if (Biometric.available(context)) {
+                val title = stringResource(R.string.lock_title)
+                SwitchRow(stringResource(R.string.app_lock), stringResource(R.string.app_lock_hint), appLock) { on ->
+                    // confirm with the fingerprint before turning the lock on or off
+                    Biometric.authenticate(context, title, null) { ok ->
+                        if (ok) {
+                            appLock = on
+                            vm.prefs.appLock = on
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(stringResource(R.string.section_language), fontWeight = FontWeight.SemiBold)
+            LanguagePicker()
+        }
+
+        // ---- new strip
+        GlassCard(Modifier.fillMaxWidth()) {
+            CardTitle("➕", stringResource(R.string.section_setup))
+            Text(stringResource(R.string.setup_intro), color = Glass.TextSoft)
+            Spacer(Modifier.height(10.dp))
+            Button(onClick = onSetup) { Text(stringResource(R.string.setup_strip)) }
+        }
+
+        // ---- about
+        Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(stringResource(R.string.app_name) + " " + ltr(BuildConfig.VERSION_NAME), color = Glass.TextSoft,
+                style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.developed_by) + " ", color = Glass.TextFaint, style = MaterialTheme.typography.labelMedium)
+                TextButton(onClick = { uri.openUri(OFFICIAL_SITE) }) {
+                    Text("Darwish Tech · darwish-tech.com", color = Glass.Cyan, fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+                }
+            }
+        }
+    }
+    LaunchedEffect(state.addressText, state.token) {
+        address = state.addressText
+        token = state.token
+    }
+}
+
+const val OFFICIAL_SITE = "https://darwish-tech.com"
+
+@Composable
+private fun CardTitle(emoji: String, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+        Text(emoji)
+        Spacer(Modifier.width(8.dp))
+        Text(text, style = SectionTitleStyle)
     }
 }
 
 @Composable
-fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+private fun NumberField(value: String, label: String, modifier: Modifier = Modifier.fillMaxWidth(), decimal: Boolean = false,
+                        onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { v -> onChange(v.filter { it.isDigit() || (decimal && it == '.') }.take(8)) },
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = if (decimal) KeyboardType.Decimal else KeyboardType.Number),
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun SwitchRow(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(hint, color = Glass.TextSoft, style = MaterialTheme.typography.labelSmall)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
 }
 
 /** Phone language, Arabic or English. AppCompat stores the choice and recreates the screen. */
 @Composable
 private fun LanguagePicker() {
     val current = AppCompatDelegate.getApplicationLocales().toLanguageTags()
-    val options = listOf(
-        "" to R.string.lang_system,
-        "ar" to R.string.lang_ar,
-        "en" to R.string.lang_en,
-    )
+    val options = listOf("" to R.string.lang_system, "ar" to R.string.lang_ar, "en" to R.string.lang_en)
     Column(Modifier.selectableGroup()) {
         options.forEach { (tag, label) ->
             val selected = if (tag.isEmpty()) current.isEmpty() else current.startsWith(tag)
             Row(
-                Modifier
-                    .fillMaxWidth()
+                Modifier.fillMaxWidth()
                     .selectable(selected = selected, role = Role.RadioButton, onClick = {
                         AppCompatDelegate.setApplicationLocales(
                             if (tag.isEmpty()) LocaleListCompat.getEmptyLocaleList() else LocaleListCompat.forLanguageTags(tag)
                         )
                     })
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 RadioButton(selected = selected, onClick = null)
@@ -186,3 +265,4 @@ private fun LanguagePicker() {
         }
     }
 }
+

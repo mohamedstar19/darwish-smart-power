@@ -21,3 +21,10 @@ fun rssi(value: Int) = ltr("Wi-Fi $value dBm")
 
 fun clock(epochSeconds: Long): String =
     if (epochSeconds <= 0) "—" else ltr(SimpleDateFormat("HH:mm", Locale.US).format(Date(epochSeconds * 1000)))
+
+fun money(value: Double, currency: String) = ltr(number(value, 2)) + " " + currency
+
+/** "06:30" -> "6:30" style for lists; kept left-to-right inside Arabic text. */
+fun hhmm(text: String) = ltr(text)
+
+fun minutesLabel(minutes: Int): String = ltr(if (minutes % 60 == 0) "${minutes / 60}h" else "${minutes}m")

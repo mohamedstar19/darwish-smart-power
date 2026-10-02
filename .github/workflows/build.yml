@@ -43,10 +43,10 @@ jobs:
           if-no-files-found: error
       # A fixed download link for phones: .../releases/latest/download/darwish-smart-power.apk
       - name: Publish APK as a release
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: .
         run: cp android/app/build/outputs/apk/debug/app-debug.apk darwish-smart-power.apk
-      - if: github.event_name != 'pull_request'
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: app-latest
