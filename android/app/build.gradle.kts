@@ -12,8 +12,10 @@ android {
         applicationId = "com.darwish.smartpower"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "2.0.0"
+        // CI numbers every build (Google Play needs a higher versionCode for each upload)
+        val build = System.getenv("DSP_VERSION_CODE")?.toIntOrNull()
+        versionCode = build ?: 2
+        versionName = if (build != null) "2.0.$build" else "2.0.0"
     }
 
     // One fixed signing key, so a new build installs over the old one. CI passes it in through

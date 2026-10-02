@@ -70,6 +70,7 @@ STATIC = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/welcome": ("index.html", "text/html; charset=utf-8"),
     "/panel": ("panel.html", "text/html; charset=utf-8"),
+    "/privacy": ("privacy.html", "text/html; charset=utf-8"),
     "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
     "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
 }
@@ -1932,6 +1933,11 @@ async def selftest() -> None:
 
     loop = asyncio.get_running_loop()
     assert (await loop.run_in_executor(None, http, "/api/state", None, None))[0] == 401
+
+    def page(path: str) -> str:                     # public website pages need no password
+        with urllib.request.urlopen(base + path, timeout=10) as r:
+            return r.read().decode()
+    assert "Privacy Policy" in await loop.run_in_executor(None, page, "/privacy")
     status, state = await loop.run_in_executor(None, http, "/api/state")
     assert status == 200 and state["strips"][0]["outlets"][0]["name"] == "Kettle"
     status, res = await loop.run_in_executor(None, http, "/api/switch", {"strip": "A1B2C3D4E5F6", "outlet": 4, "on": False})

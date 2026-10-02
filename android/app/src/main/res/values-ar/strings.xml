@@ -221,6 +221,7 @@
     <string name="app_lock">قفل التطبيق</string>
     <string name="app_lock_hint">يطلب البصمة كل ما تفتح التطبيق.</string>
     <string name="developed_by">تطوير</string>
+    <string name="privacy_policy">سياسة الخصوصية</string>
 
     <string name="notif_channel">تنبيهات المشتركات</string>
     <string name="notif_offline_title">مشترك فصل</string>

@@ -234,6 +234,7 @@
     <string name="app_lock">Lock the app</string>
     <string name="app_lock_hint">Ask for the fingerprint every time the app opens.</string>
     <string name="developed_by">Developed by</string>
+    <string name="privacy_policy">Privacy policy</string>
 
     <!-- notifications -->
     <string name="notif_channel">Strip alerts</string>

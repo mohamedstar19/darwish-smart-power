@@ -214,6 +214,9 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
                         style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
                 }
             }
+            TextButton(onClick = { uri.openUri(PRIVACY_POLICY) }) {
+                Text(stringResource(R.string.privacy_policy), color = Glass.TextSoft, style = MaterialTheme.typography.labelMedium)
+            }
         }
     }
     LaunchedEffect(state.addressText, state.token) {
@@ -223,6 +226,7 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
 }
 
 const val OFFICIAL_SITE = "https://darwish-tech.com"
+const val PRIVACY_POLICY = "https://power.darwish-tech.com/privacy"
 
 @Composable
 private fun CardTitle(emoji: String, text: String) {

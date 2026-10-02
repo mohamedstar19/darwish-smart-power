@@ -27,6 +27,8 @@ jobs:
     defaults:
       run:
         working-directory: android
+    env:
+      DSP_VERSION_CODE: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -55,11 +57,25 @@ jobs:
           name: darwish-smart-power-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      # Google Play upload: an app bundle signed with the same key (needs the signing secrets)
+      - name: App bundle for Google Play
+        if: env.DSP_KEYSTORE_FILE != ''
+        run: ./gradlew --no-daemon bundleRelease
+      - if: env.DSP_KEYSTORE_FILE != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwish-smart-power-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
       # A fixed download link for phones: .../releases/latest/download/darwish-smart-power.apk
       - name: Publish APK as a release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: .
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk darwish-smart-power.apk
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk darwish-smart-power.apk
+          if [ -f android/app/build/outputs/bundle/release/app-release.aab ]; then
+            cp android/app/build/outputs/bundle/release/app-release.aab darwish-smart-power.aab
+          fi
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
@@ -68,5 +84,9 @@ jobs:
           body: |
             Latest build of the Darwish Smart Power Android app, from commit ${{ github.sha }}.
             Download darwish-smart-power.apk on the phone and open it to install.
-          files: darwish-smart-power.apk
+            darwish-smart-power.aab is the same build for uploading to Google Play (version code ${{ github.run_number }}).
+          files: |
+            darwish-smart-power.apk
+            darwish-smart-power.aab
+          fail_on_unmatched_files: false
           make_latest: true
