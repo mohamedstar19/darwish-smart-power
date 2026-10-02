@@ -123,8 +123,13 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
             testResult?.let { Spacer(Modifier.height(8.dp)); Text(it, color = Glass.TextSoft) }
         }
 
-        // ---- bill and alert limits (kept on the server)
-        state.server?.settings?.let { current ->
+        // ---- family: the owner manages it, members see who they are
+        if (state.server != null) {
+            if (state.me.isOwner) FamilyCard(vm, state) else SignedInAsCard(state.me)
+        }
+
+        // ---- bill and alert limits (kept on the server, owner only)
+        state.server?.settings?.takeIf { state.me.isOwner }?.let { current ->
             var price by remember(current) { mutableStateOf(number(current.pricePerKwh, 2)) }
             var maxTemp by remember(current) { mutableStateOf(current.maxTempC.toInt().toString()) }
             var maxWatts by remember(current) { mutableStateOf(current.maxWatts.toInt().toString()) }
@@ -151,7 +156,7 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
         }
 
         // ---- Alexa (on the server, inside the home network)
-        state.server?.settings?.let { current ->
+        state.server?.settings?.takeIf { state.me.isOwner }?.let { current ->
             GlassCard(Modifier.fillMaxWidth()) {
                 CardTitle("🗣️", stringResource(R.string.section_alexa))
                 SwitchRow(stringResource(R.string.alexa_enable), stringResource(R.string.alexa_hint), current.alexa) { on ->

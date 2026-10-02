@@ -75,6 +75,18 @@ class NewApiJsonTest {
     }
 
     @Test
+    fun membersAndMe() {
+        val s = StateJson.parseState("""{"strips": [], "me": {"role": "view", "name": "منى"}}""")
+        assertEquals(Me("view", "منى"), s.me)
+        assertFalse(s.me.canControl)
+        assertFalse(s.me.isOwner)
+        assertTrue(StateJson.parseState("""{"strips": []}""").me.isOwner)
+        val members = StateJson.parseMembers(org.json.JSONArray(
+            """[{"id": "a1", "name": "Omar", "role": "control", "strips": ["A1B2"], "last_seen": 5}]"""))
+        assertEquals(listOf(Member("a1", "Omar", "control", listOf("A1B2"), 5)), members)
+    }
+
+    @Test
     fun energyReport() {
         val r = StateJson.parseReport(
             """{"range": "week", "buckets": [{"t": 100, "kwh": 1.5}, {"t": 200, "kwh": 0}],

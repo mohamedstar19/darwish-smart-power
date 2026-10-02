@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.darwish.smartpower.R
 import com.darwish.smartpower.data.AlertEvent
 import com.darwish.smartpower.data.EnergyReport
+import com.darwish.smartpower.data.Me
+import com.darwish.smartpower.data.Member
 import com.darwish.smartpower.data.Prefs
 import com.darwish.smartpower.data.Scene
 import com.darwish.smartpower.data.Schedule
@@ -44,9 +46,16 @@ data class UiState(
     val report: EnergyReport? = null,
     val reportRange: String = "day",
     val alerts: List<AlertEvent> = emptyList(),
+    val members: List<Member> = emptyList(),
+    /** A family member's token right after it was made, to share; shown once. */
+    val invite: Invite? = null,
 ) {
+    val me: Me get() = server?.me ?: Me()
     val strips: List<Strip> get() = server?.strips.orEmpty()
 }
+
+/** What to send a new family member: their name and token. */
+data class Invite(val name: String, val token: String)
 
 /** A one-off message for the snackbar. */
 data class Note(@param:StringRes val text: Int, val arg: String? = null)
@@ -160,7 +169,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissPin() { _pinRequest.value = null }
 
+    /** View-only members can look but not switch; say so instead of trying. */
+    private fun viewOnly(): Boolean {
+        if (_state.value.me.canControl) return false
+        viewModelScope.launch { notes.send(Note(R.string.view_only_note)) }
+        return true
+    }
+
     fun switch(stripId: String, outlet: Int, on: Boolean) {
+        if (viewOnly()) return
         val k = key(stripId, outlet)
         if (k in _state.value.pending) return                    // one command per outlet at a time
         _state.update { s ->
@@ -256,6 +273,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- family sharing (owner only)
+
+    fun loadMembers() = act { client ->
+        val list = client.members()
+        _state.update { it.copy(members = list) }
+    }
+
+    fun addMember(name: String, role: String, strips: List<String>) = act { client ->
+        val (list, token) = client.addMember(name.trim(), role, strips)
+        _state.update { it.copy(members = list, invite = Invite(name.trim(), token)) }
+    }
+
+    fun changeMemberRole(member: Member, role: String) = act { client ->
+        val (list, _) = client.updateMember(member.id, role = role)
+        _state.update { it.copy(members = list) }
+    }
+
+    fun renewMemberToken(member: Member) = act { client ->
+        val (list, token) = client.updateMember(member.id, newToken = true)
+        _state.update { it.copy(members = list, invite = token?.let { t -> Invite(member.name, t) }) }
+    }
+
+    fun removeMember(member: Member) = act { client ->
+        val list = client.deleteMember(member.id)
+        _state.update { it.copy(members = list) }
+        notes.send(Note(R.string.member_removed, member.name))
+    }
+
+    fun dismissInvite() = _state.update { it.copy(invite = null) }
+
     // ---- energy, alerts, server settings
 
     fun loadReport(range: String) {
@@ -347,6 +394,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             e is ServerException && e.code == 401 -> Note(R.string.problem_bad_token)
             e is ServerException && e.code == 503 -> Note(R.string.note_strip_offline)
             e is ServerException && e.code == 429 -> Note(R.string.pin_too_many)
+            e is ServerException && e.code == 403 && e.message == "view only" -> Note(R.string.view_only_note)
+            e is ServerException && e.code == 403 -> Note(R.string.not_allowed_note)
             e is ServerException -> Note(R.string.note_server_error, e.message ?: "HTTP ${e.code}")
             e is IOException -> Note(R.string.problem_unreachable)
             else -> Note(R.string.note_server_error, e.message ?: e.javaClass.simpleName)

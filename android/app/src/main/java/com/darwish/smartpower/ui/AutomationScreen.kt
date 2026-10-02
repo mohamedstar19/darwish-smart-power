@@ -151,7 +151,7 @@ fun AutomationScreen(vm: AppViewModel) {
                 }
             }
         }
-        if (state.strips.isNotEmpty()) {
+        if (state.strips.isNotEmpty() && state.me.canControl) {
             Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
                 ExtendedFloatingActionButton(
                     onClick = { addMenu = true },

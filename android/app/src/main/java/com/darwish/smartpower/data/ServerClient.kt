@@ -119,6 +119,28 @@ class ServerClient(private val address: ServerAddress, private val token: String
         return StateJson.parseSettings(JSONObject(call("POST", "api/settings", body)).optJSONObject("settings"))
     }
 
+    suspend fun members(): List<Member> = StateJson.parseMembers(JSONObject(call("GET", "api/users")).optJSONArray("users"))
+
+    /** Adds a family member; returns everyone and the new member's token (shown only this once). */
+    suspend fun addMember(name: String, role: String, strips: List<String>): Pair<List<Member>, String> {
+        val body = JSONObject().put("name", name).put("role", role).put("strips", JSONArray(strips))
+        val reply = JSONObject(call("POST", "api/users/add", body))
+        return StateJson.parseMembers(reply.optJSONArray("users")) to reply.getString("token")
+    }
+
+    /** Changes a member; with [newToken] the old token stops working and the new one is returned. */
+    suspend fun updateMember(id: String, role: String? = null, strips: List<String>? = null, newToken: Boolean = false): Pair<List<Member>, String?> {
+        val body = JSONObject().put("id", id)
+        role?.let { body.put("role", it) }
+        strips?.let { body.put("strips", JSONArray(it)) }
+        if (newToken) body.put("new_token", true)
+        val reply = JSONObject(call("POST", "api/users/update", body))
+        return StateJson.parseMembers(reply.optJSONArray("users")) to reply.optString("token").takeIf { it.isNotEmpty() }
+    }
+
+    suspend fun deleteMember(id: String): List<Member> =
+        StateJson.parseMembers(JSONObject(call("POST", "api/users/delete", JSONObject().put("id", id))).optJSONArray("users"))
+
     private suspend fun call(method: String, path: String, body: JSONObject? = null): String =
         withContext(Dispatchers.IO) {
             val conn = URL(address.url(path)).openConnection() as HttpURLConnection

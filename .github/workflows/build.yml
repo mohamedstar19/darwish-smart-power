@@ -34,6 +34,20 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
+      # the app's fixed signing key (repository secrets); without it each build gets a throw-away key
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/darwish.jks"
+            echo "DSP_KEYSTORE_FILE=$RUNNER_TEMP/darwish.jks" >> "$GITHUB_ENV"
+            echo "DSP_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "Signing with the Darwish key"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_B64 secret: this APK cannot be installed over a differently signed one"
+          fi
       - run: chmod +x gradlew
       - run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
       - uses: actions/upload-artifact@v4

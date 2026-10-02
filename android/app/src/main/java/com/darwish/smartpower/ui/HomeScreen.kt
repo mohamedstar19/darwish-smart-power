@@ -104,6 +104,9 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit, onSetup: () -> Unit, on
                     GlassPill(stringResource(R.string.stale_banner) + " " + stringResource(problemText(problem)),
                         color = Glass.Amber, fill = Glass.Amber.copy(alpha = 0.12f))
                 }
+                if (!state.me.canControl) item {
+                    GlassPill("👁 " + stringResource(R.string.role_view_long), color = Glass.Cyan, fill = Glass.Cyan.copy(alpha = 0.12f))
+                }
                 item { Hero(state) }
                 val scenes = server?.scenes.orEmpty()
                 if (scenes.isNotEmpty()) {

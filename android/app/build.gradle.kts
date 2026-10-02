@@ -16,9 +16,27 @@ android {
         versionName = "2.0.0"
     }
 
+    // One fixed signing key, so a new build installs over the old one. CI passes it in through
+    // environment variables (from GitHub secrets); without them Gradle's own debug key is used.
+    val keystore = System.getenv("DSP_KEYSTORE_FILE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (keystore != null) {
+            create("darwish") {
+                storeFile = keystore
+                storePassword = System.getenv("DSP_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("DSP_KEY_ALIAS") ?: "darwish"
+                keyPassword = System.getenv("DSP_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (keystore != null) signingConfig = signingConfigs.getByName("darwish")
+        }
         release {
             isMinifyEnabled = false
+            if (keystore != null) signingConfig = signingConfigs.getByName("darwish")
         }
     }
 

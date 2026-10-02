@@ -87,6 +87,21 @@ data class ServerSettings(
 
 data class Usage(val kwh: Double, val cost: Double)
 
+/** Who this app is signed in as: "owner" (the server password) or a family member ("control" / "view"). */
+data class Me(val role: String = ROLE_OWNER, val name: String? = null) {
+    val isOwner: Boolean get() = role == ROLE_OWNER
+    val canControl: Boolean get() = role != ROLE_VIEW
+
+    companion object {
+        const val ROLE_OWNER = "owner"
+        const val ROLE_CONTROL = "control"
+        const val ROLE_VIEW = "view"
+    }
+}
+
+/** A family member the owner shared access with. [strips] empty = all strips. */
+data class Member(val id: String, val name: String, val role: String, val strips: List<String>, val lastSeenEpochSeconds: Long)
+
 data class ServerState(
     val strips: List<Strip>,
     val serverIp: String?,
@@ -99,6 +114,7 @@ data class ServerState(
     val todayHours: List<Double> = emptyList(),
     val month: Usage = Usage(0.0, 0.0),
     val lastEventId: Long = 0,
+    val me: Me = Me(),
 )
 
 data class EnergyBucket(val startEpochSeconds: Long, val kwh: Double)
@@ -141,6 +157,17 @@ object StateJson {
             todayHours = today?.optJSONArray("hours").doubles(),
             month = parseUsage(root.optJSONObject("month")),
             lastEventId = root.optLong("last_event", 0L),
+            me = root.optJSONObject("me")?.let { Me(it.optString("role", Me.ROLE_OWNER), it.stringOrNull("name")) } ?: Me(),
+        )
+    }
+
+    fun parseMembers(a: JSONArray?): List<Member> = a.objects().map {
+        Member(
+            id = it.getString("id"),
+            name = it.optString("name"),
+            role = it.optString("role", Me.ROLE_CONTROL),
+            strips = it.optJSONArray("strips")?.let { s -> (0 until s.length()).map { i -> s.getString(i) } } ?: emptyList(),
+            lastSeenEpochSeconds = it.optLong("last_seen", 0L),
         )
     }
 
