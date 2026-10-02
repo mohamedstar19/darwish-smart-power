@@ -31,8 +31,8 @@ cd ~ && { [ -d darwish-smart-power ] || git clone https://github.com/mohamedstar
 | الصفحة التعريفية | `http://192.168.1.116:8095/welcome` | `https://power.darwish-tech.com/welcome` |
 | تحميل التطبيق | `http://192.168.1.116:8095/app.apk` | `https://power.darwish-tech.com/app.apk` |
 
-- التطبيق متظبط إنه يتصل بـ `192.168.1.116:8095` لوحده. علشان تتحكم من برّه البيت، غيّر العنوان من الإعدادات لـ
-  `https://power.darwish-tech.com`، واكتب نفس الرمز (token).
+- التطبيق متظبط إنه يتصل بـ `https://power.darwish-tech.com` لوحده، وده شغال من البيت ومن برّه.
+  كل اللي عليك تكتب الرمز (token) في الإعدادات.
 - علشان رابط `app.apk` يشتغل: نزّل الـ APK من صفحة الـ Releases في GitHub وحطه جنب `smartpower.py` باسم `darwish-smart-power.apk`.
 - **ربط الدومين بخطوة واحدة** (على السيرفر):
   `cd ~/darwish-smart-power && git pull -q && sudo bash tunnel.sh power.darwish-tech.com`

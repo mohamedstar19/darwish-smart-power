@@ -20,7 +20,9 @@ class Prefs(context: Context) {
     companion object {
         /** The home server this app was made for; can be changed in Settings. */
         const val DEFAULT_SERVER_IP = "192.168.1.116"
-        const val DEFAULT_ADDRESS = "192.168.1.116:8095"
+
+        /** Works at home and outside (Cloudflare Tunnel), whatever port the server uses. */
+        const val DEFAULT_ADDRESS = "https://power.darwish-tech.com"
 
         private const val KEY_ADDRESS = "address"
         private const val KEY_TOKEN = "token"
