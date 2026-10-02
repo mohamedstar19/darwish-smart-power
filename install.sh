@@ -28,10 +28,13 @@ echo "2/4 choosing a free port ..."
 systemctl stop smartpower 2>/dev/null || true   # so our own old copy does not count as "busy"
 sleep 1
 port_free() {
+    # SO_REUSEADDR like the server itself: connections still closing (TIME_WAIT) must not count as "busy",
+    # only another program listening on the port does
     python3 -c "
 import socket, sys
 for host in ('0.0.0.0', '127.0.0.1'):
     s = socket.socket()
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         s.bind((host, $1))
     except OSError:
@@ -42,6 +45,7 @@ for host in ('0.0.0.0', '127.0.0.1'):
 if ! port_free 10086; then
     echo "Port 10086 (the power strip's port) is used by another program:"
     ss -lntp 2>/dev/null | grep ':10086 ' || true
+    systemctl start smartpower 2>/dev/null || true
     exit 1
 fi
 PORT="${SP_WEB_PORT:-8095}"
