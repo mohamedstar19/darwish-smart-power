@@ -115,7 +115,7 @@ class ServerClient(private val address: ServerAddress, private val token: String
 
     suspend fun updateSettings(s: ServerSettings): ServerSettings {
         val body = JSONObject().put("price_kwh", s.pricePerKwh).put("currency", s.currency)
-            .put("max_temp_c", s.maxTempC).put("max_watts", s.maxWatts)
+            .put("max_temp_c", s.maxTempC).put("max_watts", s.maxWatts).put("alexa", s.alexa)
         return StateJson.parseSettings(JSONObject(call("POST", "api/settings", body)).optJSONObject("settings"))
     }
 

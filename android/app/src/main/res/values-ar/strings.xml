@@ -231,4 +231,8 @@
     <string name="notif_temp">%1$s في %2$s حرارته %3$s°C.</string>
     <string name="notif_power_title">استهلاك عالي</string>
     <string name="notif_power">%1$s بيسحب %2$s وات.</string>
+    <string name="section_alexa">أليكسا</string>
+    <string name="alexa_enable">التحكم بأليكسا</string>
+    <string name="alexa_hint">المخارج بتظهر كفيش ذكية لسماعات Echo اللي في البيت. المشتركات المقفولة مش بتظهر.</string>
+    <string name="alexa_steps">قول "أليكسا، ابحثي عن الأجهزة". كل مخرج هيظهر باسمه اللي في التطبيق، وكل مشترك كجهاز واحد. لو غيّرت اسم، ابحثي تاني. وبعدها: "أليكسا، شغّلي الغلاية".</string>
 </resources>

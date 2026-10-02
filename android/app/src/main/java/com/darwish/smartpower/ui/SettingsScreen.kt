@@ -150,6 +150,17 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
             }
         }
 
+        // ---- Alexa (on the server, inside the home network)
+        state.server?.settings?.let { current ->
+            GlassCard(Modifier.fillMaxWidth()) {
+                CardTitle("🗣️", stringResource(R.string.section_alexa))
+                SwitchRow(stringResource(R.string.alexa_enable), stringResource(R.string.alexa_hint), current.alexa) { on ->
+                    vm.saveServerSettings(current.copy(alexa = on))
+                }
+                Text(stringResource(R.string.alexa_steps), color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
         // ---- this phone
         GlassCard(Modifier.fillMaxWidth()) {
             CardTitle("📱", stringResource(R.string.section_phone))

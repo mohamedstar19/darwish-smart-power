@@ -245,4 +245,8 @@
     <string name="notif_temp">%1$s on %2$s is at %3$s°C.</string>
     <string name="notif_power_title">High power</string>
     <string name="notif_power">%1$s is drawing %2$s W.</string>
+    <string name="section_alexa">Alexa</string>
+    <string name="alexa_enable">Control with Alexa</string>
+    <string name="alexa_hint">Outlets show up as smart plugs on Echo devices in this home. Locked strips are left out.</string>
+    <string name="alexa_steps">Say "Alexa, discover devices". Each outlet appears with its name from this app, and each strip as one device. After renaming, discover again. Then: "Alexa, turn on the kettle".</string>
 </resources>

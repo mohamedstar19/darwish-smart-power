@@ -81,6 +81,8 @@ data class ServerSettings(
     val currency: String = "EGP",
     val maxTempC: Double = 60.0,
     val maxWatts: Double = 3000.0,
+    /** Offer the outlets to Amazon Echo devices on the home network. */
+    val alexa: Boolean = true,
 )
 
 data class Usage(val kwh: Double, val cost: Double)
@@ -213,6 +215,7 @@ object StateJson {
             currency = o.stringOrNull("currency") ?: d.currency,
             maxTempC = o.optDouble("max_temp_c", d.maxTempC),
             maxWatts = o.optDouble("max_watts", d.maxWatts),
+            alexa = o.optBoolean("alexa", d.alexa),
         )
     }
 
