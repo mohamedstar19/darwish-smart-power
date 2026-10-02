@@ -8,7 +8,19 @@
 # - strips in other homes: sudo SP_PUBLIC_IP=<fixed internet IP> bash install.sh
 #   and forward TCP port 10086 on the router to this machine
 # Run it again any time to update or repair the installation.
+#   --show-password   print the current password again
+#   --new-password    replace the password with a new random one
 set -euo pipefail
+
+NEW_PASSWORD=0
+SHOW_PASSWORD=0
+for arg in "$@"; do
+    case "$arg" in
+        --new-password) NEW_PASSWORD=1 ;;
+        --show-password) SHOW_PASSWORD=1 ;;
+        *) echo "Unknown option: $arg  (use --show-password or --new-password)"; exit 1 ;;
+    esac
+done
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UNIT=/etc/systemd/system/smartpower.service
@@ -65,11 +77,14 @@ fi
 
 echo "    writing the service ..."
 TOKEN=""
-if [ -f "$UNIT" ]; then
+if [ -f "$UNIT" ] && [ "$NEW_PASSWORD" = 0 ]; then
     TOKEN="$(sed -n 's/^Environment=SP_TOKEN=//p' "$UNIT")"
 fi
+FRESH_TOKEN=0
 if [ -z "$TOKEN" ] || [ "$TOKEN" = "change-me-to-a-long-random-token" ]; then
-    TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(12))')"
+    # letters and digits only: easy to type on a phone
+    TOKEN="$(python3 -c 'import secrets, string; a = string.ascii_letters + string.digits; print("".join(secrets.choice(a) for _ in range(16)))')"
+    FRESH_TOKEN=1
 fi
 # the LAN address other devices use to reach this machine
 IP="$(python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(("10.255.255.255", 1)); print(s.getsockname()[0])' 2>/dev/null || true)"
@@ -128,7 +143,12 @@ sys.exit(0 if json.load(urllib.request.urlopen(req, timeout=2)).get('app') == 'd
         echo "=============================================================="
         echo " Darwish Smart Power is running"
         echo
-        echo "   Password (token):  $TOKEN"
+        if [ "$FRESH_TOKEN" = 1 ] || [ "$SHOW_PASSWORD" = 1 ]; then
+            echo "   Password (token):  $TOKEN"
+            echo "   Keep it private: don't paste it in chats or screenshots."
+        else
+            echo "   Password (token):  unchanged (see it: sudo bash $DIR/install.sh --show-password)"
+        fi
         echo
         echo "   Website:           http://$IP:$PORT/"
         echo "   Control panel:     http://$IP:$PORT/panel"
@@ -136,9 +156,12 @@ sys.exit(0 if json.load(urllib.request.urlopen(req, timeout=2)).get('app') == 'd
         echo "   App settings:      address $IP:$PORT (or your domain) + the password"
         echo "   New strips connect to: $STRIP_IP port 10086"
         echo
-        echo " In the control panel and the app: the password above."
-        echo " Run 'sudo bash $DIR/install.sh' again to see it later."
-        if systemctl is-active --quiet darwish-tunnel 2>/dev/null; then
+        if [ "$FRESH_TOKEN" = 1 ]; then
+            echo " New password: enter it in the app (Settings > Connection) and the control panel."
+            echo " Family members' invite codes keep working."
+        fi
+        TUNNEL_CONF=/etc/cloudflared/darwish-smart-power.yml
+        if [ -f "$TUNNEL_CONF" ] && ! grep -q "localhost:$PORT\$" "$TUNNEL_CONF"; then
             echo
             echo " Domain: run 'sudo bash $DIR/tunnel.sh' so it points to port $PORT."
         fi
