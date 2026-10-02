@@ -34,6 +34,10 @@ cd ~ && { [ -d darwish-smart-power ] || git clone https://github.com/mohamedstar
 - التطبيق متظبط إنه يتصل بـ `192.168.1.116:8090` لوحده. علشان تتحكم من برّه البيت، غيّر العنوان من الإعدادات لـ
   `https://power.darwish-tech.com`، واكتب نفس الرمز (token).
 - علشان رابط `app.apk` يشتغل: نزّل الـ APK من صفحة الـ Releases في GitHub وحطه جنب `smartpower.py` باسم `darwish-smart-power.apk`.
+- **ربط الدومين بخطوة واحدة** (على السيرفر):
+  `cd ~/darwish-smart-power && git pull -q && sudo bash tunnel.sh power.darwish-tech.com`
+  السكربت بيثبّت `cloudflared`، ويطبع رابط واحد تفتحه وتختار الدومين وتدوس Authorize، وبعدها بيعمل الـ tunnel
+  والـ subdomain وخدمة بتشتغل لوحدها بعد الريستارت. مش بيلمس أي tunnel تاني على السيرفر (زي بتاع n8n).
 - الدومين شغال عن طريق **Cloudflare Tunnel** (Zero Trust ← Networks ← Tunnels)، والـ Public hostname بتاعه
   `power.darwish-tech.com` ← `HTTP` ← `localhost:8090`. مش محتاج Port Forwarding ولا IP عام.
 - طول ما الدومين شغال **لازم** السيرفر يكون شغال بـ `--token`.
