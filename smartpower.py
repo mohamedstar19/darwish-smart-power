@@ -23,6 +23,7 @@ import ipaddress
 import json
 import os
 import re
+import shutil
 import socket
 import struct
 import sqlite3
@@ -1356,6 +1357,13 @@ class WebServer(ThreadingHTTPServer):
     def run_on_loop(self, coro, timeout: float = 20.0):
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
 
+    def handle_error(self, request, client_address) -> None:
+        # a phone or the tunnel hanging up in the middle of a reply (e.g. a cancelled app download)
+        # is normal; only real errors deserve a traceback in the log
+        if isinstance(sys.exc_info()[1], (ConnectionError, TimeoutError)):
+            return
+        super().handle_error(request, client_address)
+
 
 class WebHandler(BaseHTTPRequestHandler):
     server: WebServer
@@ -1443,7 +1451,18 @@ class WebHandler(BaseHTTPRequestHandler):
         if not path.is_file():
             self.reply_json(404, {"error": "not built yet - see README (Android app)"})
             return
-        self.reply(200, path.read_bytes(), ctype, {"Content-Disposition": 'attachment; filename="%s"' % filename})
+        # streamed in pieces: the app is several MB and may be downloaded by several phones at once
+        with path.open("rb") as fh:
+            size = os.fstat(fh.fileno()).st_size
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(size))
+            self.send_header("Content-Disposition", 'attachment; filename="%s"' % filename)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            if self.command != "HEAD":
+                shutil.copyfileobj(fh, self.wfile, 64 * 1024)
 
     def send_static(self, path: str) -> bool:
         """Serve a public website file; False when [path] is not one."""
