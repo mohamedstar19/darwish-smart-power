@@ -81,8 +81,8 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
     ) {
         Text(stringResource(R.string.tab_settings), style = MaterialTheme.typography.headlineMedium)
 
-        // ---- connection
-        GlassCard(Modifier.fillMaxWidth()) {
+        // ---- connection (customers just sign in; the address and token are for the owner and family)
+        if (!state.me.isCustomer) GlassCard(Modifier.fillMaxWidth()) {
             CardTitle("🌐", stringResource(R.string.section_server))
             OutlinedTextField(
                 value = address,
@@ -125,7 +125,8 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
 
         // ---- family: the owner manages it, members see who they are
         if (state.server != null) {
-            if (state.me.isOwner) FamilyCard(vm, state) else SignedInAsCard(state.me)
+            if (state.me.isOwner) FamilyCard(vm, state)
+            else SignedInAsCard(state.me, onSignOut = vm::signOut, onDeleteAccount = vm::deleteAccount.takeIf { state.me.isCustomer })
         }
 
         // ---- strips the owner blocked; one tap lets a strip in again

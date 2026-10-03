@@ -90,12 +90,15 @@ data class Usage(val kwh: Double, val cost: Double)
 /** Who this app is signed in as: "owner" (the server password) or a family member ("control" / "view"). */
 data class Me(val role: String = ROLE_OWNER, val name: String? = null) {
     val isOwner: Boolean get() = role == ROLE_OWNER
+    val isCustomer: Boolean get() = role == ROLE_CUSTOMER
     val canControl: Boolean get() = role != ROLE_VIEW
 
     companion object {
         const val ROLE_OWNER = "owner"
         const val ROLE_CONTROL = "control"
         const val ROLE_VIEW = "view"
+        /** Signed up in the app; sees only the strips they added. */
+        const val ROLE_CUSTOMER = "customer"
     }
 }
 

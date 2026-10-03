@@ -8,7 +8,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /** An answer from the server that was not a success. [code] is the HTTP status. */
-class ServerException(val code: Int, message: String, val pinNeeded: Boolean = false) : Exception(message)
+/** [field]: which form field the server complained about (sign-up / sign-in), if any. */
+class ServerException(val code: Int, message: String, val pinNeeded: Boolean = false, val field: String? = null) : Exception(message)
 
 enum class SwitchOutcome { CONFIRMED, UNCONFIRMED, QUEUED }
 
@@ -141,6 +142,29 @@ class ServerClient(private val address: ServerAddress, private val token: String
     suspend fun deleteMember(id: String): List<Member> =
         StateJson.parseMembers(JSONObject(call("POST", "api/users/delete", JSONObject().put("id", id))).optJSONArray("users"))
 
+    // ---- customer accounts (no token needed to sign up or sign in)
+
+    /** Creates a customer account and returns the sign-in token for this phone. */
+    suspend fun signUp(name: String, login: String, password: String): String {
+        val body = JSONObject().put("name", name).put("login", login).put("password", password)
+        return JSONObject(call("POST", "api/signup", body)).getString("token")
+    }
+
+    suspend fun signIn(login: String, password: String): String {
+        val body = JSONObject().put("login", login).put("password", password)
+        return JSONObject(call("POST", "api/login", body)).getString("token")
+    }
+
+    /** Ends this phone's sign-in on the server. */
+    suspend fun signOut() {
+        call("POST", "api/logout", JSONObject())
+    }
+
+    /** Closes the customer account; strips nobody else has are removed with it. */
+    suspend fun deleteAccount() {
+        call("POST", "api/account/delete", JSONObject())
+    }
+
     /** Tells the server a strip with this setup code is being added from the app, so it is approved by itself. */
     suspend fun expectStrip(code: String) {
         call("POST", "api/strips/expect", JSONObject().put("code", code))
@@ -176,7 +200,8 @@ class ServerClient(private val address: ServerAddress, private val token: String
                     val json = runCatching { JSONObject(text) }.getOrNull()
                     val error = json?.optString("error")
                     throw ServerException(code, error?.takeIf { it.isNotBlank() } ?: "HTTP $code",
-                        pinNeeded = json?.optBoolean("locked", false) == true)
+                        pinNeeded = json?.optBoolean("locked", false) == true,
+                        field = json?.optString("field")?.takeIf { it.isNotBlank() })
                 }
                 text
             } finally {

@@ -320,4 +320,27 @@
     <string name="remove_and_block">Remove and block</string>
     <string name="blocked_strips_title">Blocked strips</string>
     <string name="unblock">Allow again</string>
+    <string name="account_welcome">Welcome to Darwish Smart Power</string>
+    <string name="account_intro">Create your account to add your strip and control it from anywhere. Already have one? Sign in.</string>
+    <string name="account_expired">Your sign-in ended. Sign in again.</string>
+    <string name="account_create">Create account</string>
+    <string name="account_sign_in">Sign in</string>
+    <string name="account_name">Your name</string>
+    <string name="account_login">Mobile number or e-mail</string>
+    <string name="account_password">Password</string>
+    <string name="account_password_hint">At least 6 characters</string>
+    <string name="account_have_password">I have a server password or an invite code</string>
+    <string name="account_err_name">Enter your name.</string>
+    <string name="account_err_login">Enter a mobile number or an e-mail address.</string>
+    <string name="account_err_password">The password needs at least 6 characters.</string>
+    <string name="account_err_exists">There is already an account with this number or e-mail. Sign in instead.</string>
+    <string name="account_err_wrong">Wrong number/e-mail or password.</string>
+    <string name="account_err_closed">New accounts are closed at the moment.</string>
+    <string name="account_err_too_many">Too many attempts. Try again in a while.</string>
+    <string name="account_err_other">Something went wrong. Try again.</string>
+    <string name="account_deleted">Your account was deleted.</string>
+    <string name="role_customer_long">Your account: you see and control the strips you added</string>
+    <string name="sign_out">Sign out</string>
+    <string name="delete_account">Delete my account</string>
+    <string name="delete_account_body">This deletes your account and removes the strips you added from the server. It cannot be undone.</string>
 </resources>

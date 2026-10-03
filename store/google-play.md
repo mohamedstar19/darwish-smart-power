@@ -67,7 +67,12 @@ Create app:
     - Purpose: **App functionality**
   - **Device or other IDs** (رقم المشترك MAC)
     - Collected: Yes · Shared: No · Required · Purpose: **App functionality**
-- مش بنجمع: الاسم، الإيميل، رقم التليفون، الموقع، جهات الاتصال، الصور، بيانات الدفع.
+  - **Personal info → Name** و **Email address** و **Phone number** (حساب العميل)
+    - Collected: Yes · Shared: No · Required · Purpose: **App functionality** و **Account management**
+- **Account creation:** التطبيق فيه حسابات، فـ Play بيطلب رابط مسح الحساب:
+  - Delete account URL: `https://power.darwish-tech.com/delete-account`
+  - والمسح موجود جوه التطبيق كمان: الإعدادات ← امسح حسابي
+- مش بنجمع: الموقع، جهات الاتصال، الصور، بيانات الدفع.
 - إذن الموقع (أندرويد 12 وأقدم) و"الأجهزة القريبة" (أندرويد 13+) بنستخدمهم بس عشان نشوف شبكات الواي فاي القريبة ونلاقي المشترك، ومفيش أي بيانات بتطلع من الموبايل، فالموقع **مش** بيتحسب في Data safety.
 - اسم وكلمة سر الواي فاي بيروحوا للمشترك مباشرة على الشبكة المحلية، مش لينا، فمش بيتحسبوا.
 

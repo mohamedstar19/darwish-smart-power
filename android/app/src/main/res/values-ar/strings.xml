@@ -306,4 +306,27 @@
     <string name="remove_and_block">شيل واحظر</string>
     <string name="blocked_strips_title">مشتركات محظورة</string>
     <string name="unblock">اسمح تاني</string>
+    <string name="account_welcome">أهلاً بيك في Darwish Smart Power</string>
+    <string name="account_intro">اعمل حسابك عشان تضيف المشترك بتاعك وتتحكم فيه من أي مكان. عندك حساب؟ ادخل.</string>
+    <string name="account_expired">الدخول بتاعك انتهى. ادخل تاني.</string>
+    <string name="account_create">حساب جديد</string>
+    <string name="account_sign_in">دخول</string>
+    <string name="account_name">اسمك</string>
+    <string name="account_login">رقم الموبايل أو الإيميل</string>
+    <string name="account_password">الباسورد</string>
+    <string name="account_password_hint">6 حروف أو أرقام على الأقل</string>
+    <string name="account_have_password">عندي باسورد سيرفر أو كود دعوة</string>
+    <string name="account_err_name">اكتب اسمك.</string>
+    <string name="account_err_login">اكتب رقم موبايل أو إيميل.</string>
+    <string name="account_err_password">الباسورد لازم يكون 6 حروف أو أرقام على الأقل.</string>
+    <string name="account_err_exists">فيه حساب بالرقم أو الإيميل ده. ادخل بيه بدل ما تعمل حساب جديد.</string>
+    <string name="account_err_wrong">الرقم أو الإيميل أو الباسورد غلط.</string>
+    <string name="account_err_closed">التسجيل مقفول دلوقتي.</string>
+    <string name="account_err_too_many">محاولات كتير. جرّب تاني بعد شوية.</string>
+    <string name="account_err_other">حصلت مشكلة. جرّب تاني.</string>
+    <string name="account_deleted">حسابك اتمسح.</string>
+    <string name="role_customer_long">حسابك: بتشوف وتتحكم في المشتركات اللي ضفتها</string>
+    <string name="sign_out">خروج</string>
+    <string name="delete_account">امسح حسابي</string>
+    <string name="delete_account_body">هيتمسح حسابك وهتتشال المشتركات اللي ضفتها من السيرفر، ومش هينفع ترجّعه.</string>
 </resources>

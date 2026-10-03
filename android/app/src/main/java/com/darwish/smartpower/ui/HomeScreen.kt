@@ -96,6 +96,10 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit, onSetup: () -> Unit, on
                 MessageCard(stringResource(R.string.welcome_title), stringResource(R.string.welcome_body),
                     stringResource(R.string.open_settings), onSettings)
             }
+            // not signed in (or the sign-in ended): customers sign in or create an account right here
+            problem == Problem.BAD_TOKEN && state.strips.isEmpty() -> item {
+                AccountCard(vm, expired = state.token.isNotEmpty(), onServerPassword = onSettings)
+            }
             state.strips.isEmpty() && problem != null -> item {
                 MessageCard(stringResource(R.string.problem_title), stringResource(problemText(problem)),
                     stringResource(R.string.retry), { scope.launch { vm.refresh() } },

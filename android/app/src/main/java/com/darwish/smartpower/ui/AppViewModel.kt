@@ -38,6 +38,9 @@ import java.io.IOException
 /** Why the strips cannot be shown right now. */
 enum class Problem { NOT_CONFIGURED, UNREACHABLE, BAD_TOKEN, SERVER }
 
+/** Why creating an account or signing in did not work. */
+enum class AccountError { NAME, LOGIN, PASSWORD, EXISTS, WRONG, CLOSED, TOO_MANY, UNREACHABLE, OTHER }
+
 data class UiState(
     val addressText: String = "",
     val token: String = "",
@@ -305,6 +308,56 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun dismissInvite() = _state.update { it.copy(invite = null) }
+
+    // ---- customer accounts
+
+    suspend fun signUp(name: String, login: String, password: String): AccountError? =
+        accountCall { it.signUp(name.trim(), login.trim(), password) }
+
+    suspend fun signIn(login: String, password: String): AccountError? =
+        accountCall { it.signIn(login.trim(), password) }
+
+    /** Runs a sign-up or sign-in; on success the returned token becomes this phone's sign-in. */
+    private suspend fun accountCall(block: suspend (ServerClient) -> String): AccountError? {
+        val address = prefs.address ?: return AccountError.UNREACHABLE
+        return try {
+            useToken(block(ServerClient(address, "")))
+            null
+        } catch (e: ServerException) {
+            when {
+                e.code == 409 -> AccountError.EXISTS
+                e.code == 401 -> AccountError.WRONG
+                e.code == 403 -> AccountError.CLOSED
+                e.code == 429 -> AccountError.TOO_MANY
+                e.field == "name" -> AccountError.NAME
+                e.field == "login" -> AccountError.LOGIN
+                e.field == "password" -> AccountError.PASSWORD
+                else -> AccountError.OTHER
+            }
+        } catch (e: IOException) {
+            AccountError.UNREACHABLE
+        }
+    }
+
+    private suspend fun useToken(token: String) {
+        prefs.token = token
+        _state.update { it.copy(token = token, server = null, loaded = false, problem = null) }
+        refresh()
+    }
+
+    fun signOut() {
+        val client = client()
+        viewModelScope.launch {
+            client?.let { runCatching { it.signOut() } }
+            useToken("")
+        }
+    }
+
+    fun deleteAccount() = act { client ->
+        client.deleteAccount()
+        useToken("")
+        notes.send(Note(R.string.account_deleted))
+    }
 
     // ---- approving and removing strips (owner)
 

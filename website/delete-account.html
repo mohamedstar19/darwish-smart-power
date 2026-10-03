@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Delete account · Darwish Smart Power</title>
+<meta name="description" content="امسح حسابك في Darwish Smart Power.">
+<link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+<meta name="theme-color" content="#1e130d">
+<style>
+:root{--text:#fff4ec;--soft:#c9b8ac;--stroke:rgba(255,255,255,.14);--fill:rgba(255,255,255,.07);--brand:#ff8a4c;--bad:#ff6b6b;--good:#3ee6a0}
+*{box-sizing:border-box}
+html{background:#0d0907}
+body{margin:0;color:var(--text);font:15px/1.7 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+  background:radial-gradient(900px 600px at 85% -10%,rgba(74,32,12,.95),transparent 70%),linear-gradient(180deg,#1e130d,#0d0907 60%);background-attachment:fixed}
+bdi{unicode-bidi:isolate}
+.wrap{max-width:560px;margin:auto;padding:24px 16px 40px}
+.card{background:var(--fill);border:1px solid var(--stroke);border-radius:20px;padding:20px;margin-top:16px}
+h1{font-size:22px;margin:8px 0 0}
+h2{font-size:16px;margin:0 0 6px;color:var(--brand)}
+p,li{color:#f3e6dc}
+a{color:var(--brand)}
+input,button{font:inherit;color:inherit}
+input{width:100%;margin:6px 0 10px;padding:11px 14px;border-radius:12px;border:1px solid var(--stroke);background:rgba(0,0,0,.25)}
+button{border:0;border-radius:12px;padding:11px 16px;font-weight:700;cursor:pointer;background:var(--bad);color:#2a0606;width:100%}
+#msg{min-height:24px;margin-top:10px}
+.ok{color:var(--good)}.err{color:var(--bad)}
+.en{direction:ltr;text-align:left}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="/welcome"><img src="/icons/icon-192.png" alt="" width="48" height="48" style="border-radius:14px"></a>
+  <h1>مسح الحساب</h1>
+  <p>تقدر تمسح حسابك في <b>Darwish Smart Power</b> بأي طريقة من دول. لما الحساب يتمسح، بيتمسح اسمك ورقمك أو إيميلك والباسورد،
+    والمشتركات اللي ضفتها بتتشال من السيرفر بأسمائها ومواعيدها. ده مش بيترجع.</p>
+
+  <div class="card">
+    <h2>من التطبيق</h2>
+    <p>الإعدادات ← <b>امسح حسابي</b>.</p>
+  </div>
+
+  <div class="card">
+    <h2>من هنا</h2>
+    <form id="f">
+      <label>رقم الموبايل أو الإيميل<input id="login" autocomplete="username" dir="ltr" required></label>
+      <label>الباسورد<input id="pw" type="password" autocomplete="current-password" dir="ltr" required></label>
+      <button type="submit">امسح حسابي نهائياً</button>
+      <div id="msg"></div>
+    </form>
+  </div>
+
+  <div class="card en" lang="en">
+    <h2>Delete your account</h2>
+    <p>Delete your Darwish Smart Power account in the app (Settings → Delete my account) or with the form above
+      (your mobile number or e-mail and password). Your name, login and password are deleted, and the strips you added are
+      removed from the server with their names and schedules. This cannot be undone.</p>
+  </div>
+  <p style="text-align:center;color:var(--soft);font-size:13px">تطوير <a href="https://darwish-tech.com">Darwish Tech</a> · <a href="/privacy">سياسة الخصوصية</a></p>
+</div>
+<script>
+document.getElementById("f").onsubmit = async e => {
+  e.preventDefault();
+  const msg = document.getElementById("msg");
+  if (!confirm("متأكد؟ الحساب هيتمسح نهائياً.")) return;
+  msg.className = ""; msg.textContent = "…";
+  const post = (path, body, token) => fetch(path, {method: "POST",
+    headers: Object.assign({"Content-Type": "application/json"}, token ? {"X-Token": token} : {}), body: JSON.stringify(body)});
+  try {
+    const r = await post("/api/login", {login: document.getElementById("login").value, password: document.getElementById("pw").value});
+    if (!r.ok) { msg.className = "err"; msg.textContent = r.status === 429 ? "محاولات كتير، جرّب بعد شوية." : "الرقم أو الإيميل أو الباسورد غلط."; return; }
+    const {token} = await r.json();
+    const d = await post("/api/account/delete", {}, token);
+    if (!d.ok) throw new Error(d.status);
+    msg.className = "ok"; msg.textContent = "حسابك اتمسح. Your account was deleted.";
+    e.target.reset();
+  } catch (err) { msg.className = "err"; msg.textContent = "حصلت مشكلة، جرّب تاني."; }
+};
+</script>
+</body>
+</html>

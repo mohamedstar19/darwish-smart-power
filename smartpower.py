@@ -68,7 +68,11 @@ LOGIN_FAILS = 10                         # different wrong passwords from one ad
 LOGIN_BLOCK_SECONDS = 900
 ICONS = ("plug", "kettle", "router", "tv", "ac", "lamp", "heater", "fan", "fridge",
          "washer", "charger", "computer", "speaker", "camera", "microwave", "iron")
-DEFAULT_SETTINGS = {"price_kwh": 1.5, "currency": "EGP", "max_temp_c": 60, "max_watts": 3000, "alexa": True}
+DEFAULT_SETTINGS = {"price_kwh": 1.5, "currency": "EGP", "max_temp_c": 60, "max_watts": 3000, "alexa": True,
+                    "signup": True}
+SIGNUPS_PER_HOUR = 5                     # new customer accounts from one internet address
+MAX_SESSIONS = 10                        # signed-in phones per customer account
+PASSWORD_ROUNDS = 200_000
 SSDP_GROUP = "239.255.255.250"
 SSDP_PORT = 1900
 ALEXA_BASE_PORT = 52100                  # one small web server per outlet, like a real smart plug
@@ -85,6 +89,8 @@ STATIC = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/welcome": ("index.html", "text/html; charset=utf-8"),
     "/panel": ("panel.html", "text/html; charset=utf-8"),
+    "/admin": ("admin.html", "text/html; charset=utf-8"),
+    "/delete-account": ("delete-account.html", "text/html; charset=utf-8"),
     "/privacy": ("privacy.html", "text/html; charset=utf-8"),
     "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
     "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
@@ -176,6 +182,8 @@ class Store:
         self.blocked_strips: List[str] = []
         # strips the app is setting up right now: setup-Wi-Fi code -> {"by": member id or "", "until"}
         self.expected: Dict[str, Dict[str, Any]] = {}
+        # app downloads: total, per day, and today's (hashed) addresses so a retry is not counted twice
+        self.stats: Dict[str, Any] = {}
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             self.names = dict(data.get("names", {}))
@@ -189,6 +197,7 @@ class Store:
             self.settings.update(data.get("settings", {}))
             self.blocked_strips = list(data.get("blocked_strips", []))
             self.expected = dict(data.get("expected", {}))
+            self.stats = dict(data.get("stats", {}))
             if "approved" in data:
                 self.approved = list(data["approved"])
             else:                                   # before approvals existed: every strip in use counts
@@ -203,7 +212,8 @@ class Store:
                            "schedules": self.schedules, "scenes": self.scenes, "pending": self.pending,
                            "alexa_ports": self.alexa_ports, "users": self.users,
                            "settings": self.settings, "approved": self.approved,
-                           "blocked_strips": self.blocked_strips, "expected": self.expected},
+                           "blocked_strips": self.blocked_strips, "expected": self.expected,
+                           "stats": self.stats},
                           ensure_ascii=False, indent=1)
         fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), prefix=".smartpower-")
         try:
@@ -239,8 +249,8 @@ class Store:
         if mac not in self.approved:
             self.approved.append(mac)
         user = next((u for u in self.users if u["id"] == by), None)
-        if user and user.get("strips") and mac not in user["strips"]:
-            user["strips"] = sorted(user["strips"] + [mac])
+        if user and (user.get("role") == CUSTOMER or user.get("strips")) and mac not in (user.get("strips") or []):
+            user["strips"] = sorted((user.get("strips") or []) + [mac])
         self.save()
 
     def expect(self, code: str, by: str, now: float) -> None:
@@ -346,7 +356,49 @@ class Store:
         for user in self.users:
             if hmac.compare_digest(user.get("token_hash", ""), digest):
                 return user
+            if any(hmac.compare_digest(x.get("hash", ""), digest) for x in user.get("sessions", [])):
+                return user
         return None
+
+    # ---- customer accounts
+
+    def account_by_login(self, login: str) -> Optional[Dict[str, Any]]:
+        return next((u for u in self.users if u.get("role") == CUSTOMER and u.get("login") == login), None)
+
+    def new_session(self, user: Dict[str, Any]) -> str:
+        """A fresh sign-in token for one phone; only its hash is kept."""
+        token = base64.urlsafe_b64encode(os.urandom(24)).decode().rstrip("=")
+        sessions = user.setdefault("sessions", [])
+        sessions.append({"hash": hashlib.sha256(token.encode()).hexdigest(), "created": int(time.time())})
+        del sessions[:-MAX_SESSIONS]
+        self.save()
+        return token
+
+    def end_session(self, token: str) -> None:
+        digest = hashlib.sha256(token.encode()).hexdigest()
+        for user in self.users:
+            before = len(user.get("sessions", []))
+            user["sessions"] = [x for x in user.get("sessions", []) if x.get("hash") != digest]
+            if len(user["sessions"]) != before:
+                self.save()
+                return
+
+    def count_download(self, ip: str, now: float) -> None:
+        """Counts app downloads, once per address per day (a retry or refresh is not a new download)."""
+        day = time.strftime("%Y-%m-%d", time.localtime(now))
+        stats = self.stats
+        if stats.get("seen_day") != day:
+            stats["seen_day"], stats["seen"] = day, []
+        tag = hashlib.sha256(("%s|%s" % (day, ip)).encode()).hexdigest()[:12]
+        if tag in stats["seen"]:
+            return
+        stats["seen"] = (stats["seen"] + [tag])[-5000:]
+        stats["downloads"] = int(stats.get("downloads", 0)) + 1
+        days = stats.setdefault("download_days", {})
+        days[day] = int(days.get(day, 0)) + 1
+        for old in sorted(days)[:-90]:            # keep three months of daily counts
+            del days[old]
+        self.save()
 
     # PIN locks: meta[mac]["pin"] = "salt$sha256(salt + pin)"
     def locked(self, mac: str) -> bool:
@@ -404,7 +456,34 @@ def normalise_schedule(sched: Dict[str, Any]) -> Dict[str, Any]:
 
 OWNER = {"role": "owner", "name": None, "id": None, "strips": None}
 ROLES = ("control", "view")
-OWNER_ONLY = ("/api/users", "/api/settings", "/api/lock", "/api/strips/approve", "/api/strips/remove")
+CUSTOMER = "customer"                    # signs up in the app and sees only the strips they added
+ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
+
+
+def normalise_login(text: Any) -> Optional[str]:
+    """A phone number (digits, optional +) or an e-mail address, in one canonical form; None if neither."""
+    login = re.sub(r"[\s\-()]", "", str(text or "").translate(ARABIC_DIGITS)).lower()
+    if re.fullmatch(r"[^@\s]{1,64}@[^@\s]{1,190}\.[a-z]{2,24}", login):
+        return login
+    if re.fullmatch(r"\+?\d{8,15}", login):
+        return login
+    return None
+
+
+def hash_password(password: str, salt: Optional[bytes] = None) -> str:
+    salt = salt or os.urandom(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PASSWORD_ROUNDS)
+    return "pbkdf2$%d$%s$%s" % (PASSWORD_ROUNDS, salt.hex(), digest.hex())
+
+
+def password_ok(stored: str, password: str) -> bool:
+    try:
+        _, rounds, salt, digest = stored.split("$")
+        mine = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), int(rounds))
+        return hmac.compare_digest(mine.hex(), digest)
+    except (ValueError, AttributeError):
+        return False
+OWNER_ONLY = ("/api/users", "/api/settings", "/api/lock", "/api/strips/approve", "/api/strips/remove", "/api/admin")
 
 
 def may_see(who: Dict[str, Any], mac: str) -> bool:
@@ -714,6 +793,7 @@ class Guard:
         self.strikes: Dict[str, List[float]] = {}                 # ip -> recent misbehaviour
         self.new_strips: Dict[str, List[float]] = {}              # ip -> times a new strip was added
         self.login_fails: Dict[str, Dict[str, float]] = {}        # ip -> {wrong password hash: when}
+        self.signups: Dict[str, List[float]] = {}                 # ip -> times an account was made
         self.refused = 0
         self.lock = threading.Lock()                              # the web side runs in other threads
 
@@ -808,6 +888,17 @@ class Guard:
             count = len(fails)
         if count >= LOGIN_FAILS:
             self.block(ip, "%d wrong passwords" % count, LOGIN_BLOCK_SECONDS, now)
+
+    def may_sign_up(self, ip: str, now: Optional[float] = None) -> bool:
+        if is_local_address(ip):
+            return True
+        now = time.time() if now is None else now
+        with self.lock:
+            recent = self._recent(self.signups.setdefault(ip, []), 3600, now)
+            if len(recent) >= SIGNUPS_PER_HOUR:
+                return False
+            recent.append(now)
+            return True
 
     def report(self, now: Optional[float] = None) -> Dict[str, Any]:
         now = time.time() if now is None else now
@@ -1018,7 +1109,106 @@ class Hub:
                 "created": user.get("created", 0), "last_seen": int(self.user_seen.get(user["id"], 0))}
 
     async def users(self) -> Dict[str, Any]:
-        return {"users": [self.user_json(u) for u in self.store.users]}
+        """Family members (customers are on the admin page)."""
+        return {"users": [self.user_json(u) for u in self.store.users if u.get("role") != CUSTOMER]}
+
+    def saw_user(self, user: Dict[str, Any]) -> None:
+        now = time.time()
+        self.user_seen[user["id"]] = now
+        if now - user.get("last_seen", 0) > 300:   # remembered across restarts, written at most every 5 minutes
+            user["last_seen"] = int(now)
+            self.store.save()
+
+    async def sign_up(self, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        if not self.store.settings.get("signup", True):
+            return 403, {"error": "new accounts are closed"}
+        name = str(req.get("name") or "").strip()[:30]
+        login = normalise_login(req.get("login"))
+        password = str(req.get("password") or "")
+        if not name:
+            return 400, {"error": "name required", "field": "name"}
+        if login is None:
+            return 400, {"error": "enter a phone number or an e-mail address", "field": "login"}
+        if not 6 <= len(password) <= 128:
+            return 400, {"error": "the password needs at least 6 characters", "field": "password"}
+        if self.store.account_by_login(login):
+            return 409, {"error": "an account with this phone or e-mail exists; sign in instead", "field": "login"}
+        user = {"id": os.urandom(4).hex(), "name": name, "role": CUSTOMER, "login": login,
+                "pw": hash_password(password), "strips": [], "created": int(time.time()), "sessions": []}
+        self.store.users.append(user)
+        token = self.store.new_session(user)
+        log("[account] new customer %s" % user["id"])
+        return 200, {"ok": True, "token": token, "me": {"role": CUSTOMER, "name": name}}
+
+    async def sign_in(self, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        login = normalise_login(req.get("login"))
+        user = self.store.account_by_login(login) if login else None
+        if user is None or not password_ok(user.get("pw", ""), str(req.get("password") or "")):
+            return 401, {"error": "wrong phone/e-mail or password"}
+        token = self.store.new_session(user)
+        return 200, {"ok": True, "token": token, "me": {"role": CUSTOMER, "name": user["name"]}}
+
+    async def delete_account(self, user_id: str) -> Tuple[int, Dict[str, Any]]:
+        """A customer closes their account; strips nobody else has are removed with it."""
+        user = next((u for u in self.store.users if u["id"] == user_id and u.get("role") == CUSTOMER), None)
+        if user is None:
+            return 404, {"error": "no such account"}
+        self.store.users.remove(user)
+        others = {m for u in self.store.users for m in (u.get("strips") or [])}
+        for mac in user.get("strips") or []:
+            if mac not in others:
+                await self.remove_strip(mac, block=False)
+        self.store.save()
+        log("[account] customer %s deleted their account" % user_id)
+        return 200, {"ok": True}
+
+    async def admin_report(self, now: Optional[float] = None) -> Dict[str, Any]:
+        """Everything the owner's admin page shows."""
+        now = time.time() if now is None else now
+        store = self.store
+
+        def seen(u: Dict[str, Any]) -> float:
+            return max(self.user_seen.get(u["id"], 0), u.get("last_seen", 0))
+        owners: Dict[str, List[str]] = {}
+        for u in store.users:
+            for mac in u.get("strips") or []:
+                owners.setdefault(mac, []).append(u["name"])
+        customers = [u for u in store.users if u.get("role") == CUSTOMER]
+        family = [u for u in store.users if u.get("role") != CUSTOMER]
+        approved = [m for m in store.approved if m not in store.blocked_strips]
+        online = [m for m in approved if m in self.strips and self.strips[m].online]
+        days = store.stats.get("download_days", {})
+        last_days = [time.strftime("%Y-%m-%d", time.localtime(now - i * 86400)) for i in range(30)]
+        return {
+            "totals": {
+                "downloads": int(store.stats.get("downloads", 0)),
+                "downloads_today": int(days.get(last_days[0], 0)),
+                "downloads_7d": sum(int(days.get(d, 0)) for d in last_days[:7]),
+                "customers": len(customers),
+                "new_customers_7d": sum(1 for u in customers if now - u.get("created", 0) < 7 * 86400),
+                "active_1d": sum(1 for u in store.users if now - seen(u) < 86400),
+                "active_7d": sum(1 for u in store.users if now - seen(u) < 7 * 86400),
+                "family": len(family),
+                "strips": len(approved),
+                "online": len(online),
+                "waiting": sum(1 for x in self.strips.values() if not store.is_approved(x.mac)),
+                "blocked": len(store.blocked_strips),
+            },
+            "downloads_by_day": [{"day": d, "count": int(days.get(d, 0))} for d in reversed(last_days)],
+            "customers": sorted(({
+                "id": u["id"], "name": u["name"], "login": u.get("login", ""), "created": u.get("created", 0),
+                "last_seen": int(seen(u)), "strips": len(u.get("strips") or []),
+                "online": sum(1 for m in u.get("strips") or [] if m in self.strips and self.strips[m].online),
+            } for u in customers), key=lambda x: -x["last_seen"]),
+            "strips": sorted(({
+                "id": m, "name": store.name(m, 0) or "", "owners": owners.get(m, []),
+                "online": m in online, "address": self.strips[m].address if m in self.strips else "",
+                "last_seen": int(self.strips[m].last_seen) if m in self.strips else 0,
+            } for m in approved), key=lambda x: (not x["online"], x["id"])),
+            "new_strips": [{"id": x.mac, "address": x.address, "online": x.online}
+                           for x in self.strips.values() if not store.is_approved(x.mac)],
+            "signup": bool(store.settings.get("signup", True)),
+        }
 
     def check_user_fields(self, req: Dict[str, Any], user: Dict[str, Any]) -> Optional[Tuple[int, Dict[str, Any]]]:
         if "name" in req:
@@ -1343,6 +1533,8 @@ class Hub:
             new["currency"] = str(req["currency"]).strip()[:8] or "EGP"
         if "alexa" in req:
             new["alexa"] = bool(req["alexa"])
+        if "signup" in req:
+            new["signup"] = bool(req["signup"])
         self.store.settings = new
         self.store.save()
         return 200, {"ok": True, "settings": new}
@@ -1509,9 +1701,10 @@ class WebHandler(BaseHTTPRequestHandler):
         for o in offered:
             user = self.server.hub.store.user_by_token(o) if o else None
             if user:
-                self.server.hub.user_seen[user["id"]] = time.time()
+                self.server.hub.saw_user(user)
+                strips = set(user.get("strips") or [])
                 return {"role": user["role"], "name": user["name"], "id": user["id"],
-                        "strips": set(user.get("strips") or []) or None}
+                        "strips": strips if user["role"] == CUSTOMER else (strips or None)}
         return None
 
     def client_ip(self) -> str:
@@ -1619,6 +1812,8 @@ class WebHandler(BaseHTTPRequestHandler):
             return
         if path == "/app.apk":                      # public: install the Android app from the phone browser
             apk = find_apk()
+            if self.command == "GET":
+                self.server.hub.store.count_download(self.client_ip(), time.time())
             if apk:
                 self.send_file(apk, "application/vnd.android.package-archive", "darwish-smart-power.apk")
             else:                                   # not downloaded yet: send the phone to the GitHub copy
@@ -1645,6 +1840,13 @@ class WebHandler(BaseHTTPRequestHandler):
                 self.reply_json(200, self.server.run_on_loop(hub.users()))
         elif path == "/api/health":
             self.reply_json(200, {"ok": True, "app": "darwish-smart-power", "version": VERSION})
+        elif path == "/api/admin":
+            if who["role"] != "owner":
+                self.reply_json(403, {"error": "only the owner sees this"})
+            else:
+                report = self.server.run_on_loop(hub.admin_report())
+                report["security"] = hub.guard.report()
+                self.reply_json(200, report)
         elif path == "/api/security":
             if who["role"] != "owner":
                 self.reply_json(403, {"error": "only the owner sees this"})
@@ -1670,15 +1872,57 @@ class WebHandler(BaseHTTPRequestHandler):
         else:
             self.reply_json(404, {"error": "not found"})
 
+    def read_json(self) -> Optional[Dict[str, Any]]:
+        """The request body as a JSON object, or None after replying with the error."""
+        if not self.headers.get("Content-Type", "").lower().startswith("application/json"):
+            self.reply_json(415, {"error": "send JSON (Content-Type: application/json)"})
+            return None
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 0 < length <= MAX_BODY:
+                raise ValueError("body size")
+            req = json.loads(self.rfile.read(length).decode("utf-8"))
+            if not isinstance(req, dict):
+                raise ValueError("body must be an object")
+            return req
+        except (TypeError, ValueError) as err:
+            self.reply_json(400, {"error": "bad request: %s" % err})
+            return None
+
+    def account_request(self, path: str) -> None:
+        """Public: a customer creates an account or signs in from the app."""
+        guard, ip = self.server.hub.guard, self.client_ip()
+        if guard.is_blocked(ip):
+            self.reply_json(429, {"error": "too many attempts, try again later"})
+            return
+        req = self.read_json()
+        if req is None:
+            return
+        hub = self.server.hub
+        if path == "/api/signup":
+            if not guard.may_sign_up(ip):
+                self.reply_json(429, {"error": "too many new accounts from here, try again later"})
+                return
+            code, body = self.server.run_on_loop(hub.sign_up(req))
+        else:
+            code, body = self.server.run_on_loop(hub.sign_in(req))
+            if code == 401:
+                guard.login_failed(ip, ["%s|%s" % (req.get("login"), req.get("password"))])
+        self.reply_json(code, body)
+
     def do_POST(self):
         path = urlsplit(self.path).path
+        if path in ("/api/signup", "/api/login"):
+            self.account_request(path)
+            return
         who = self.signed_in()
         if who is None:
             return
         if who["role"] == "view":
             self.reply_json(403, {"error": "view only", "view_only": True})
             return
-        if who["role"] != "owner" and path.startswith(OWNER_ONLY):
+        own_strip = path == "/api/strips/remove" and who["role"] == CUSTOMER
+        if who["role"] != "owner" and path.startswith(OWNER_ONLY) and not own_strip:
             self.reply_json(403, {"error": "only the owner can change this"})
             return
         # JSON only: browsers cannot send this cross-site without a CORS preflight, which we never grant
@@ -1721,7 +1965,18 @@ class WebHandler(BaseHTTPRequestHandler):
             elif path == "/api/strips/approve":
                 code, body = self.server.run_on_loop(hub.approve_strip(strip_id))
             elif path == "/api/strips/remove":
-                code, body = self.server.run_on_loop(hub.remove_strip(strip_id, bool(req.get("block"))))
+                block = bool(req.get("block")) and who["role"] == "owner"
+                code, body = self.server.run_on_loop(hub.remove_strip(strip_id, block))
+            elif path == "/api/logout":
+                for token in self.offered_tokens():
+                    if token:
+                        hub.store.end_session(token)
+                code, body = 200, {"ok": True}
+            elif path == "/api/account/delete":
+                if who["role"] != CUSTOMER:
+                    code, body = 400, {"error": "only customer accounts can be deleted here"}
+                else:
+                    code, body = self.server.run_on_loop(hub.delete_account(who["id"]))
             elif path == "/api/users/add":
                 code, body = self.server.run_on_loop(hub.add_user(req))
             elif path == "/api/users/update":
@@ -2362,6 +2617,50 @@ async def selftest() -> None:
     for mac in ("C0FFEE0BF7E1", "C0FFEEBBDDF1"):
         assert (await loop.run_in_executor(None, http, "/api/strips/remove", {"strip": mac}))[0] == 200
     assert "C0FFEE0BF7E1" not in hub.strips and not hub.store.blocked_strips
+
+    # ---- customer accounts: sign up, own strips only, sign in again, delete; admin page and downloads
+    def post(path: str, body: dict, token: Optional[str] = None, ip: str = "156.200.9.9") -> Tuple[int, Any]:
+        req = urllib.request.Request(base + path, data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json", "CF-Connecting-IP": ip,
+                                              **({"X-Token": token} if token else {})})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.status, json.loads(r.read())
+        except urllib.error.HTTPError as err:
+            return err.code, json.loads(err.read() or b"{}")
+    assert normalise_login(" ٠١٠ 1234-5678 ") == "01012345678" and normalise_login("A@B.co") == "a@b.co"
+    assert normalise_login("hello") is None
+    status, res = await loop.run_in_executor(None, post, "/api/signup", {"name": "Ali", "login": "01012345678", "password": "123"})
+    assert status == 400 and res["field"] == "password"
+    status, res = await loop.run_in_executor(None, post, "/api/signup", {"name": "Ali", "login": "010 1234 5678", "password": "secret1"})
+    assert status == 200 and res["token"]
+    ali = res["token"]
+    assert (await loop.run_in_executor(None, post, "/api/signup", {"name": "X", "login": "01012345678", "password": "secret1"}))[0] == 409
+    status, state = await loop.run_in_executor(None, http, "/api/state", None, ali)
+    assert status == 200 and state["me"]["role"] == CUSTOMER and state["strips"] == [] and "new_strips" not in state
+    assert (await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "AA0001"}, ali))[0] == 200
+    assert hub.attach(Remote("41.33.1.1"), {"mac": "C0FFEEAA0001", "mac2": "", "model": "lgutap", "fw": "x"}) is not None
+    status, state = await loop.run_in_executor(None, http, "/api/state", None, ali)
+    assert [x["id"] for x in state["strips"]] == ["C0FFEEAA0001"]       # the strip they set up, and nothing else
+    assert (await loop.run_in_executor(None, post, "/api/switch", {"strip": "A1B2C3D4E5F6", "outlet": 1, "on": True}, ali))[0] == 403
+    assert (await loop.run_in_executor(None, post, "/api/users/add", {"name": "Y", "role": "control"}, ali))[0] == 403
+    assert (await loop.run_in_executor(None, post, "/api/login", {"login": "01012345678", "password": "nope"}))[0] == 401
+    status, res = await loop.run_in_executor(None, post, "/api/login", {"login": "+01012345678".lstrip("+"), "password": "secret1"})
+    assert status == 200 and res["token"] != ali
+    assert all(u.get("role") != CUSTOMER for u in (await hub.users())["users"])     # not in the family list
+    status, report = await loop.run_in_executor(None, http, "/api/admin")
+    assert status == 200 and report["totals"]["customers"] == 1 and report["customers"][0]["strips"] == 1
+    assert any(x["owners"] == ["Ali"] for x in report["strips"])
+    assert (await loop.run_in_executor(None, http, "/api/admin", None, ali))[0] == 403
+    before = report["totals"]["downloads"]
+    hub.store.count_download("41.33.1.1", time.time())
+    hub.store.count_download("41.33.1.1", time.time())                          # same phone again: not counted
+    hub.store.count_download("41.33.1.2", time.time())
+    assert (await hub.admin_report())["totals"]["downloads"] == before + 2
+    assert (await loop.run_in_executor(None, post, "/api/logout", {}, ali))[0] == 200
+    assert (await loop.run_in_executor(None, http, "/api/state", None, ali))[0] == 401
+    assert (await loop.run_in_executor(None, post, "/api/account/delete", {}, res["token"]))[0] == 200
+    assert "C0FFEEAA0001" not in hub.strips and not any(u.get("role") == CUSTOMER for u in hub.store.users)
     status, state = await loop.run_in_executor(None, http, "/api/state")
     assert status == 200 and state["strips"][0]["outlets"][0]["name"] == "Kettle"
     status, res = await loop.run_in_executor(None, http, "/api/switch", {"strip": "A1B2C3D4E5F6", "outlet": 4, "on": False})
@@ -2501,7 +2800,7 @@ async def selftest() -> None:
     writer.close()
     srv.close()
     print("selftest OK: protocol, switching, button events, names, timers, energy history, rooms/icons, "
-          "schedules, cycles, scenes, PIN locks, offline queue, alerts, settings, Alexa, family sharing, protection, strip approval, web API + token")
+          "schedules, cycles, scenes, PIN locks, offline queue, alerts, settings, Alexa, family sharing, protection, strip approval, customer accounts, admin, web API + token")
 
 
 # --------------------------------------------------------------------------- main

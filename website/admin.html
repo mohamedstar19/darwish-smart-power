@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Admin · Darwish Smart Power</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#1e130d">
+<link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<style>
+:root{--night:#0d0907;--deep:#1e130d;--fill:rgba(255,255,255,.07);--fill2:rgba(255,255,255,.12);--stroke:rgba(255,255,255,.14);
+  --line:rgba(255,255,255,.08);--text:#fff4ec;--soft:#c9b8ac;--faint:#8a7a6f;--brand:#ff8a4c;--bar:#e8622a;
+  --good:#3ee6a0;--warn:#ffb547;--bad:#ff6b6b}
+*{box-sizing:border-box}
+html{background:var(--night)}
+html,body{margin:0;min-height:100%}
+body{color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+  background:radial-gradient(900px 600px at 85% -10%,rgba(74,32,12,.95),transparent 70%),
+             radial-gradient(800px 700px at 0% 110%,rgba(64,44,10,.75),transparent 70%),
+             linear-gradient(180deg,var(--deep),var(--night) 60%);background-attachment:fixed}
+bdi{unicode-bidi:isolate}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+.wrap{max-width:1100px;margin:auto;padding:0 16px 40px}
+.glass{background:linear-gradient(135deg,var(--fill2),var(--fill));border:1px solid var(--stroke);border-radius:20px;
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+header{display:flex;align-items:center;gap:12px;padding:18px 0 14px}
+header img{width:40px;height:40px;border-radius:12px}
+header .t{flex:1;min-width:0}
+header h1{margin:0;font-size:17px}
+header .sub{color:var(--soft);font-size:12px}
+.pill-btn{border:1px solid var(--stroke);background:var(--fill);border-radius:999px;padding:7px 13px;font-size:13px}
+
+/* stat tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.tile{padding:14px 16px}
+.tile .k{color:var(--soft);font-size:12px}
+.tile .v{font-size:30px;font-weight:800;letter-spacing:-.5px;line-height:1.2;margin-top:2px}
+.tile .s{color:var(--soft);font-size:12px}
+.tile.alert{border-color:rgba(255,181,71,.6)}
+
+section.card{padding:16px 18px;margin-top:14px}
+section.card h2{margin:0 0 2px;font-size:15px}
+section.card .note{color:var(--soft);font-size:12px;margin:0 0 10px}
+
+/* chart */
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:150px;overflow:visible}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.axisrow{display:flex;justify-content:space-between;color:var(--faint);font-size:11px;margin-top:4px}
+.chart .bar{fill:var(--bar)}
+.chart .hit{fill:transparent}
+.chart .hit:hover+.bar,.chart g:hover .bar{fill:var(--brand)}
+.tip{position:absolute;pointer-events:none;background:#2a1b13;border:1px solid var(--stroke);border-radius:10px;padding:6px 10px;
+  font-size:12px;white-space:nowrap;transform:translate(-50%,-110%);opacity:0;transition:opacity .1s}
+.tip b{display:block;font-size:14px}
+details{margin-top:8px;color:var(--soft);font-size:12px}
+details table{margin-top:6px}
+
+/* tables */
+.scroll{overflow-x:auto;margin:0 -4px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{color:var(--faint);font-weight:600;text-align:start;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.muted{color:var(--soft)}
+.status{display:inline-flex;align-items:center;gap:6px}
+.status i{width:8px;height:8px;border-radius:50%;background:var(--faint);display:inline-block}
+.status.on i{background:var(--good);box-shadow:0 0 8px var(--good)}
+.empty{color:var(--soft);padding:10px 0}
+.row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row .grow{flex:1;min-width:0}
+.btn{border:1px solid var(--stroke);background:var(--fill);border-radius:12px;padding:7px 14px;font-weight:600}
+.btn.primary{border:0;background:linear-gradient(135deg,#ff7a3d,#ffb347);color:#2a0e00}
+.btn.danger{color:var(--bad)}
+.switch{display:flex;align-items:center;gap:10px}
+.switch input{width:40px;height:22px;accent-color:var(--brand)}
+
+/* login */
+.login{max-width:380px;margin:12vh auto 0;padding:26px;text-align:center}
+.login img{width:64px;height:64px;border-radius:18px}
+.login input{width:100%;margin:14px 0 10px;padding:12px 14px;border-radius:14px;border:1px solid var(--stroke);background:rgba(0,0,0,.25);text-align:center}
+.login .err{color:var(--bad);min-height:20px;font-size:13px}
+.login .btn{width:100%;padding:12px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2a1b13;border:1px solid var(--stroke);border-radius:12px;
+  padding:9px 16px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.credit{text-align:center;color:var(--faint);font-size:12px;padding:18px}
+.credit a{color:var(--brand);text-decoration:none}
+@media (max-width:520px){.tile .v{font-size:26px}}
+</style>
+</head>
+<body>
+<div class="wrap" id="root"></div>
+<div class="credit"><span id="credit">تطوير</span> <a href="https://darwish-tech.com" target="_blank" rel="noopener">Darwish Tech</a></div>
+<div class="toast" id="toast"></div>
+<script>
+const L = {
+  ar: {title: "لوحة الإدارة", sub: "Darwish Smart Power", lang: "English", logout: "خروج", refresh: "تحديث",
+       login: "ادخل باسورد السيرفر", enter: "دخول", wrong: "الباسورد غلط", ownerOnly: "الصفحة دي لصاحب السيرفر بس",
+       unreachable: "السيرفر مش بيرد",
+       downloads: "تحميلات التطبيق", today: "النهارده", week: "آخر 7 أيام", customers: "العملاء", newWeek: "جداد في آخر 7 أيام",
+       active: "بيستخدموا التطبيق", d1: "آخر 24 ساعة", d7: "آخر 7 أيام", strips: "المشتركات أونلاين", of: "من",
+       waiting: "مستنية موافقة", blocked: "محظورة",
+       chartTitle: "التحميلات في آخر 30 يوم", chartNote: "كل جهاز بيتحسب مرة واحدة في اليوم", asTable: "عرض كجدول",
+       day: "اليوم", count: "التحميلات",
+       newTitle: "مشتركات جديدة مستنية موافقتك", from: "من", approve: "موافقة", block: "حظر",
+       blockAsk: "تحظر المشترك ده؟ مش هيقدر يتصل بالسيرفر تاني.", noneWaiting: "مفيش مشتركات مستنية.",
+       custTitle: "العملاء", name: "الاسم", account: "الموبايل / الإيميل", stripsCol: "المشتركات", lastSeen: "آخر استخدام",
+       joined: "سجّل", noCustomers: "لسه مفيش عملاء سجلوا.",
+       stripTitle: "المشتركات", strip: "المشترك", owner: "العميل", state: "الحالة", address: "العنوان", online: "أونلاين",
+       offline: "أوفلاين", noStrips: "مفيش مشتركات لسه.", nobody: "—",
+       signupTitle: "تسجيل عملاء جداد", signupNote: "لو قفلته، محدش يقدر يعمل حساب جديد من التطبيق.", signupOn: "مفتوح",
+       done: "تم", fail: "فشل: ", never: "ولا مرة", now: "دلوقتي", min: "د", hour: "س", dayU: "ي", ago: "من",
+       credit: "تطوير"},
+  en: {title: "Admin", sub: "Darwish Smart Power", lang: "العربية", logout: "Sign out", refresh: "Refresh",
+       login: "Enter the server password", enter: "Sign in", wrong: "Wrong password", ownerOnly: "This page is for the server owner",
+       unreachable: "The server is not answering",
+       downloads: "App downloads", today: "today", week: "last 7 days", customers: "Customers", newWeek: "new in 7 days",
+       active: "Using the app", d1: "last 24 h", d7: "last 7 days", strips: "Strips online", of: "of",
+       waiting: "Waiting for approval", blocked: "blocked",
+       chartTitle: "Downloads, last 30 days", chartNote: "Each device counts once a day", asTable: "Show as table",
+       day: "Day", count: "Downloads",
+       newTitle: "New strips waiting for your approval", from: "from", approve: "Approve", block: "Block",
+       blockAsk: "Block this strip? It will not be able to connect again.", noneWaiting: "No strips waiting.",
+       custTitle: "Customers", name: "Name", account: "Phone / e-mail", stripsCol: "Strips", lastSeen: "Last used",
+       joined: "Joined", noCustomers: "No customers have signed up yet.",
+       stripTitle: "Strips", strip: "Strip", owner: "Customer", state: "State", address: "Address", online: "online",
+       offline: "offline", noStrips: "No strips yet.", nobody: "—",
+       signupTitle: "New customer sign-ups", signupNote: "When closed, nobody can create a new account in the app.", signupOn: "Open",
+       done: "Done", fail: "Failed: ", never: "never", now: "just now", min: "m", hour: "h", dayU: "d", ago: "ago",
+       credit: "Developed by"}
+};
+let lang = (() => { try { return localStorage.getItem("dsp-lang") } catch (e) { return null } })() ||
+           ((navigator.language || "").startsWith("ar") ? "ar" : "en");
+let token = (() => { try { return localStorage.getItem("dsp-token") || "" } catch (e) { return "" } })();
+let data = null, timer = null;
+const t = k => (L[lang] || L.ar)[k] || k;
+const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const fmt = n => Number(n || 0).toLocaleString(lang === "ar" ? "ar-EG" : "en-US");
+function save(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v) } catch (e) {} }
+function toast(msg) { const el = document.getElementById("toast"); el.textContent = msg; el.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 2200); }
+function ago(ts) {
+  if (!ts) return t("never");
+  const s = Date.now() / 1000 - ts;
+  if (s < 90) return t("now");
+  const v = s < 3600 ? Math.round(s / 60) + " " + t("min") : s < 86400 ? Math.round(s / 3600) + " " + t("hour") : Math.round(s / 86400) + " " + t("dayU");
+  return lang === "ar" ? t("ago") + " " + v : v + " " + t("ago");
+}
+const date = ts => ts ? new Date(ts * 1000).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-GB", {day: "numeric", month: "short", year: "numeric"}) : t("nobody");
+
+async function api(path, body) {
+  const opt = {headers: {"X-Token": token}};
+  if (body) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || r.status); e.status = r.status; throw e; }
+  return j;
+}
+
+function frame() {
+  document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  document.getElementById("credit").textContent = t("credit");
+}
+
+function renderLogin(msg) {
+  frame();
+  document.getElementById("root").innerHTML = `<form class="login glass" id="lf"><img src="/icons/icon-192.png" alt="">
+    <h2 style="margin:12px 0 0;font-size:18px">${t("title")}</h2><div class="muted" style="font-size:13px">${t("login")}</div>
+    <input id="pw" type="password" autocomplete="current-password" dir="ltr" autofocus>
+    <div class="err">${esc(msg || "")}</div><button class="btn primary" type="submit">${t("enter")}</button>
+    <div style="margin-top:12px"><button type="button" class="pill-btn" id="lang">${t("lang")}</button></div></form>`;
+  document.getElementById("lf").onsubmit = e => { e.preventDefault(); token = document.getElementById("pw").value.trim(); save("dsp-token", token); start(); };
+  document.getElementById("lang").onclick = () => { lang = lang === "ar" ? "en" : "ar"; save("dsp-lang", lang); renderLogin(msg); };
+}
+
+function chart(days) {
+  const W = 600, H = 150, top = 8, bottom = 2, n = days.length, gap = 2;
+  const max = Math.max(1, ...days.map(d => d.count));
+  const step = Math.pow(10, Math.floor(Math.log10(max))) || 1;
+  const ceil = Math.ceil(max / step) * step;
+  const bw = W / n;
+  const y = v => top + (H - top - bottom) * (1 - v / ceil);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(t("chartTitle"))}">`;
+  [0, ceil / 2, ceil].forEach(v => { svg += `<line class="grid" x1="0" x2="${W}" y1="${y(v)}" y2="${y(v)}"/>`; });
+  days.forEach((d, i) => {
+    const x = (lang === "ar" ? n - 1 - i : i) * bw, h = Math.max(0, y(0) - y(d.count));
+    const r = Math.min(4, h, (bw - gap) / 2);
+    const bx = x + gap / 2, w = bw - gap, by = y(d.count);
+    // a bar with 4px rounded top corners standing on the baseline
+    const path = h > 0 ? `M${bx},${y(0)} V${by + r} Q${bx},${by} ${bx + r},${by} H${bx + w - r} Q${bx + w},${by} ${bx + w},${by + r} V${y(0)} Z` : "";
+    svg += `<g data-i="${i}"><rect class="hit" x="${x}" y="${top}" width="${bw}" height="${H - top}"/>${path ? `<path class="bar" d="${path}"/>` : ""}</g>`;
+  });
+  // dates as HTML under the plot, so they keep their size when the chart stretches
+  const label = i => esc(new Date(days[i].day + "T12:00").toLocaleDateString(lang === "ar" ? "ar-EG" : "en-GB", {day: "numeric", month: "short"}));
+  return svg + `</svg><div class="axisrow"><span>${label(0)}</span><span>${label(Math.floor(n / 2))}</span><span>${label(n - 1)}</span></div>`;
+}
+
+function render() {
+  frame();
+  const d = data, T = d.totals;
+  const tile = (k, v, s, cls = "") => `<div class="tile glass ${cls}"><div class="k">${k}</div><div class="v"><bdi>${v}</bdi></div><div class="s">${s}</div></div>`;
+  let html = `<header><img src="/icons/icon-192.png" alt=""><div class="t"><h1>${t("title")}</h1><div class="sub"><bdi>${t("sub")}</bdi></div></div>
+    <button class="pill-btn" id="lang">${t("lang")}</button><button class="pill-btn" id="logout">${t("logout")}</button></header>
+    <div class="tiles">
+      ${tile(t("downloads"), fmt(T.downloads), `${fmt(T.downloads_today)} ${t("today")} · ${fmt(T.downloads_7d)} ${t("week")}`)}
+      ${tile(t("customers"), fmt(T.customers), `${fmt(T.new_customers_7d)} ${t("newWeek")}`)}
+      ${tile(t("active"), fmt(T.active_1d), `${t("d1")} · ${fmt(T.active_7d)} ${t("d7")}`)}
+      ${tile(t("strips"), `${fmt(T.online)} <span style="font-size:15px;color:var(--soft)">${t("of")} ${fmt(T.strips)}</span>`,
+             `<span class="status on"><i></i>${t("online")}</span>`)}
+      ${tile(t("waiting"), fmt(T.waiting), `${fmt(T.blocked)} ${t("blocked")}`, T.waiting ? "alert" : "")}
+    </div>`;
+
+  html += `<section class="card glass"><h2>${t("chartTitle")}</h2><p class="note">${t("chartNote")}</p>
+    <div class="chart" id="chart">${chart(d.downloads_by_day)}<div class="tip" id="tip"></div></div>
+    <details><summary>${t("asTable")}</summary><div class="scroll"><table><tr><th>${t("day")}</th><th>${t("count")}</th></tr>
+    ${d.downloads_by_day.slice().reverse().map(x => `<tr><td><bdi>${esc(x.day)}</bdi></td><td>${fmt(x.count)}</td></tr>`).join("")}</table></div></details></section>`;
+
+  if (d.new_strips.length) {
+    html += `<section class="card glass" style="border-color:rgba(255,181,71,.55)"><h2>🆕 ${t("newTitle")}</h2>` +
+      d.new_strips.map(n => `<div class="row"><div class="grow"><b>${t("strip")} <bdi>${esc(n.id.slice(-6))}</bdi></b>
+        <div class="muted" style="font-size:12px">${t("from")} <bdi>${esc(n.address || "?")}</bdi></div></div>
+        <button class="btn danger" data-block="${esc(n.id)}">${t("block")}</button>
+        <button class="btn primary" data-approve="${esc(n.id)}">${t("approve")}</button></div>`).join("") + `</section>`;
+  }
+
+  html += `<section class="card glass"><h2>${t("custTitle")} (${fmt(d.customers.length)})</h2>` +
+    (d.customers.length ? `<div class="scroll"><table><tr><th>${t("name")}</th><th>${t("account")}</th><th>${t("stripsCol")}</th>
+      <th>${t("lastSeen")}</th><th>${t("joined")}</th></tr>` +
+      d.customers.map(c => `<tr><td><b>${esc(c.name)}</b></td><td><bdi dir="ltr">${esc(c.login)}</bdi></td>
+        <td><span class="status${c.online ? " on" : ""}"><i></i><bdi>${fmt(c.online)} / ${fmt(c.strips)}</bdi></span></td>
+        <td class="muted">${ago(c.last_seen)}</td><td class="muted">${date(c.created)}</td></tr>`).join("") + `</table></div>`
+      : `<div class="empty">${t("noCustomers")}</div>`) + `</section>`;
+
+  html += `<section class="card glass"><h2>${t("stripTitle")} (${fmt(d.strips.length)})</h2>` +
+    (d.strips.length ? `<div class="scroll"><table><tr><th>${t("strip")}</th><th>${t("owner")}</th><th>${t("state")}</th>
+      <th>${t("lastSeen")}</th><th>${t("address")}</th></tr>` +
+      d.strips.map(x => `<tr><td><b>${esc(x.name || t("strip") + " " + x.id.slice(-6))}</b><div class="muted" style="font-size:11px"><bdi>${esc(x.id)}</bdi></div></td>
+        <td>${x.owners.length ? esc(x.owners.join("، ")) : `<span class="muted">${t("nobody")}</span>`}</td>
+        <td><span class="status${x.online ? " on" : ""}"><i></i>${x.online ? t("online") : t("offline")}</span></td>
+        <td class="muted">${x.online ? t("now") : ago(x.last_seen)}</td><td class="muted"><bdi>${esc(x.address || t("nobody"))}</bdi></td></tr>`).join("") + `</table></div>`
+      : `<div class="empty">${t("noStrips")}</div>`) + `</section>`;
+
+  html += `<section class="card glass"><h2>${t("signupTitle")}</h2><p class="note">${t("signupNote")}</p>
+    <label class="switch"><input type="checkbox" id="signup" ${d.signup ? "checked" : ""}> ${t("signupOn")}</label></section>`;
+
+  document.getElementById("root").innerHTML = html;
+  document.getElementById("lang").onclick = () => { lang = lang === "ar" ? "en" : "ar"; save("dsp-lang", lang); render(); };
+  document.getElementById("logout").onclick = () => { save("dsp-token", null); token = ""; clearInterval(timer); renderLogin(); };
+  document.getElementById("signup").onchange = async e => {
+    try { await api("/api/settings", {signup: e.target.checked}); toast(t("done")); } catch (err) { toast(t("fail") + err.message); }
+    refresh();
+  };
+  const box = document.getElementById("chart"), tip = document.getElementById("tip");
+  box.querySelectorAll("g[data-i]").forEach(g => {
+    g.addEventListener("mouseenter", () => {
+      const x = d.downloads_by_day[+g.dataset.i], r = g.getBoundingClientRect(), b = box.getBoundingClientRect();
+      tip.innerHTML = `<b>${fmt(x.count)}</b>${esc(new Date(x.day + "T12:00").toLocaleDateString(lang === "ar" ? "ar-EG" : "en-GB", {weekday: "short", day: "numeric", month: "short"}))}`;
+      tip.style.left = (r.left - b.left + r.width / 2) + "px"; tip.style.top = "0px"; tip.style.opacity = 1;
+    });
+    g.addEventListener("mouseleave", () => { tip.style.opacity = 0; });
+  });
+}
+
+document.addEventListener("click", async ev => {
+  const ap = ev.target.closest("[data-approve]"), bl = ev.target.closest("[data-block]");
+  if (!ap && !bl) return;
+  if (bl && !confirm(t("blockAsk"))) return;
+  try {
+    await api(ap ? "/api/strips/approve" : "/api/strips/remove", ap ? {strip: ap.dataset.approve} : {strip: bl.dataset.block, block: true});
+    toast(t("done"));
+  } catch (e) { toast(t("fail") + e.message); }
+  refresh();
+});
+
+async function refresh() {
+  try { data = await api("/api/admin"); render(); }
+  catch (e) {
+    if (e.status === 401) { clearInterval(timer); save("dsp-token", null); renderLogin(t("wrong")); }
+    else if (e.status === 403) { clearInterval(timer); renderLogin(t("ownerOnly")); }
+    else if (!data) renderLogin(t("unreachable"));
+  }
+}
+function start() { refresh(); clearInterval(timer); timer = setInterval(() => { if (!document.hidden) refresh(); }, 15000); }
+token ? start() : renderLogin();
+</script>
+</body>
+</html>

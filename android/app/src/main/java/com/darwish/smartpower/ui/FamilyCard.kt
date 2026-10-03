@@ -30,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -196,16 +197,52 @@ private fun copy(context: Context, text: String) {
 
 /** For family members: who they are signed in as. */
 @Composable
-fun SignedInAsCard(me: Me) {
+fun SignedInAsCard(me: Me, onSignOut: () -> Unit, onDeleteAccount: (() -> Unit)? = null) {
+    var confirmDelete by remember { mutableStateOf(false) }
     GlassCard(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (me.role == Me.ROLE_VIEW) "👁" else "🎛", fontSize = 22.sp)
+            Text(
+                when (me.role) {
+                    Me.ROLE_VIEW -> "👁"
+                    Me.ROLE_CUSTOMER -> "👤"
+                    else -> "🎛"
+                },
+                fontSize = 22.sp,
+            )
             Spacer(Modifier.width(10.dp))
-            Column {
+            Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.signed_in_as, me.name ?: ""), fontWeight = FontWeight.SemiBold)
-                Text(stringResource(if (me.role == Me.ROLE_VIEW) R.string.role_view_long else R.string.role_control_long),
-                    color = Glass.TextSoft, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    stringResource(
+                        when (me.role) {
+                            Me.ROLE_VIEW -> R.string.role_view_long
+                            Me.ROLE_CUSTOMER -> R.string.role_customer_long
+                            else -> R.string.role_control_long
+                        }
+                    ),
+                    color = Glass.TextSoft, style = MaterialTheme.typography.labelSmall,
+                )
             }
         }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onSignOut) { Text(stringResource(R.string.sign_out), color = Glass.Text) }
+            if (onDeleteAccount != null) {
+                TextButton(onClick = { confirmDelete = true }) { Text(stringResource(R.string.delete_account), color = Glass.Red) }
+            }
+        }
+    }
+    if (confirmDelete && onDeleteAccount != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.delete_account)) },
+            text = { Text(stringResource(R.string.delete_account_body)) },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDeleteAccount() }) {
+                    Text(stringResource(R.string.delete_account), color = Glass.Red)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel)) } },
+        )
     }
 }
