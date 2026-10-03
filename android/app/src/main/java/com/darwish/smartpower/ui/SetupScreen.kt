@@ -163,7 +163,7 @@ fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Uni
                     listOf(R.string.setup_connecting_1, R.string.setup_connecting_2, R.string.setup_connecting_3),
                 )
                 Phase.DONE -> {
-                    result?.let { SetupResultCard(it, serverIp) }
+                    result?.let { SetupResultCard(it) }
                     Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.back)) }
                 }
                 Phase.PICK -> when (val found = scan) {
@@ -190,7 +190,7 @@ fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Uni
                             onPassword = { password = it; result = null },
                             onServerIp = { serverIp = it.trim(); serverIpEdited = true; result = null },
                         )
-                        result?.let { SetupResultCard(it, serverIp) }
+                        result?.let { SetupResultCard(it) }
                         Button(
                             onClick = { chosen?.let(::add) },
                             enabled = chosen != null,
@@ -221,7 +221,7 @@ fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Uni
                             }
                         },
                     )
-                    manualResult?.let { SetupResultCard(it, serverIp, auto = false) }
+                    manualResult?.let { SetupResultCard(it, auto = false) }
                 }
             }
         }
@@ -400,16 +400,25 @@ private fun WifiFields(
             },
             modifier = Modifier.fillMaxWidth(),
         )
-        OutlinedTextField(
-            value = serverIp,
-            onValueChange = onServerIp,
-            label = { Text(stringResource(R.string.setup_server_ip)) },
-            placeholder = { Text(Prefs.DEFAULT_SERVER_IP) },
-            supportingText = { Text(stringResource(R.string.setup_server_ip_hint)) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            modifier = Modifier.fillMaxWidth(),
-        )
+        // the server fills this in; it stays out of sight unless it is missing or someone wants to change it
+        var advanced by rememberSaveable { mutableStateOf(false) }
+        if (serverIp.isNotBlank()) {
+            TextButton(onClick = { advanced = !advanced }) {
+                Text((if (advanced) "▴ " else "▾ ") + stringResource(R.string.setup_advanced))
+            }
+        }
+        if (advanced || serverIp.isBlank()) {
+            OutlinedTextField(
+                value = serverIp,
+                onValueChange = onServerIp,
+                label = { Text(stringResource(R.string.setup_server_ip)) },
+                placeholder = { Text(Prefs.EXAMPLE_SERVER_IP) },
+                supportingText = { Text(stringResource(R.string.setup_server_ip_hint)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -428,10 +437,10 @@ private fun NumberedLine(number: Int, text: String) {
 }
 
 @Composable
-private fun SetupResultCard(result: SetupResult, serverIp: String, auto: Boolean = true) {
+private fun SetupResultCard(result: SetupResult, auto: Boolean = true) {
     val ok = result is SetupResult.Done
     val text = when (result) {
-        SetupResult.Done -> stringResource(if (auto) R.string.setup_done_auto else R.string.setup_done, serverIp)
+        SetupResult.Done -> stringResource(if (auto) R.string.setup_done_auto else R.string.setup_done)
         SetupResult.NoWifi -> stringResource(R.string.setup_no_wifi)
         SetupResult.NotReachable -> stringResource(R.string.setup_not_reachable)
         SetupResult.JoinFailed -> stringResource(R.string.setup_join_failed)

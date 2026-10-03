@@ -84,12 +84,13 @@
     <string name="setup_step3">Come back here, fill in the fields below and tap Send.</string>
     <string name="setup_step4">When it says done, switch the phone back to your home Wi-Fi. The strip appears on the home screen within a minute.</string>
     <string name="setup_server_ip">Server IP</string>
+    <string name="setup_advanced">Advanced</string>
     <string name="setup_server_ip_hint">The IPv4 address the strip will connect to: the server\'s fixed public IP (works from anywhere), or the computer\'s home IP.</string>
     <string name="setup_wifi_name">Home Wi-Fi name</string>
     <string name="setup_wifi_hint">2.4 GHz networks only. The strip cannot use 5 GHz.</string>
     <string name="setup_wifi_password">Home Wi-Fi password</string>
     <string name="setup_send">Send to strip</string>
-    <string name="setup_done">Done. The strip will join your Wi-Fi and connect to %1$s. Switch the phone back to your home Wi-Fi now.</string>
+    <string name="setup_done">Done. The strip will join your Wi-Fi and connect to the server. Switch the phone back to your home Wi-Fi now.</string>
     <string name="setup_no_wifi">The phone is not connected to any Wi-Fi. Join the strip\'s TONLY_TAP network first.</string>
     <string name="setup_not_reachable">The strip did not answer. Make sure it is blinking fast (setup mode) and the phone is on its TONLY_TAP network.</string>
     <string name="setup_refused">The strip answered something unexpected: %1$s</string>
@@ -113,7 +114,7 @@
     <string name="setup_add">Add the strip</string>
     <string name="setup_manual">Manual setup</string>
     <string name="setup_join_failed">Couldn\'t join the strip\'s Wi-Fi. If Android asked to connect, tap Connect. Check that the strip is still blinking fast, then try again.</string>
-    <string name="setup_done_auto">Done. The strip will join your Wi-Fi and connect to %1$s. It appears on the home screen within a minute.</string>
+    <string name="setup_done_auto">Done. The strip will join your Wi-Fi and connect to the server. It appears on the home screen within a minute.</string>
     <string name="setup_ready_title">Get the strip ready</string>
     <string name="setup_ready_1">Plug the strip in.</string>
     <string name="setup_ready_2">If its Wi-Fi light isn\'t blinking fast, hold the strip\'s button until it does (about 10 seconds).</string>

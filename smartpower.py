@@ -1491,7 +1491,9 @@ class WebHandler(BaseHTTPRequestHandler):
         hub = self.server.hub
         if path == "/api/state":
             snap = hub.filter_for(who, self.server.run_on_loop(hub.snapshot()))
-            snap["server"] = {"ip": self.server.public_ip, "strip_port": STRIP_PORT, "version": VERSION}
+            snap["server"] = {"strip_port": STRIP_PORT, "version": VERSION}
+            if who["role"] != "view":               # the address new strips dial; only people who add strips need it
+                snap["server"]["ip"] = self.server.public_ip
             self.reply_json(200, snap)
         elif path == "/api/me":
             self.reply_json(200, {"role": who["role"], "name": who["name"]})
@@ -2223,6 +2225,7 @@ async def selftest() -> None:
     viewer = res["token"]
     status, state = await loop.run_in_executor(None, http, "/api/state", None, viewer)
     assert status == 200 and state["me"]["role"] == "view" and len(state["strips"]) == 2
+    assert "ip" not in state["server"]                       # view-only members never add strips
     status, _ = await loop.run_in_executor(None, http, "/api/switch", {"strip": S, "outlet": 1, "on": True}, viewer)
     assert status == 403
     status, res = await loop.run_in_executor(None, http, "/api/users/add",

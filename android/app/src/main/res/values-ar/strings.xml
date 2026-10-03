@@ -76,12 +76,13 @@
     <string name="setup_step3">ارجع هنا، املا الخانات اللي تحت واضغط إرسال.</string>
     <string name="setup_step4">لما يقول تم، رجّع الموبايل على الواي فاي بتاع البيت. المشترك هيظهر في الشاشة الرئيسية خلال دقيقة.</string>
     <string name="setup_server_ip">IP السيرفر</string>
+    <string name="setup_advanced">إعدادات متقدمة</string>
     <string name="setup_server_ip_hint">عنوان IPv4 اللي المشترك هيتصل بيه: الـ IP العام الثابت للسيرفر (يشتغل من أي مكان)، أو IP الكمبيوتر جوه البيت.</string>
     <string name="setup_wifi_name">اسم واي فاي البيت</string>
     <string name="setup_wifi_hint">شبكات 2.4 جيجا بس. المشترك مش بيشتغل على 5 جيجا.</string>
     <string name="setup_wifi_password">باسورد واي فاي البيت</string>
     <string name="setup_send">إرسال للمشترك</string>
-    <string name="setup_done">تم. المشترك هيدخل على الواي فاي بتاعك ويتصل بـ %1$s. رجّع الموبايل على واي فاي البيت دلوقتي.</string>
+    <string name="setup_done">تم. المشترك هيدخل على الواي فاي بتاعك ويتصل بالسيرفر. رجّع الموبايل على واي فاي البيت دلوقتي.</string>
     <string name="setup_no_wifi">الموبايل مش متصل بأي واي فاي. ادخل على شبكة TONLY_TAP بتاعة المشترك الأول.</string>
     <string name="setup_not_reachable">المشترك ما ردش. اتأكد إن لمبته بترمش بسرعة (وضع الإعداد) وإن الموبايل على شبكة TONLY_TAP بتاعته.</string>
     <string name="setup_refused">المشترك رد برد غير متوقع: %1$s</string>
@@ -105,7 +106,7 @@
     <string name="setup_add">أضف المشترك</string>
     <string name="setup_manual">الطريقة اليدوية</string>
     <string name="setup_join_failed">معرفناش ندخل على واي فاي المشترك. لو أندرويد سألك تتصل، دوس "اتصال". اتأكد إن المشترك لسه بيرمش بسرعة وجرّب تاني.</string>
-    <string name="setup_done_auto">تمام. المشترك هيدخل على الواي فاي بتاعك ويتصل بـ %1$s، وهيظهر في الشاشة الرئيسية خلال دقيقة.</string>
+    <string name="setup_done_auto">تمام. المشترك هيدخل على الواي فاي بتاعك ويتصل بالسيرفر، وهيظهر في الشاشة الرئيسية خلال دقيقة.</string>
     <string name="setup_ready_title">خلّي المشترك جاهز</string>
     <string name="setup_ready_1">وصّل المشترك بالكهربا.</string>
     <string name="setup_ready_2">لو لمبة الواي فاي مش بترمش بسرعة، دوس مطوّل على زرار المشترك لحد ما ترمش (حوالي 10 ثواني).</string>

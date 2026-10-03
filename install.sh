@@ -90,7 +90,7 @@ fi
 IP="$(python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(("10.255.255.255", 1)); print(s.getsockname()[0])' 2>/dev/null || true)"
 IP="${IP:-127.0.0.1}"
 # the address new strips are told to connect to (port 10086). For strips in other homes give the
-# fixed internet IP once:  sudo SP_PUBLIC_IP=41.38.141.215 bash install.sh   (later runs keep it)
+# fixed internet IP once:  sudo SP_PUBLIC_IP=203.0.113.5 bash install.sh   (later runs keep it)
 STRIP_IP="${SP_PUBLIC_IP:-}"
 if [ -z "$STRIP_IP" ] && [ -f "$UNIT" ]; then
     STRIP_IP="$(sed -n 's/^Environment=SP_PUBLIC_IP=//p' "$UNIT")"
