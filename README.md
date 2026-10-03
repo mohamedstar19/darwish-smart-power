@@ -132,6 +132,19 @@ python3 smartpower.py provision --server-ip 192.168.1.20 --ssid "اسم-الوا
 
 في التطبيق: الإعدادات ← عنوان السيرفر (مثلاً `192.168.1.20` أو `203.0.113.5:8080`) + الرمز ← **اختبار** ← **حفظ**.
 
+## الحماية
+
+بورت المشترك (10086) مفتوح على الإنترنت، فأي حد يقدر يتصل بيه ويدّعي إنه مشترك. السيرفر بيحمي نفسه:
+
+- اللي يتصل وميعرّفش نفسه كمشترك خلال 15 ثانية بيتقفل.
+- عنوان IP واحد مينفعش يفتح أكتر من 30 اتصال في الدقيقة، ولا يضيف أكتر من 6 مشتركات جديدة في اليوم، وإلا بيتحظر ساعة.
+- مشترك متصل مينفعش حد تاني ينتحل شخصيته من عنوان تاني.
+- اللي يجرّب 10 باسوردات غلط مختلفة في 5 دقايق بيتحظر ربع ساعة.
+- عناوين الشبكة المنزلية مش بتتحظر أبداً.
+- `install.sh` بيخلي الـ firewall (ufw) يحدّد عدد الاتصالات على 10086 كمان.
+
+تشوف المحظورين: `GET /api/security` بباسورد السيرفر، أو في السجل: `journalctl -u smartpower | grep guard`.
+
 ## فحص سريع من غير مشترك
 
 ```bash
@@ -190,6 +203,7 @@ POST bodies must be JSON (`Content-Type: application/json`).
 |---|---|---|
 | GET | `/api/state` | all strips, outlets, readings, names and timers |
 | GET | `/api/health` | `{"ok": true, "version": "…"}`, used by the app's Test button |
+| GET | `/api/security` | owner only: addresses blocked by the strip-port and password protection |
 | POST | `/api/switch` | `{"strip": "<id>", "outlets": [1, 3], "on": true}` (or `"outlet": 0-4`, `0` = all); waits for the strip to confirm, 202 + queued when it is offline |
 | POST | `/api/rename` | `{"strip": "<id>", "outlet": 0-4, "name": "Kettle"}`, where outlet `0` = the strip; empty name = default |
 | POST | `/api/timer` | `{"strip": "<id>", "outlet": 0-4, "minutes": 30, "on": false}`; `minutes: 0` cancels |

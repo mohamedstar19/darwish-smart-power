@@ -51,6 +51,19 @@ ALERT_REPEAT = {"temp": 3600, "power": 1800}
 MAX_EVENTS = 500
 QUEUE_TTL = 24 * 3600                    # commands for an offline strip are kept this long
 PIN_MAX_TRIES = 5                        # wrong PINs before a strip refuses PINs for a minute
+# Protection for the strip port, which is open to the internet: anything can connect and claim to
+# be a strip. Limits are per internet address and generous, because many homes share one address
+# (carrier NAT). Home-network and loopback addresses are never limited or blocked.
+HELLO_TIMEOUT = 15                       # seconds a new connection gets to introduce itself as a strip
+MAX_LINE = 4096                          # longest line accepted from a strip
+MAX_CONNECTIONS_PER_IP = 16              # open strip connections at the same time
+MAX_CONNECTS_PER_MINUTE = 30             # new strip connections per minute
+MAX_NEW_STRIPS_PER_DAY = 6               # strips never seen before, per address per day
+MAX_UNKNOWN_STRIPS = 64                  # never-named strips kept in memory before new ones are refused
+MAX_STRIKES = 3                          # misbehaving connections (10 minutes) before a block
+BLOCK_SECONDS = 3600
+LOGIN_FAILS = 10                         # different wrong passwords from one address (5 minutes) before a block
+LOGIN_BLOCK_SECONDS = 900
 ICONS = ("plug", "kettle", "router", "tv", "ac", "lamp", "heater", "fan", "fridge",
          "washer", "charger", "computer", "speaker", "camera", "microwave", "iron")
 DEFAULT_SETTINGS = {"price_kwh": 1.5, "currency": "EGP", "max_temp_c": 60, "max_watts": 3000, "alexa": True}
@@ -188,6 +201,10 @@ class Store:
                 os.unlink(tmp)
             except OSError:
                 pass
+
+    def knows(self, mac: str) -> bool:
+        """True once the owner has named the strip or one of its outlets, or set its room/icons."""
+        return bool(self.names.get(mac)) or bool(self.meta.get(mac))
 
     def name(self, mac: str, outlet: int) -> Optional[str]:
         return self.names.get(mac, {}).get(str(outlet))
@@ -487,6 +504,7 @@ class StripLink:
         self.state_waiters: List[asyncio.Future] = []
         self.missed = 0
         self.closed = False
+        self.before_hello = 0
 
     async def send(self, line: str) -> None:
         self.writer.write(line.encode("utf-8") + b"\r\n")
@@ -535,11 +553,19 @@ class StripLink:
     def handle(self, line: str) -> None:
         boot = parse_bootinfo(line)
         if boot:
-            self.strip = self.hub.attach(self, boot)
+            strip = self.hub.attach(self, boot)
+            if strip is None:
+                self.close()
+                return
+            self.strip = strip
             asyncio.ensure_future(self.hub.came_online(self))
             return
         strip = self.strip
         if strip is None:
+            self.before_hello += 1
+            if self.before_hello > 5:
+                self.hub.guard.strike(self.address, "talks but never says it is a strip")
+                self.close()
             return
         strip.last_seen = time.time()
         kind, _, rest = line.partition(":")[2].partition(":")
@@ -575,10 +601,12 @@ class StripLink:
                 asyncio.ensure_future(self.read_state())
 
     async def run(self) -> None:
-        log("[strip] connection from %s" % self.address)
         try:
-            while True:
-                raw = await self.reader.readline()
+            while not self.closed:
+                if self.strip is None:              # a real strip says hello right away
+                    raw = await asyncio.wait_for(self.reader.readline(), HELLO_TIMEOUT)
+                else:
+                    raw = await self.reader.readline()
                 if not raw:
                     break
                 line = clean_line(raw)
@@ -586,12 +614,139 @@ class StripLink:
                     self.handle(line)
         except (ConnectionError, asyncio.IncompleteReadError):
             pass
+        except asyncio.TimeoutError:
+            self.hub.guard.strike(self.address, "connected but never said it is a strip")
         except (ValueError, asyncio.LimitOverrunError) as err:      # absurdly long line
             log("[strip] dropping %s: %s" % (self.address, err))
+            self.hub.guard.strike(self.address, "line too long")
         finally:
             self.closed = True
             self.hub.detach(self)
             self.writer.close()
+
+
+def is_local_address(ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return addr.is_private or addr.is_loopback or addr.is_link_local
+
+
+class Guard:
+    """Keeps abusive internet addresses away from the strip port and the password check."""
+
+    def __init__(self):
+        self.blocked: Dict[str, Tuple[float, str]] = {}           # ip -> (until, reason)
+        self.open: Dict[str, int] = {}                            # ip -> open strip connections
+        self.connects: Dict[str, List[float]] = {}                # ip -> recent connection times
+        self.strikes: Dict[str, List[float]] = {}                 # ip -> recent misbehaviour
+        self.new_strips: Dict[str, List[float]] = {}              # ip -> times a new strip was added
+        self.login_fails: Dict[str, Dict[str, float]] = {}        # ip -> {wrong password hash: when}
+        self.refused = 0
+        self.lock = threading.Lock()                              # the web side runs in other threads
+
+    @staticmethod
+    def _recent(times: List[float], window: float, now: float) -> List[float]:
+        times[:] = [t for t in times if now - t < window]
+        return times
+
+    def is_blocked(self, ip: str, now: Optional[float] = None) -> bool:
+        now = time.time() if now is None else now
+        with self.lock:
+            entry = self.blocked.get(ip)
+            if entry and entry[0] > now:
+                return True
+            if entry:
+                del self.blocked[ip]
+            return False
+
+    def block(self, ip: str, reason: str, seconds: float = BLOCK_SECONDS, now: Optional[float] = None) -> None:
+        if is_local_address(ip):
+            return
+        now = time.time() if now is None else now
+        if not self.is_blocked(ip, now):
+            log("[guard] blocked %s for %d min: %s" % (ip, seconds // 60, reason))
+        with self.lock:
+            self.blocked[ip] = (now + seconds, reason)
+
+    def strike(self, ip: str, reason: str, now: Optional[float] = None) -> None:
+        """Something an honest strip never does; a few of these get the address blocked."""
+        if is_local_address(ip):
+            return
+        now = time.time() if now is None else now
+        log("[guard] %s: %s" % (ip, reason))
+        if len(self._recent(self.strikes.setdefault(ip, []), 600, now) + [now]) >= MAX_STRIKES:
+            self.block(ip, reason, now=now)
+        self.strikes[ip].append(now)
+
+    def connection_opened(self, ip: str, now: Optional[float] = None) -> bool:
+        """False when this connection must be dropped straight away."""
+        now = time.time() if now is None else now
+        if self.is_blocked(ip, now):
+            self.refused += 1
+            return False
+        if is_local_address(ip):
+            return True
+        recent = self._recent(self.connects.setdefault(ip, []), 60, now)
+        recent.append(now)
+        if len(recent) > MAX_CONNECTS_PER_MINUTE:
+            self.block(ip, "%d connections in a minute" % len(recent), now=now)
+            self.refused += 1
+            return False
+        if self.open.get(ip, 0) >= MAX_CONNECTIONS_PER_IP:
+            self.strike(ip, "too many open connections", now)
+            self.refused += 1
+            return False
+        self.open[ip] = self.open.get(ip, 0) + 1
+        return True
+
+    def connection_closed(self, ip: str) -> None:
+        if ip in self.open:
+            self.open[ip] -= 1
+            if self.open[ip] <= 0:
+                del self.open[ip]
+
+    def may_add_strip(self, ip: str, unknown_now: int, now: Optional[float] = None) -> bool:
+        """Can [ip] bring in a strip this server has never seen?"""
+        if is_local_address(ip):
+            return True
+        now = time.time() if now is None else now
+        if unknown_now >= MAX_UNKNOWN_STRIPS:
+            self.strike(ip, "new strip refused: %d unnamed strips already" % unknown_now, now)
+            return False
+        added = self._recent(self.new_strips.setdefault(ip, []), 24 * 3600, now)
+        if len(added) >= MAX_NEW_STRIPS_PER_DAY:
+            self.block(ip, "more than %d new strips in a day" % MAX_NEW_STRIPS_PER_DAY, now=now)
+            return False
+        added.append(now)
+        return True
+
+    def login_failed(self, ip: str, offered: List[str], now: Optional[float] = None) -> None:
+        """Counts different wrong passwords: an app still sending an old one is not guessing."""
+        if is_local_address(ip):
+            return
+        now = time.time() if now is None else now
+        with self.lock:
+            fails = self.login_fails.setdefault(ip, {})
+            for key in [k for k, t in fails.items() if now - t >= 300]:
+                del fails[key]
+            for token in offered:
+                if token:
+                    fails[hashlib.sha256(token.encode("utf-8", "replace")).hexdigest()[:16]] = now
+            count = len(fails)
+        if count >= LOGIN_FAILS:
+            self.block(ip, "%d wrong passwords" % count, LOGIN_BLOCK_SECONDS, now)
+
+    def report(self, now: Optional[float] = None) -> Dict[str, Any]:
+        now = time.time() if now is None else now
+        with self.lock:
+            blocked = sorted(self.blocked.items())
+        return {
+            "blocked": [{"ip": ip, "minutes_left": int((until - now) // 60) + 1, "reason": reason}
+                        for ip, (until, reason) in blocked if until > now],
+            "refused_connections": self.refused,
+        }
 
 
 class Hub:
@@ -605,14 +760,23 @@ class Hub:
         self.cycle_phase: Dict[str, bool] = {}
         self.pin_failures: Dict[str, Tuple[int, float]] = {}
         self.user_seen: Dict[str, float] = {}
+        self.guard = Guard()
 
     @staticmethod
     def label(strip: Strip) -> str:
         return "strip %s" % strip.mac[-6:]
 
-    def attach(self, link: StripLink, boot: Dict[str, str]) -> Strip:
+    def attach(self, link: StripLink, boot: Dict[str, str]) -> Optional[Strip]:
+        """The strip behind [link], or None when the connection is refused."""
         strip = self.strips.get(boot["mac"])
+        if strip is not None and strip.online and strip.link is not link and strip.link.address != link.address:
+            # an online strip does not move to another address; someone is impersonating it
+            self.guard.strike(link.address, "claimed to be %s, which is online from another address" % self.label(strip))
+            return None
         if strip is None:
+            unknown = sum(1 for s in self.strips.values() if not self.store.knows(s.mac))
+            if not self.guard.may_add_strip(link.address, unknown):
+                return None
             strip = self.strips[boot["mac"]] = Strip(boot["mac"])
         if strip.link is not None and strip.link is not link:
             strip.link.close()                      # the strip re-dialled; the old socket is dead
@@ -628,7 +792,15 @@ class Hub:
             log("[strip] %s offline" % self.label(strip))
 
     async def accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        await StripLink(self, reader, writer).run()
+        peer = writer.get_extra_info("peername")
+        ip = peer[0] if peer else "?"
+        if not self.guard.connection_opened(ip):
+            writer.close()
+            return
+        try:
+            await StripLink(self, reader, writer).run()
+        finally:
+            self.guard.connection_closed(ip)
 
     async def came_online(self, link: "StripLink") -> None:
         """Read the state, then run whatever was asked while the strip was offline."""
@@ -1212,6 +1384,28 @@ class WebHandler(BaseHTTPRequestHandler):
                         "strips": set(user.get("strips") or []) or None}
         return None
 
+    def client_ip(self) -> str:
+        """The caller's address; behind the Cloudflare tunnel (a local connection) it comes from a header."""
+        peer = self.client_address[0]
+        forwarded = self.headers.get("CF-Connecting-IP", "").strip()
+        if forwarded and peer in ("127.0.0.1", "::1"):
+            return forwarded
+        return peer
+
+    def signed_in(self) -> Optional[Dict[str, Any]]:
+        """who(), after the brute-force checks; None means a reply was already sent."""
+        guard, ip = self.server.hub.guard, self.client_ip()
+        if guard.is_blocked(ip):
+            self.reply_json(429, {"error": "too many wrong passwords, try again later"})
+            return None
+        who = self.who()
+        if who is None:
+            offered = self.offered_tokens()
+            if any(offered):
+                guard.login_failed(ip, offered)
+            self.deny()
+        return who
+
     def offered_tokens(self) -> List[str]:
         offered = [self.headers.get("X-Token", "")]
         auth = self.headers.get("Authorization", "")
@@ -1291,9 +1485,8 @@ class WebHandler(BaseHTTPRequestHandler):
             return
         if self.send_static(path):                  # public: website, control panel (asks for the password), PWA files
             return
-        who = self.who()
+        who = self.signed_in()
         if who is None:
-            self.deny()
             return
         hub = self.server.hub
         if path == "/api/state":
@@ -1309,6 +1502,11 @@ class WebHandler(BaseHTTPRequestHandler):
                 self.reply_json(200, self.server.run_on_loop(hub.users()))
         elif path == "/api/health":
             self.reply_json(200, {"ok": True, "app": "darwish-smart-power", "version": VERSION})
+        elif path == "/api/security":
+            if who["role"] != "owner":
+                self.reply_json(403, {"error": "only the owner sees this"})
+            else:
+                self.reply_json(200, hub.guard.report())
         elif path == "/api/history":
             query = parse_qs(urlsplit(self.path).query)
             strip = query.get("strip", [None])[0]
@@ -1331,9 +1529,8 @@ class WebHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
-        who = self.who()
+        who = self.signed_in()
         if who is None:
-            self.deny()
             return
         if who["role"] == "view":
             self.reply_json(403, {"error": "view only", "view_only": True})
@@ -1680,7 +1877,7 @@ async def serve(args) -> int:
     store = Store(Path(args.data).resolve())
     history = History(store.path.with_name(store.path.stem + "-history.db"))
     hub = Hub(store, history)
-    strip_server = await asyncio.start_server(hub.accept, args.bind, STRIP_PORT)
+    strip_server = await asyncio.start_server(hub.accept, args.bind, STRIP_PORT, limit=MAX_LINE)
     ip = args.public_ip or guess_lan_ip()
     web = WebServer((args.bind, args.web_port), hub, asyncio.get_running_loop(), args.token, ip)
     threading.Thread(target=web.serve_forever, daemon=True).start()
@@ -1938,6 +2135,56 @@ async def selftest() -> None:
         with urllib.request.urlopen(base + path, timeout=10) as r:
             return r.read().decode()
     assert "Privacy Policy" in await loop.run_in_executor(None, page, "/privacy")
+
+    # ---- protection: limits per internet address, impersonation, silent connections, password guessing
+    g, t0 = Guard(), 1_000_000.0
+    for _ in range(MAX_CONNECTS_PER_MINUTE):                                  # reconnecting is fine ...
+        assert g.connection_opened("41.65.227.203", t0)
+        g.connection_closed("41.65.227.203")
+    assert not g.connection_opened("41.65.227.203", t0) and g.is_blocked("41.65.227.203", t0)  # ... a flood is not
+    assert all(g.connection_opened("41.65.227.204", t0 + i) for i in range(MAX_CONNECTIONS_PER_IP))
+    assert not g.connection_opened("41.65.227.204", t0 + 99)                   # too many open at once
+    assert not g.is_blocked("41.65.227.203", t0 + BLOCK_SECONDS + 1)          # blocks run out
+    assert all(g.connection_opened("192.168.1.50", t0) for _ in range(100))  # the home network is never limited
+    assert all(g.may_add_strip("196.135.103.190", 0, t0) for _ in range(MAX_NEW_STRIPS_PER_DAY))
+    assert not g.may_add_strip("196.135.103.190", 0, t0) and g.is_blocked("196.135.103.190", t0)
+    assert not g.may_add_strip("196.135.103.191", MAX_UNKNOWN_STRIPS, t0)
+    for _ in range(MAX_STRIKES):
+        g.strike("196.135.103.192", "test", t0)
+    assert g.is_blocked("196.135.103.192", t0) and not g.is_blocked("10.0.0.3", t0)
+    for _ in range(30):                                                       # an app with an old password
+        g.login_failed("196.135.103.193", ["old-password"], t0)
+    assert not g.is_blocked("196.135.103.193", t0)
+    for n in range(LOGIN_FAILS):                                              # someone guessing
+        g.login_failed("196.135.103.193", ["guess-%d" % n], t0)
+    assert g.is_blocked("196.135.103.193", t0) and g.report(t0)["blocked"]
+
+    class Impostor:
+        address, closed = "41.65.227.2046", False
+    real = hub.strips["A1B2C3D4E5F6"]
+    assert real.online and hub.attach(Impostor(), {"mac": "A1B2C3D4E5F6", "model": "x", "fw": "x"}) is None
+    assert hub.strips["A1B2C3D4E5F6"].link is real.link                       # the real strip keeps its link
+
+    global HELLO_TIMEOUT
+    saved_timeout, HELLO_TIMEOUT = HELLO_TIMEOUT, 0.5
+    silent_r, silent_w = await asyncio.open_connection("127.0.0.1", srv.sockets[0].getsockname()[1])
+    assert await asyncio.wait_for(silent_r.read(), 5) == b""                  # dropped for saying nothing
+    silent_w.close()
+    HELLO_TIMEOUT = saved_timeout
+
+    def guess(token: str, ip: str = "156.200.1.77") -> int:
+        req = urllib.request.Request(base + "/api/state", headers={"X-Token": token, "CF-Connecting-IP": ip})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.status
+        except urllib.error.HTTPError as err:
+            return err.code
+    codes = [await loop.run_in_executor(None, guess, "wrong-%d" % n) for n in range(LOGIN_FAILS + 1)]
+    assert codes[0] == 401 and codes[-1] == 429
+    assert await loop.run_in_executor(None, guess, "s3cret") == 429           # blocked even with the password
+    assert await loop.run_in_executor(None, guess, "s3cret", "156.200.1.78") == 200
+    status, sec = await loop.run_in_executor(None, http, "/api/security")
+    assert status == 200 and any(b["ip"] == "156.200.1.77" for b in sec["blocked"])
     status, state = await loop.run_in_executor(None, http, "/api/state")
     assert status == 200 and state["strips"][0]["outlets"][0]["name"] == "Kettle"
     status, res = await loop.run_in_executor(None, http, "/api/switch", {"strip": "A1B2C3D4E5F6", "outlet": 4, "on": False})
@@ -2075,7 +2322,7 @@ async def selftest() -> None:
     writer.close()
     srv.close()
     print("selftest OK: protocol, switching, button events, names, timers, energy history, rooms/icons, "
-          "schedules, cycles, scenes, PIN locks, offline queue, alerts, settings, Alexa, family sharing, web API + token")
+          "schedules, cycles, scenes, PIN locks, offline queue, alerts, settings, Alexa, family sharing, protection, web API + token")
 
 
 # --------------------------------------------------------------------------- main
