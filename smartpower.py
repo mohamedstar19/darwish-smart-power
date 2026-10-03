@@ -1270,7 +1270,8 @@ class Hub:
 
     def filter_for(self, who: Dict[str, Any], snap: Dict[str, Any]) -> Dict[str, Any]:
         """What a member limited to some strips may see of /api/state."""
-        snap["me"] = {"role": who["role"], "name": who["name"], "strips": sorted(who["strips"]) if who["strips"] else []}
+        snap["me"] = {"role": who["role"], "name": who["name"], "strips": sorted(who["strips"]) if who["strips"] else [],
+                      "login": who.get("login") or ""}
         if who["role"] != "owner":                  # approving strips is the owner's job
             snap.pop("new_strips", None)
             snap.pop("blocked_strips", None)
@@ -1703,7 +1704,7 @@ class WebHandler(BaseHTTPRequestHandler):
             if user:
                 self.server.hub.saw_user(user)
                 strips = set(user.get("strips") or [])
-                return {"role": user["role"], "name": user["name"], "id": user["id"],
+                return {"role": user["role"], "name": user["name"], "id": user["id"], "login": user.get("login", ""),
                         "strips": strips if user["role"] == CUSTOMER else (strips or None)}
         return None
 
@@ -1832,7 +1833,7 @@ class WebHandler(BaseHTTPRequestHandler):
                 snap["server"]["ip"] = self.server.public_ip
             self.reply_json(200, snap)
         elif path == "/api/me":
-            self.reply_json(200, {"role": who["role"], "name": who["name"]})
+            self.reply_json(200, {"role": who["role"], "name": who["name"], "login": who.get("login") or ""})
         elif path == "/api/users":
             if who["role"] != "owner":
                 self.reply_json(403, {"error": "only the owner manages family members"})

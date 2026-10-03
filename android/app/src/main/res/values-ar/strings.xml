@@ -329,4 +329,8 @@
     <string name="sign_out">خروج</string>
     <string name="delete_account">امسح حسابي</string>
     <string name="delete_account_body">هيتمسح حسابك وهتتشال المشتركات اللي ضفتها من السيرفر، ومش هينفع ترجّعه.</string>
+    <string name="my_account">حسابي</string>
+    <string name="owner_title">صاحب السيرفر</string>
+    <string name="owner_body">داخل بباسورد السيرفر: بتشوف كل المشتركات والعملاء والعيلة.</string>
+    <string name="owner_sign_out_body">تخرج من باسورد السيرفر على الموبايل ده؟ تقدر تدخل تاني من الإعدادات، أو تعمل حساب عميل.</string>
 </resources>

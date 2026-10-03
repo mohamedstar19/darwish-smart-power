@@ -88,7 +88,7 @@ data class ServerSettings(
 data class Usage(val kwh: Double, val cost: Double)
 
 /** Who this app is signed in as: "owner" (the server password) or a family member ("control" / "view"). */
-data class Me(val role: String = ROLE_OWNER, val name: String? = null) {
+data class Me(val role: String = ROLE_OWNER, val name: String? = null, val login: String? = null) {
     val isOwner: Boolean get() = role == ROLE_OWNER
     val isCustomer: Boolean get() = role == ROLE_CUSTOMER
     val canControl: Boolean get() = role != ROLE_VIEW
@@ -166,7 +166,8 @@ object StateJson {
             todayHours = today?.optJSONArray("hours").doubles(),
             month = parseUsage(root.optJSONObject("month")),
             lastEventId = root.optLong("last_event", 0L),
-            me = root.optJSONObject("me")?.let { Me(it.optString("role", Me.ROLE_OWNER), it.stringOrNull("name")) } ?: Me(),
+            me = root.optJSONObject("me")?.let { Me(it.optString("role", Me.ROLE_OWNER), it.stringOrNull("name"), it.stringOrNull("login")) }
+                ?: Me(),
             newStrips = root.optJSONArray("new_strips").objects().map {
                 NewStrip(it.getString("id"), it.optString("address"), it.optBoolean("online"))
             },

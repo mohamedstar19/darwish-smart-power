@@ -81,6 +81,13 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
     ) {
         Text(stringResource(R.string.tab_settings), style = MaterialTheme.typography.headlineMedium)
 
+        // ---- my account: who this phone is signed in as, with sign out (and delete for customers)
+        if (state.server != null) {
+            Text(stringResource(R.string.my_account), style = SectionTitleStyle)
+            if (state.me.isOwner) OwnerAccountCard(onSignOut = vm::signOut)
+            else SignedInAsCard(state.me, onSignOut = vm::signOut, onDeleteAccount = vm::deleteAccount.takeIf { state.me.isCustomer })
+        }
+
         // ---- connection (customers just sign in; the address and token are for the owner and family)
         if (!state.me.isCustomer) GlassCard(Modifier.fillMaxWidth()) {
             CardTitle("🌐", stringResource(R.string.section_server))
@@ -126,7 +133,6 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
         // ---- family: the owner manages it, members see who they are
         if (state.server != null) {
             if (state.me.isOwner) FamilyCard(vm, state)
-            else SignedInAsCard(state.me, onSignOut = vm::signOut, onDeleteAccount = vm::deleteAccount.takeIf { state.me.isCustomer })
         }
 
         // ---- strips the owner blocked; one tap lets a strip in again

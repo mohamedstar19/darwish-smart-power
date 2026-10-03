@@ -212,6 +212,7 @@ fun SignedInAsCard(me: Me, onSignOut: () -> Unit, onDeleteAccount: (() -> Unit)?
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.signed_in_as, me.name ?: ""), fontWeight = FontWeight.SemiBold)
+                me.login?.takeIf { it.isNotEmpty() }?.let { Text(ltr(it), color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall) }
                 Text(
                     stringResource(
                         when (me.role) {
@@ -243,6 +244,33 @@ fun SignedInAsCard(me: Me, onSignOut: () -> Unit, onDeleteAccount: (() -> Unit)?
                 }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+}
+
+/** The owner signed in with the server password; signing out shows the customer sign-in screen. */
+@Composable
+fun OwnerAccountCard(onSignOut: () -> Unit) {
+    var confirm by remember { mutableStateOf(false) }
+    GlassCard(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("👑", fontSize = 22.sp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.owner_title), fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.owner_body), color = Glass.TextSoft, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(onClick = { confirm = true }) { Text(stringResource(R.string.sign_out), color = Glass.Text) }
+    }
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(R.string.sign_out)) },
+            text = { Text(stringResource(R.string.owner_sign_out_body)) },
+            confirmButton = { TextButton(onClick = { confirm = false; onSignOut() }) { Text(stringResource(R.string.sign_out)) } },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }

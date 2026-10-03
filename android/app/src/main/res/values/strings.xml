@@ -343,4 +343,8 @@
     <string name="sign_out">Sign out</string>
     <string name="delete_account">Delete my account</string>
     <string name="delete_account_body">This deletes your account and removes the strips you added from the server. It cannot be undone.</string>
+    <string name="my_account">My account</string>
+    <string name="owner_title">Server owner</string>
+    <string name="owner_body">Signed in with the server password: you see every strip, customer and family member.</string>
+    <string name="owner_sign_out_body">Sign out of the server password on this phone? You can sign in again from Settings, or create a customer account.</string>
 </resources>
