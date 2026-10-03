@@ -97,6 +97,11 @@ input:focus{border-color:var(--cyan)}
 .room{color:var(--soft);font-size:13px;font-weight:600;margin:20px 6px 8px}
 .credit{text-align:center;color:var(--faint);font-size:12px;padding:8px 16px 28px}
 .credit a{color:var(--cyan);font-weight:700;text-decoration:none}
+.newstrips{margin-top:16px;padding:16px 18px;border-color:rgba(255,179,71,.55)}
+.newstrips h2{margin:0;font-size:16px}.newstrips p{margin:4px 0 8px;color:var(--soft);font-size:13px}
+.newrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.08)}
+.newrow div{flex:1;display:flex;flex-direction:column}.newrow span{color:var(--soft);font-size:12px}
+.newrow .btn{flex:none;padding:8px 14px}
 </style>
 </head>
 <body>
@@ -113,7 +118,9 @@ const L = {
        none: "مفيش مشترك متصل لسه. اعمل إعداد للمشترك من تطبيق الأندرويد.", pin: "المشترك ده مقفول. ادخل الـ PIN:", wrongPin: "الـ PIN غلط",
        queued: "المشترك مش متصل، الأمر هيتنفذ أول ما يرجع", done: "تم", fail: "فشل: ", install: "تثبيت", other: "بدون غرفة",
        iosHint: "على الآيفون: زرار المشاركة ← إضافة إلى الشاشة الرئيسية", cost: "ج.م", waiting: "مستني يرجع",
-       viewOnly: "صلاحية مشاهدة بس", hi: "أهلاً"},
+       viewOnly: "صلاحية مشاهدة بس", hi: "أهلاً",
+       newTitle: "مشتركات جديدة مستنية موافقتك", newBody: "اتصلت بالسيرفر من غير ما حد يضيفها من التطبيق. وافق بس على اللي تعرفه.",
+       from: "من", approve: "موافقة", block: "حظر", blockAsk: "تحظر المشترك ده؟ مش هيقدر يتصل بالسيرفر تاني."},
   en: {lang: "العربية", hello_m: "Good morning", hello_e: "Good evening", now: "Using now", today: "Today", month: "This month",
        scenes: "Scenes", strip: "Strip", outlet: "Outlet", online: "online", offline: "offline", allOn: "All on", allOff: "All off",
        timer: "Timer", rename: "New name (empty = default):", timerAsk: "Switch after how many minutes? (0 = cancel)", turnsOn: "on at", turnsOff: "off at",
@@ -121,7 +128,9 @@ const L = {
        none: "No strip connected yet. Set one up from the Android app.", pin: "This strip is locked. Enter its PIN:", wrongPin: "Wrong PIN",
        queued: "The strip is offline; it will run when it is back", done: "Done", fail: "Failed: ", install: "Install", other: "No room",
        iosHint: "On iPhone: Share → Add to Home Screen", cost: "EGP", waiting: "waiting",
-       viewOnly: "View only", hi: "Hi"}
+       viewOnly: "View only", hi: "Hi",
+       newTitle: "New strips waiting for your approval", newBody: "They connected without being added from the app. Approve only strips you know.",
+       from: "from", approve: "Approve", block: "Block", blockAsk: "Block this strip? It will not be able to connect again."}
 };
 const ICON = {plug:"🔌",kettle:"☕",router:"📶",tv:"📺",ac:"❄️",lamp:"💡",heater:"🔥",fan:"🌀",fridge:"🧊",washer:"🧺",charger:"🔋",
               computer:"💻",speaker:"🔊",camera:"📷",microwave:"🍲",iron:"👔"};
@@ -195,6 +204,13 @@ function render() {
       <div class="kpis"><div class="kpi"><b><bdi>${num(s.today.kwh, 2)} kWh</bdi></b><span>${t("today")}</span></div>
         <div class="kpi"><b><bdi>${num(s.today.cost, 2)}</bdi> ${esc(cur)}</b><span>${t("today")}</span></div>
         <div class="kpi"><b><bdi>${num(s.month.cost, 2)}</bdi> ${esc(cur)}</b><span>${t("month")}</span></div></div></section>`;
+  if (s.new_strips && s.new_strips.length) {
+    html += `<section class="glass newstrips"><h2>🆕 ${t("newTitle")}</h2><p>${t("newBody")}</p>` +
+      s.new_strips.map(n => `<div class="newrow"><div><b>${t("strip")} <bdi>${esc(n.id.slice(-6))}</bdi></b>
+        <span>${t("from")} <bdi>${esc(n.address || "?")}</bdi></span></div>
+        <button class="btn" data-block="${esc(n.id)}">${t("block")}</button>
+        <button class="btn primary" data-approve="${esc(n.id)}">${t("approve")}</button></div>`).join("") + `</section>`;
+  }
   if (s.scenes && s.scenes.length) {
     html += `<div class="row-title"><h2>${t("scenes")}</h2></div><div class="scenes">` +
       s.scenes.map(sc => `<button class="scene" data-scene="${esc(sc.id)}"><span class="e">${esc(sc.icon)}</span>${esc(sc.name)}</button>`).join("") + `</div>`;
@@ -250,6 +266,15 @@ async function withPin(stripId, fn) {
 
 document.addEventListener("click", async ev => {
   if (readOnly() && ev.target.closest("[data-sw],[data-timer],[data-more],[data-scene]")) { toast("👁 " + t("viewOnly")); return; }
+  const ap = ev.target.closest("[data-approve]"), bl = ev.target.closest("[data-block]");
+  if (ap || bl) {
+    if (bl && !confirm(t("blockAsk"))) return;
+    try {
+      await api(ap ? "/api/strips/approve" : "/api/strips/remove", ap ? {strip: ap.dataset.approve} : {strip: bl.dataset.block, block: true});
+      toast(t("done"));
+    } catch (e) { toast(t("fail") + e.message); }
+    refresh(); return;
+  }
   const more = ev.target.closest("[data-more]");
   if (more) {
     ev.stopPropagation();

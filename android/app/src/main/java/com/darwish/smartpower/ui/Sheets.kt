@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -114,6 +115,8 @@ fun StripSheet(vm: AppViewModel, strip: Strip, rooms: List<String>, onClose: () 
     var renaming by remember { mutableStateOf(false) }
     var timer by remember { mutableStateOf(false) }
     var lock by remember { mutableStateOf(false) }
+    var removing by remember { mutableStateOf(false) }
+    val isOwner = vm.state.value.me.isOwner
     var room by rememberSaveable { mutableStateOf(strip.room.orEmpty()) }
     ModalBottomSheet(onDismissRequest = onClose, containerColor = Glass.Deep) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
@@ -146,7 +149,31 @@ fun StripSheet(vm: AppViewModel, strip: Strip, rooms: List<String>, onClose: () 
                 )
                 TextButton(onClick = { vm.setRoom(strip.id, room) }) { Text(stringResource(R.string.save)) }
             }
+            if (isOwner) {
+                Spacer(Modifier.height(10.dp))
+                SheetRow("🗑", stringResource(R.string.remove_strip)) { removing = true }
+            }
         }
+    }
+    if (removing) {
+        AlertDialog(
+            onDismissRequest = { removing = false },
+            title = { Text(stringResource(R.string.remove_strip)) },
+            text = { Text(stringResource(R.string.remove_strip_body, stripName(strip))) },
+            confirmButton = {
+                TextButton(onClick = { removing = false; onClose(); vm.removeStrip(strip.id, block = false) }) {
+                    Text(stringResource(R.string.remove))
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { removing = false; onClose(); vm.removeStrip(strip.id, block = true) }) {
+                        Text(stringResource(R.string.remove_and_block), color = Glass.Red)
+                    }
+                    TextButton(onClick = { removing = false }) { Text(stringResource(R.string.cancel)) }
+                }
+            },
+        )
     }
     if (renaming) {
         RenameDialog(strip.name, stringResource(R.string.default_strip_name, strip.id.takeLast(6)), { renaming = false }) {

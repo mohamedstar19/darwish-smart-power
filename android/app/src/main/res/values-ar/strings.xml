@@ -291,4 +291,19 @@
     <string name="signed_in_as">داخل باسم %1$s</string>
     <string name="view_only_note">صلاحيتك مشاهدة بس. اطلب من صاحب السيرفر يسمحلك بالتحكم.</string>
     <string name="not_allowed_note">مالكش صلاحية على ده.</string>
+    <string name="new_strips_title">مشتركات جديدة مستنية موافقتك</string>
+    <string name="new_strips_body">المشتركات دي اتصلت بالسيرفر بتاعك من غير ما حد يضيفها من التطبيق. وافق بس على المشتركات اللي تعرفها.</string>
+    <string name="new_strip_line">مشترك %1$s</string>
+    <string name="new_strip_from">من %1$s</string>
+    <string name="approve">موافقة</string>
+    <string name="block">حظر</string>
+    <string name="strip_approved">تمت الموافقة على مشترك %1$s.</string>
+    <string name="strip_removed">اتشال مشترك %1$s.</string>
+    <string name="strip_blocked">اتشال مشترك %1$s واتحظر.</string>
+    <string name="remove_strip">شيل المشترك</string>
+    <string name="remove_strip_body">تشيل %1$s من السيرفر؟ هتتمسح أسماؤه ومواعيده ومشاهده، ولو اتصل تاني هيستنى موافقتك.</string>
+    <string name="remove">شيل</string>
+    <string name="remove_and_block">شيل واحظر</string>
+    <string name="blocked_strips_title">مشتركات محظورة</string>
+    <string name="unblock">اسمح تاني</string>
 </resources>

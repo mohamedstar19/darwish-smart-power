@@ -305,4 +305,19 @@
     <string name="signed_in_as">Signed in as %1$s</string>
     <string name="view_only_note">View only: ask the owner to allow control.</string>
     <string name="not_allowed_note">You don\'t have access to this.</string>
+    <string name="new_strips_title">New strips waiting for your approval</string>
+    <string name="new_strips_body">These strips connected to your server without being added from your app. Approve only strips you know.</string>
+    <string name="new_strip_line">Strip %1$s</string>
+    <string name="new_strip_from">From %1$s</string>
+    <string name="approve">Approve</string>
+    <string name="block">Block</string>
+    <string name="strip_approved">Strip %1$s approved.</string>
+    <string name="strip_removed">Strip %1$s removed.</string>
+    <string name="strip_blocked">Strip %1$s removed and blocked.</string>
+    <string name="remove_strip">Remove strip</string>
+    <string name="remove_strip_body">Remove %1$s from your server? Its names, schedules and scenes are deleted. If it connects again it waits for your approval.</string>
+    <string name="remove">Remove</string>
+    <string name="remove_and_block">Remove and block</string>
+    <string name="blocked_strips_title">Blocked strips</string>
+    <string name="unblock">Allow again</string>
 </resources>

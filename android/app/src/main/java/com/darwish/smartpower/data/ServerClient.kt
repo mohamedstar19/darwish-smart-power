@@ -141,6 +141,20 @@ class ServerClient(private val address: ServerAddress, private val token: String
     suspend fun deleteMember(id: String): List<Member> =
         StateJson.parseMembers(JSONObject(call("POST", "api/users/delete", JSONObject().put("id", id))).optJSONArray("users"))
 
+    /** Tells the server a strip with this setup code is being added from the app, so it is approved by itself. */
+    suspend fun expectStrip(code: String) {
+        call("POST", "api/strips/expect", JSONObject().put("code", code))
+    }
+
+    suspend fun approveStrip(id: String) {
+        call("POST", "api/strips/approve", JSONObject().put("strip", id))
+    }
+
+    /** Forgets a strip; with [block] the server refuses it from now on. */
+    suspend fun removeStrip(id: String, block: Boolean) {
+        call("POST", "api/strips/remove", JSONObject().put("strip", id).put("block", block))
+    }
+
     private suspend fun call(method: String, path: String, body: JSONObject? = null): String =
         withContext(Dispatchers.IO) {
             val conn = URL(address.url(path)).openConnection() as HttpURLConnection

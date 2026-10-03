@@ -35,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darwish.smartpower.R
+import com.darwish.smartpower.data.NewStrip
 import com.darwish.smartpower.data.Outlet
 import com.darwish.smartpower.data.Scene
 import com.darwish.smartpower.data.Strip
@@ -82,6 +84,10 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit, onSetup: () -> Unit, on
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item { Header(onAlerts) }
+        val newStrips = server?.newStrips.orEmpty()
+        if (state.me.isOwner && newStrips.isNotEmpty()) item {
+            NewStripsCard(newStrips, onApprove = vm::approveStrip, onBlock = { vm.removeStrip(it, block = true) })
+        }
         when {
             !state.loaded -> item {
                 Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -155,6 +161,29 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit, onSetup: () -> Unit, on
         val strip = state.strips.firstOrNull { it.id == id }
         if (strip != null) StripSheet(vm, strip, state.strips.mapNotNull { it.room }.distinct()) { stripSheet = null }
         else stripSheet = null
+    }
+}
+
+/** Strips that dialled in without being added from the app; the owner decides about each one. */
+@Composable
+private fun NewStripsCard(strips: List<NewStrip>, onApprove: (String) -> Unit, onBlock: (String) -> Unit) {
+    GlassCard(Modifier.fillMaxWidth(), glow = Brush.linearGradient(listOf(Glass.Amber, Glass.Orange))) {
+        Text("🆕 " + stringResource(R.string.new_strips_title), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.new_strips_body), color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall)
+        strips.forEach { strip ->
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.new_strip_line, ltr(strip.id.takeLast(6))), fontWeight = FontWeight.SemiBold)
+                    if (strip.address.isNotEmpty()) {
+                        Text(stringResource(R.string.new_strip_from, ltr(strip.address)), color = Glass.TextSoft,
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                TextButton(onClick = { onBlock(strip.id) }) { Text(stringResource(R.string.block), color = Glass.Red) }
+                Button(onClick = { onApprove(strip.id) }) { Text(stringResource(R.string.approve)) }
+            }
+        }
     }
 }
 

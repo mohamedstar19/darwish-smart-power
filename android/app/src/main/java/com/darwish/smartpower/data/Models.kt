@@ -102,6 +102,9 @@ data class Me(val role: String = ROLE_OWNER, val name: String? = null) {
 /** A family member the owner shared access with. [strips] empty = all strips. */
 data class Member(val id: String, val name: String, val role: String, val strips: List<String>, val lastSeenEpochSeconds: Long)
 
+/** A strip that connected but is not approved yet (shown to the owner only). */
+data class NewStrip(val id: String, val address: String, val online: Boolean)
+
 data class ServerState(
     val strips: List<Strip>,
     val serverIp: String?,
@@ -115,6 +118,9 @@ data class ServerState(
     val month: Usage = Usage(0.0, 0.0),
     val lastEventId: Long = 0,
     val me: Me = Me(),
+    /** Owner only: strips waiting for approval, and strips the owner blocked. */
+    val newStrips: List<NewStrip> = emptyList(),
+    val blockedStrips: List<String> = emptyList(),
 )
 
 data class EnergyBucket(val startEpochSeconds: Long, val kwh: Double)
@@ -158,6 +164,11 @@ object StateJson {
             month = parseUsage(root.optJSONObject("month")),
             lastEventId = root.optLong("last_event", 0L),
             me = root.optJSONObject("me")?.let { Me(it.optString("role", Me.ROLE_OWNER), it.stringOrNull("name")) } ?: Me(),
+            newStrips = root.optJSONArray("new_strips").objects().map {
+                NewStrip(it.getString("id"), it.optString("address"), it.optBoolean("online"))
+            },
+            blockedStrips = root.optJSONArray("blocked_strips")?.let { a -> (0 until a.length()).map { a.getString(it) } }
+                ?: emptyList(),
         )
     }
 

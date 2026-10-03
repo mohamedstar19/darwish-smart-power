@@ -306,6 +306,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissInvite() = _state.update { it.copy(invite = null) }
 
+    // ---- approving and removing strips (owner)
+
+    fun approveStrip(id: String) = act { client ->
+        client.approveStrip(id)
+        refresh()
+        notes.send(Note(R.string.strip_approved, id.takeLast(6)))
+    }
+
+    fun removeStrip(id: String, block: Boolean) = act { client ->
+        client.removeStrip(id, block)
+        refresh()
+        notes.send(Note(if (block) R.string.strip_blocked else R.string.strip_removed, id.takeLast(6)))
+    }
+
     // ---- energy, alerts, server settings
 
     fun loadReport(range: String) {
@@ -385,6 +399,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Joins the strip's own Wi-Fi by itself, sends the setup, then gives the phone back its Wi-Fi. */
     suspend fun provisionFound(apSsid: String, serverIp: String, ssid: String, password: String): SetupResult {
         SetupRules.check(serverIp, ssid, password)?.let { return SetupResult.Invalid(it) }
+        // tell the server this strip is ours, so it is approved as soon as it connects
+        client()?.let { runCatching { it.expectStrip(SetupRules.apCode(apSsid)) } }
         // if the person missed Android's "connect?" prompt, ask once more by itself
         val joined = stripFinder.join(apSsid) ?: stripFinder.join(apSsid) ?: return SetupResult.JoinFailed
         return try {

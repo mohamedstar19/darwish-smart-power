@@ -128,6 +128,20 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
             if (state.me.isOwner) FamilyCard(vm, state) else SignedInAsCard(state.me)
         }
 
+        // ---- strips the owner blocked; one tap lets a strip in again
+        val blocked = state.server?.blockedStrips.orEmpty()
+        if (state.me.isOwner && blocked.isNotEmpty()) {
+            GlassCard(Modifier.fillMaxWidth()) {
+                CardTitle("⛔", stringResource(R.string.blocked_strips_title))
+                blocked.forEach { id ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.new_strip_line, ltr(id.takeLast(6))), modifier = Modifier.weight(1f))
+                        TextButton(onClick = { vm.approveStrip(id) }) { Text(stringResource(R.string.unblock)) }
+                    }
+                }
+            }
+        }
+
         // ---- bill and alert limits (kept on the server, owner only)
         state.server?.settings?.takeIf { state.me.isOwner }?.let { current ->
             var price by remember(current) { mutableStateOf(number(current.pricePerKwh, 2)) }
