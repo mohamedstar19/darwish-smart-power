@@ -76,6 +76,7 @@ tr:last-child td{border-bottom:0}
 .btn.primary{border:0;background:linear-gradient(135deg,#ff7a3d,#ffb347);color:#2a0e00}
 .btn.danger{color:var(--bad)}
 .switch{display:flex;align-items:center;gap:10px}
+select{background:rgba(0,0,0,.3);border:1px solid var(--stroke);border-radius:10px;padding:6px 8px;color:var(--text);font:inherit;max-width:220px}
 .switch input{width:40px;height:22px;accent-color:var(--brand)}
 
 /* login */
@@ -110,7 +111,7 @@ const L = {
        blockAsk: "تحظر المشترك ده؟ مش هيقدر يتصل بالسيرفر تاني.", noneWaiting: "مفيش مشتركات مستنية.",
        custTitle: "العملاء", name: "الاسم", account: "الموبايل / الإيميل", stripsCol: "المشتركات", lastSeen: "آخر استخدام",
        joined: "سجّل", noCustomers: "لسه مفيش عملاء سجلوا.",
-       stripTitle: "المشتركات", strip: "المشترك", owner: "العميل", state: "الحالة", address: "العنوان", online: "أونلاين",
+       stripTitle: "المشتركات", stripNote: "اختار العميل من القايمة عشان تربط المشترك بحسابه، مثلاً لعميل معاه آيفون جهّزتله المشترك بنفسك.", strip: "المشترك", owner: "العميل", state: "الحالة", address: "العنوان", online: "أونلاين",
        offline: "أوفلاين", noStrips: "مفيش مشتركات لسه.", nobody: "—",
        signupTitle: "تسجيل عملاء جداد", signupNote: "لو قفلته، محدش يقدر يعمل حساب جديد من التطبيق.", signupOn: "مفتوح",
        done: "تم", fail: "فشل: ", never: "ولا مرة", now: "دلوقتي", min: "د", hour: "س", dayU: "ي", ago: "من",
@@ -127,7 +128,7 @@ const L = {
        blockAsk: "Block this strip? It will not be able to connect again.", noneWaiting: "No strips waiting.",
        custTitle: "Customers", name: "Name", account: "Phone / e-mail", stripsCol: "Strips", lastSeen: "Last used",
        joined: "Joined", noCustomers: "No customers have signed up yet.",
-       stripTitle: "Strips", strip: "Strip", owner: "Customer", state: "State", address: "Address", online: "online",
+       stripTitle: "Strips", stripNote: "Pick a customer to link the strip to their account, e.g. for an iPhone customer whose strip you set up yourself.", strip: "Strip", owner: "Customer", state: "State", address: "Address", online: "online",
        offline: "offline", noStrips: "No strips yet.", nobody: "—",
        signupTitle: "New customer sign-ups", signupNote: "When closed, nobody can create a new account in the app.", signupOn: "Open",
        done: "Done", fail: "Failed: ", never: "never", now: "just now", min: "m", hour: "h", dayU: "d", ago: "ago",
@@ -235,11 +236,13 @@ function render() {
         <td class="muted">${ago(c.last_seen)}</td><td class="muted">${date(c.created)}</td></tr>`).join("") + `</table></div>`
       : `<div class="empty">${t("noCustomers")}</div>`) + `</section>`;
 
-  html += `<section class="card glass"><h2>${t("stripTitle")} (${fmt(d.strips.length)})</h2>` +
+  html += `<section class="card glass"><h2>${t("stripTitle")} (${fmt(d.strips.length)})</h2><p class="note">${t("stripNote")}</p>` +
     (d.strips.length ? `<div class="scroll"><table><tr><th>${t("strip")}</th><th>${t("owner")}</th><th>${t("state")}</th>
       <th>${t("lastSeen")}</th><th>${t("address")}</th></tr>` +
       d.strips.map(x => `<tr><td><b>${esc(x.name || t("strip") + " " + x.id.slice(-6))}</b><div class="muted" style="font-size:11px"><bdi>${esc(x.id)}</bdi></div></td>
-        <td>${x.owners.length ? esc(x.owners.join("، ")) : `<span class="muted">${t("nobody")}</span>`}</td>
+        <td><select data-assign="${esc(x.id)}" aria-label="${t("owner")}"><option value="">${t("nobody")}</option>
+          ${d.customers.map(c => `<option value="${esc(c.id)}"${c.id === x.customer ? " selected" : ""}>${esc(c.name)} · ${esc(c.login)}</option>`).join("")}
+          </select></td>
         <td><span class="status${x.online ? " on" : ""}"><i></i>${x.online ? t("online") : t("offline")}</span></td>
         <td class="muted">${x.online ? t("now") : ago(x.last_seen)}</td><td class="muted"><bdi>${esc(x.address || t("nobody"))}</bdi></td></tr>`).join("") + `</table></div>`
       : `<div class="empty">${t("noStrips")}</div>`) + `</section>`;
@@ -265,6 +268,14 @@ function render() {
   });
 }
 
+document.addEventListener("change", async ev => {
+  const sel = ev.target.closest("[data-assign]");
+  if (!sel) return;
+  try { await api("/api/strips/assign", {strip: sel.dataset.assign, customer: sel.value}); toast(t("done")); }
+  catch (e) { toast(t("fail") + e.message); }
+  refresh();
+});
+
 document.addEventListener("click", async ev => {
   const ap = ev.target.closest("[data-approve]"), bl = ev.target.closest("[data-block]");
   if (!ap && !bl) return;
@@ -284,7 +295,10 @@ async function refresh() {
     else if (!data) renderLogin(t("unreachable"));
   }
 }
-function start() { refresh(); clearInterval(timer); timer = setInterval(() => { if (!document.hidden) refresh(); }, 15000); }
+function start() {
+  refresh(); clearInterval(timer);
+  timer = setInterval(() => { if (!document.hidden && !(document.activeElement && document.activeElement.tagName === "SELECT")) refresh(); }, 15000);
+}
 token ? start() : renderLogin();
 </script>
 </body>

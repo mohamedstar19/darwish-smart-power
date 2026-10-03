@@ -483,7 +483,8 @@ def password_ok(stored: str, password: str) -> bool:
         return hmac.compare_digest(mine.hex(), digest)
     except (ValueError, AttributeError):
         return False
-OWNER_ONLY = ("/api/users", "/api/settings", "/api/lock", "/api/strips/approve", "/api/strips/remove", "/api/admin")
+OWNER_ONLY = ("/api/users", "/api/settings", "/api/lock", "/api/strips/approve", "/api/strips/remove", "/api/strips/assign",
+              "/api/admin")
 
 
 def may_see(who: Dict[str, Any], mac: str) -> bool:
@@ -1170,9 +1171,12 @@ class Hub:
         def seen(u: Dict[str, Any]) -> float:
             return max(self.user_seen.get(u["id"], 0), u.get("last_seen", 0))
         owners: Dict[str, List[str]] = {}
+        customer_of: Dict[str, str] = {}
         for u in store.users:
             for mac in u.get("strips") or []:
                 owners.setdefault(mac, []).append(u["name"])
+                if u.get("role") == CUSTOMER:
+                    customer_of[mac] = u["id"]
         customers = [u for u in store.users if u.get("role") == CUSTOMER]
         family = [u for u in store.users if u.get("role") != CUSTOMER]
         approved = [m for m in store.approved if m not in store.blocked_strips]
@@ -1201,7 +1205,7 @@ class Hub:
                 "online": sum(1 for m in u.get("strips") or [] if m in self.strips and self.strips[m].online),
             } for u in customers), key=lambda x: -x["last_seen"]),
             "strips": sorted(({
-                "id": m, "name": store.name(m, 0) or "", "owners": owners.get(m, []),
+                "id": m, "name": store.name(m, 0) or "", "owners": owners.get(m, []), "customer": customer_of.get(m, ""),
                 "online": m in online, "address": self.strips[m].address if m in self.strips else "",
                 "last_seen": int(self.strips[m].last_seen) if m in self.strips else 0,
             } for m in approved), key=lambda x: (not x["online"], x["id"])),
@@ -1313,6 +1317,23 @@ class Hub:
             return 404, {"error": "unknown strip"}
         self.store.approve(mac)
         log("[strip] %s approved by the owner" % mac[-6:])
+        return 200, {"ok": True}
+
+    async def assign_strip(self, strip_id: Any, customer_id: Any) -> Tuple[int, Dict[str, Any]]:
+        """Gives a strip to one customer (e.g. one the owner set up for an iPhone user); "" takes it from everyone."""
+        mac = str(strip_id or "").upper()
+        if not self.store.is_approved(mac):
+            return 404, {"error": "unknown or unapproved strip"}
+        customers = [u for u in self.store.users if u.get("role") == CUSTOMER]
+        target = next((u for u in customers if u["id"] == customer_id), None)
+        if customer_id and target is None:
+            return 404, {"error": "unknown customer"}
+        for user in customers:
+            user["strips"] = [m for m in (user.get("strips") or []) if m != mac]
+        if target is not None:
+            target["strips"] = sorted(target["strips"] + [mac])
+        self.store.save()
+        log("[strip] %s %s" % (mac[-6:], "given to customer %s" % target["id"] if target else "taken from its customer"))
         return 200, {"ok": True}
 
     async def remove_strip(self, strip_id: Any, block: bool) -> Tuple[int, Dict[str, Any]]:
@@ -1968,6 +1989,8 @@ class WebHandler(BaseHTTPRequestHandler):
             elif path == "/api/strips/remove":
                 block = bool(req.get("block")) and who["role"] == "owner"
                 code, body = self.server.run_on_loop(hub.remove_strip(strip_id, block))
+            elif path == "/api/strips/assign":
+                code, body = self.server.run_on_loop(hub.assign_strip(strip_id, str(req.get("customer") or "")))
             elif path == "/api/logout":
                 for token in self.offered_tokens():
                     if token:
@@ -2653,6 +2676,10 @@ async def selftest() -> None:
     assert status == 200 and report["totals"]["customers"] == 1 and report["customers"][0]["strips"] == 1
     assert any(x["owners"] == ["Ali"] for x in report["strips"])
     assert (await loop.run_in_executor(None, http, "/api/admin", None, ali))[0] == 403
+    status, _ = await loop.run_in_executor(None, http, "/api/strips/assign", {"strip": "A1B2C3D4E5F6", "customer": report["customers"][0]["id"]})
+    assert status == 200 and "A1B2C3D4E5F6" in [x["id"] for x in (await loop.run_in_executor(None, http, "/api/state", None, ali))[1]["strips"]]
+    assert (await loop.run_in_executor(None, http, "/api/strips/assign", {"strip": "A1B2C3D4E5F6", "customer": ""}))[0] == 200
+    assert (await loop.run_in_executor(None, post, "/api/strips/assign", {"strip": "A1B2C3D4E5F6", "customer": ""}, ali))[0] == 403
     before = report["totals"]["downloads"]
     hub.store.count_download("41.33.1.1", time.time())
     hub.store.count_download("41.33.1.1", time.time())                          # same phone again: not counted
