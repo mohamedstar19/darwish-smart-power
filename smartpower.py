@@ -2729,7 +2729,23 @@ async def selftest() -> None:
     web.shutdown()
 
     # Alexa: an Echo discovers the outlets, reads their names and switches them
-    alexa = Alexa(hub, "127.0.0.1", ssdp_port=0, base_port=53100)
+    def free_ports(count: int) -> int:
+        """The first of [count] free ports in a row, below the range the OS hands out to outgoing connections."""
+        for base in range(21000, 30000, 50):
+            socks = []
+            try:
+                for port in range(base, base + count):
+                    sock = socket.socket()
+                    socks.append(sock)
+                    sock.bind(("0.0.0.0", port))
+                return base
+            except OSError:
+                continue
+            finally:
+                for sock in socks:
+                    sock.close()
+        raise RuntimeError("no free ports for the Alexa test")
+    alexa = Alexa(hub, "127.0.0.1", ssdp_port=0, base_port=free_ports(20))
     await alexa.start_discovery()
     await alexa.reconcile()
     assert len(alexa.servers) == 5                  # the strip itself + 4 outlets
