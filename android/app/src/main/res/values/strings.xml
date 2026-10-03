@@ -98,6 +98,33 @@
     <string name="setup_bad_ssid">The strip cannot accept a Wi-Fi name that contains \":\".</string>
     <string name="setup_empty_password">Enter the Wi-Fi password.</string>
     <string name="setup_bad_password">The strip cannot accept a Wi-Fi password that contains \":\".</string>
+    <string name="setup_search_again">Search again</string>
+    <string name="setup_searching">Searching for strips…</string>
+    <string name="setup_found_none">No strip in setup mode was found. Check that its light is blinking fast and try again, or use the manual setup below.</string>
+    <string name="setup_found_strip">Strip %1$s</string>
+    <string name="setup_signal_strong">Strong signal</string>
+    <string name="setup_signal_ok">Good signal</string>
+    <string name="setup_signal_weak">Weak signal, bring the phone closer</string>
+    <string name="setup_need_permission">Allow the app to see nearby Wi-Fi networks so it can find the strip.</string>
+    <string name="setup_allow">Allow</string>
+    <string name="setup_wifi_off">Turn on the phone\'s Wi-Fi, then search again.</string>
+    <string name="setup_location_off">Turn on Location, then search again. Android needs it to list Wi-Fi networks; the app does not use your location.</string>
+    <string name="setup_nearby_wifi">2.4 GHz networks nearby, tap one:</string>
+    <string name="setup_add">Add the strip</string>
+    <string name="setup_manual">Manual setup</string>
+    <string name="setup_join_failed">Couldn\'t join the strip\'s Wi-Fi. If Android asked to connect, tap Connect. Check that the strip is still blinking fast, then try again.</string>
+    <string name="setup_done_auto">Done. The strip will join your Wi-Fi and connect to %1$s. It appears on the home screen within a minute.</string>
+    <string name="setup_ready_title">Get the strip ready</string>
+    <string name="setup_ready_1">Plug the strip in.</string>
+    <string name="setup_ready_2">If its Wi-Fi light isn\'t blinking fast, hold the strip\'s button until it does (about 10 seconds).</string>
+    <string name="setup_ready_3">Tap Ready. The app finds the strip and connects it to your home Wi-Fi by itself; just accept when the phone asks to connect.</string>
+    <string name="setup_ready">Ready</string>
+    <string name="setup_choose_strip">Choose the strip</string>
+    <string name="setup_home_wifi">Your home Wi-Fi</string>
+    <string name="setup_connecting">Connecting to the strip…</string>
+    <string name="setup_connecting_1">The phone will ask to connect to a network. Accept right away.</string>
+    <string name="setup_connecting_2">If it says the network has no internet, choose to stay connected.</string>
+    <string name="setup_connecting_3">If you miss the request, the app asks again by itself.</string>
 
     <!-- 2.0: tabs and home -->
     <string name="tab_home">Home</string>

@@ -36,4 +36,21 @@ class SetupRulesTest {
         assertEquals("up:ip:10.0.0.2", SetupRules.serverCommand(" 10.0.0.2 "))
         assertEquals("up:connect:HomeWiFi:secret", SetupRules.wifiCommand("HomeWiFi", "secret"))
     }
+
+    @Test
+    fun stripWifiPasswordComesFromItsName() {
+        assertTrue(SetupRules.isStripAp("TONLY_TAP_91C0C4C"))
+        assertEquals("LGU_91C0C4C", SetupRules.apPassword("TONLY_TAP_91C0C4C"))
+        assertEquals("91C0C4C", SetupRules.apCode("TONLY_TAP_91C0C4C"))
+        assertFalse(SetupRules.isStripAp("TONLY_TAP_"))
+        assertFalse(SetupRules.isStripAp("HomeWiFi"))
+        assertNull(SetupRules.apPassword("HomeWiFi"))
+    }
+
+    @Test
+    fun onlyTwoPointFourGigahertz() {
+        assertTrue(SetupRules.is24GHz(2412))
+        assertTrue(SetupRules.is24GHz(2472))
+        assertFalse(SetupRules.is24GHz(5180))
+    }
 }

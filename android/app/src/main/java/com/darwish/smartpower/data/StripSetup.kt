@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.net.InetSocketAddress
@@ -17,6 +18,8 @@ sealed interface SetupResult {
     data object NoWifi : SetupResult
     data object NotReachable : SetupResult
     data class Refused(val answer: String) : SetupResult
+    /** Could not join the strip's own Wi-Fi (automatic setup). */
+    data object JoinFailed : SetupResult
 }
 
 /**
@@ -26,12 +29,13 @@ sealed interface SetupResult {
  */
 class StripSetup(private val context: Context) {
 
-    suspend fun provision(serverIp: String, ssid: String, password: String): SetupResult =
+    /** [network]: the strip's Wi-Fi when the app joined it itself, else the Wi-Fi the phone is on. */
+    suspend fun provision(serverIp: String, ssid: String, password: String, network: Network? = null): SetupResult =
         withContext(Dispatchers.IO) {
             SetupRules.check(serverIp, ssid, password)?.let { return@withContext SetupResult.Invalid(it) }
-            val wifi = wifiNetwork() ?: return@withContext SetupResult.NoWifi
+            val wifi = network ?: wifiNetwork() ?: return@withContext SetupResult.NoWifi
             try {
-                val first = exchange(wifi, SetupRules.serverCommand(serverIp))
+                val first = exchangeWithRetry(wifi, SetupRules.serverCommand(serverIp))
                 if (!first.contains(SetupRules.SERVER_OK)) return@withContext SetupResult.Refused(first)
                 val second = exchange(wifi, SetupRules.wifiCommand(ssid, password))
                 if (!second.contains(SetupRules.WIFI_OK)) return@withContext SetupResult.Refused(second)
@@ -47,6 +51,18 @@ class StripSetup(private val context: Context) {
         return cm.allNetworks.firstOrNull {
             cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
         }
+    }
+
+    /** Right after joining, the strip's network can need a moment before it answers. */
+    private suspend fun exchangeWithRetry(network: Network, line: String): String {
+        repeat(3) {
+            try {
+                return exchange(network, line)
+            } catch (e: IOException) {
+                delay(1_500)
+            }
+        }
+        return exchange(network, line)
     }
 
     /** One line out, one line back, on a fresh connection (the strip expects that). */

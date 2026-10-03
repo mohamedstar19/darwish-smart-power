@@ -4,6 +4,16 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- to find the strip's setup Wi-Fi, which has no internet -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- automatic strip setup: list nearby Wi-Fi to find TONLY_TAP_ networks and join one -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission
+        android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation" />
+    <!-- Android 12 and older only allow listing Wi-Fi networks with location; it is not used for anything else -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="32" />
     <!-- alerts: strip offline, outlet too hot, too much power -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 

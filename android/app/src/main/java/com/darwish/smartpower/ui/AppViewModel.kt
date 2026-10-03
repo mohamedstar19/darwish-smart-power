@@ -10,6 +10,7 @@ import com.darwish.smartpower.data.EnergyReport
 import com.darwish.smartpower.data.Me
 import com.darwish.smartpower.data.Member
 import com.darwish.smartpower.data.Prefs
+import com.darwish.smartpower.data.ScanOutcome
 import com.darwish.smartpower.data.Scene
 import com.darwish.smartpower.data.Schedule
 import com.darwish.smartpower.data.ServerAddress
@@ -18,7 +19,9 @@ import com.darwish.smartpower.data.ServerException
 import com.darwish.smartpower.data.ServerSettings
 import com.darwish.smartpower.data.ServerState
 import com.darwish.smartpower.data.SetupResult
+import com.darwish.smartpower.data.SetupRules
 import com.darwish.smartpower.data.Strip
+import com.darwish.smartpower.data.StripFinder
 import com.darwish.smartpower.data.StripSetup
 import com.darwish.smartpower.data.SwitchOutcome
 import com.darwish.smartpower.notify.AlertNotifier
@@ -374,6 +377,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun provision(serverIp: String, ssid: String, password: String): SetupResult =
         setup.provision(serverIp, ssid, password)
+
+    val stripFinder = StripFinder(app)
+
+    suspend fun scanForStrips(): ScanOutcome = stripFinder.scan()
+
+    /** Joins the strip's own Wi-Fi by itself, sends the setup, then gives the phone back its Wi-Fi. */
+    suspend fun provisionFound(apSsid: String, serverIp: String, ssid: String, password: String): SetupResult {
+        SetupRules.check(serverIp, ssid, password)?.let { return SetupResult.Invalid(it) }
+        // if the person missed Android's "connect?" prompt, ask once more by itself
+        val joined = stripFinder.join(apSsid) ?: stripFinder.join(apSsid) ?: return SetupResult.JoinFailed
+        return try {
+            setup.provision(serverIp, ssid, password, joined.network)
+        } finally {
+            joined.release()
+        }
+    }
 
     /** Best guess for the IP the strip should dial: what the server reports, else the saved host. */
     fun suggestedServerIp(): String =

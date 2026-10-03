@@ -28,6 +28,21 @@ object SetupRules {
         else -> null
     }
 
+    /** A strip in setup mode opens a Wi-Fi called TONLY_TAP_<code>; its password is LGU_<code>. */
+    const val AP_PREFIX = "TONLY_TAP_"
+    private const val AP_PASSWORD_PREFIX = "LGU_"
+
+    fun isStripAp(ssid: String): Boolean = ssid.startsWith(AP_PREFIX) && ssid.length > AP_PREFIX.length
+
+    fun apPassword(ssid: String): String? =
+        if (isStripAp(ssid)) AP_PASSWORD_PREFIX + ssid.removePrefix(AP_PREFIX) else null
+
+    /** The code printed after TONLY_TAP_, shown to tell strips apart. */
+    fun apCode(ssid: String): String = ssid.removePrefix(AP_PREFIX)
+
+    /** The strip only works on 2.4 GHz Wi-Fi. */
+    fun is24GHz(frequencyMhz: Int): Boolean = frequencyMhz in 2400..2500
+
     fun serverCommand(serverIp: String) = "up:ip:${serverIp.trim()}"
     fun wifiCommand(ssid: String, password: String) = "up:connect:$ssid:$password"
     const val SERVER_OK = "ip_ok"
