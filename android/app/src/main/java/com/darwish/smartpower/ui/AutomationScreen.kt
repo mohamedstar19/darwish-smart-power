@@ -157,7 +157,7 @@ fun AutomationScreen(vm: AppViewModel) {
                     onClick = { addMenu = true },
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                     text = { Text(stringResource(R.string.add)) },
-                    containerColor = Glass.Cyan,
+                    containerColor = Glass.Orange,
                     contentColor = Glass.Night,
                 )
                 DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {

@@ -11,20 +11,20 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#111833">
+<meta name="theme-color" content="#1e130d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#070b18;--panel:rgba(255,255,255,.07);--ink:#f3f6ff;--soft:#a9b2cf;--line:rgba(255,255,255,.14);
-  --brand:#4fd1ff;--brand-ink:#03121c;--brand-soft:rgba(79,209,255,.14);--on:#3ee6a0;--on-soft:rgba(62,230,160,.18);
+  --bg:#0d0907;--panel:rgba(255,255,255,.07);--ink:#fff4ec;--soft:#c9b8ac;--line:rgba(255,255,255,.14);
+  --brand:#ff8a4c;--brand-ink:#2a0e00;--brand-soft:rgba(255,138,76,.14);--on:#ff9a5c;--on-soft:rgba(255,138,76,.2);
   --shadow:0 18px 50px -20px rgba(0,0,0,.7);
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth;background:#070b18}
-body{margin:0;background:radial-gradient(1000px 700px at 90% -10%,rgba(35,20,70,.95),transparent 70%),
-  radial-gradient(900px 800px at 0% 100%,rgba(11,51,64,.75),transparent 70%),linear-gradient(180deg,#111833,#070b18 55%);background-attachment:fixed;color:var(--ink);font:16px/1.7 "Cairo",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;overflow-x:hidden}
+html{scroll-behavior:smooth;background:#0d0907}
+body{margin:0;background:radial-gradient(1000px 700px at 90% -10%,rgba(74,32,12,.95),transparent 70%),
+  radial-gradient(900px 800px at 0% 100%,rgba(64,44,10,.7),transparent 70%),linear-gradient(180deg,#1e130d,#0d0907 55%);background-attachment:fixed;color:var(--ink);font:16px/1.7 "Cairo",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;overflow-x:hidden}
 a{color:inherit}
 .wrap{max-width:1100px;margin:auto;padding:0 20px}
 bdi{unicode-bidi:isolate}
@@ -57,10 +57,10 @@ h1 span{color:var(--brand)}
 @media (max-width:860px){.hero .wrap{grid-template-columns:1fr}.hero{padding-top:36px}}
 
 /* phone mockup */
-.phone{justify-self:center;width:290px;border-radius:40px;background:#05070f;padding:12px;box-shadow:var(--shadow);transform:rotate(-2deg)}
+.phone{justify-self:center;width:290px;border-radius:40px;background:#070504;padding:12px;box-shadow:var(--shadow);transform:rotate(-2deg)}
 html[dir="ltr"] .phone{transform:rotate(2deg)}
 .screen{border-radius:30px;background:var(--bg);overflow:hidden;padding:18px 14px 20px;min-height:540px}
-.notch{width:90px;height:22px;background:#05070f;border-radius:0 0 14px 14px;margin:-18px auto 12px}
+.notch{width:90px;height:22px;background:#070504;border-radius:0 0 14px 14px;margin:-18px auto 12px}
 .appbar{font-weight:800;font-size:15px;margin-bottom:12px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:14px}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -115,10 +115,10 @@ code{direction:ltr;unicode-bidi:isolate;background:var(--bg);border:1px solid va
 .device ul{margin:10px 0 0;padding-inline-start:20px;color:var(--soft)}
 @media (max-width:640px){.device{grid-template-columns:1fr;justify-items:center;text-align:center}.device ul{text-align:start}}
 
-.download{background:linear-gradient(135deg,#1ed8a0,#14a9e0 55%,#a78bfa);color:#fff;border-radius:30px;padding:44px 32px;text-align:center}
+.download{background:linear-gradient(135deg,#ff7a3d,#e8590c 55%,#ffb347);color:#fff;border-radius:30px;padding:44px 32px;text-align:center}
 .download h2{color:#fff}
 .download p{opacity:.9;max-width:36em;margin:0 auto 24px}
-.download .btn{background:#fff;color:#0b2a4a;border-color:#fff}
+.download .btn{background:#fff;color:#4a1d08;border-color:#fff}
 .download .req{font-size:14px;opacity:.85;margin-top:16px}
 
 footer{border-top:1px solid var(--line);padding:28px 0;color:var(--soft);font-size:14px}
@@ -223,7 +223,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
       <g fill="var(--soft)"><rect x="71" y="40" width="5" height="12" rx="2"/><rect x="84" y="40" width="5" height="12" rx="2"/>
         <rect x="71" y="90" width="5" height="12" rx="2"/><rect x="84" y="90" width="5" height="12" rx="2"/>
         <rect x="71" y="140" width="5" height="12" rx="2"/><rect x="84" y="140" width="5" height="12" rx="2"/></g>
-      <circle cx="80" cy="186" r="9" fill="#4fd1ff"/>
+      <circle cx="80" cy="186" r="9" fill="#ff8a4c"/>
     </svg>
     <div>
       <div class="kicker" data-i="d_k">الجهاز المدعوم</div>

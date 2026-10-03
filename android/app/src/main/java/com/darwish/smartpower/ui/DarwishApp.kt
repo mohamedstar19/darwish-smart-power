@@ -99,8 +99,8 @@ fun DarwishApp(locked: Boolean, onUnlocked: () -> Unit, vm: AppViewModel = viewM
                                 label = { Text(stringResource(t.label)) },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = Glass.Night,
-                                    indicatorColor = Glass.Cyan,
-                                    selectedTextColor = Glass.Cyan,
+                                    indicatorColor = Glass.Orange,
+                                    selectedTextColor = Glass.Orange,
                                     unselectedIconColor = Glass.TextSoft,
                                     unselectedTextColor = Glass.TextSoft,
                                 ),

@@ -168,7 +168,7 @@ private fun BarChart(report: EnergyReport, modifier: Modifier) {
             val h = ((v / max).toFloat() * (size.height - 6f)).coerceAtLeast(if (v > 0) 4f else 2f)
             val x = i * slot + (slot - barWidth) / 2
             drawRoundRect(
-                brush = if (v > 0) Brush.verticalGradient(listOf(Glass.Cyan, Glass.Purple)) else Brush.linearGradient(listOf(Glass.Stroke, Glass.Stroke)),
+                brush = if (v > 0) Brush.verticalGradient(listOf(Glass.Orange, Glass.Gold)) else Brush.linearGradient(listOf(Glass.Stroke, Glass.Stroke)),
                 topLeft = Offset(x, size.height - h),
                 size = Size(barWidth, h),
                 cornerRadius = CornerRadius(barWidth / 2, barWidth / 2),

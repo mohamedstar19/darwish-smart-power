@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Darwish Smart Power</title>
-<meta name="theme-color" content="#111833">
+<meta name="theme-color" content="#1e130d">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Darwish Power">
@@ -13,14 +13,14 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <style>
-:root{--night:#070b18;--deep:#111833;--violet:#231446;--fill:rgba(255,255,255,.07);--fill2:rgba(255,255,255,.12);--stroke:rgba(255,255,255,.14);
-  --text:#f3f6ff;--soft:#a9b2cf;--faint:#6e7899;--cyan:#4fd1ff;--green:#3ee6a0;--amber:#ffb547;--pink:#ff6b9a;--red:#ff6b6b;--purple:#a78bfa}
+:root{--night:#0d0907;--deep:#1e130d;--violet:#3a1a0c;--fill:rgba(255,255,255,.07);--fill2:rgba(255,255,255,.12);--stroke:rgba(255,255,255,.14);
+  --text:#fff4ec;--soft:#c9b8ac;--faint:#8a7a6f;--cyan:#ff8a4c;--green:#3ee6a0;--amber:#ffb547;--pink:#ff6b9a;--red:#ff6b6b;--purple:#ffb347}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{background:#070b18}
+html{background:#0d0907}
 html,body{margin:0;min-height:100%}
 body{color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
-  background:radial-gradient(900px 600px at 85% -10%,rgba(35,20,70,.95),transparent 70%),
-             radial-gradient(800px 700px at 0% 110%,rgba(11,51,64,.8),transparent 70%),
+  background:radial-gradient(900px 600px at 85% -10%,rgba(74,32,12,.95),transparent 70%),
+             radial-gradient(800px 700px at 0% 110%,rgba(64,44,10,.75),transparent 70%),
              linear-gradient(180deg,var(--deep),var(--night) 60%);background-attachment:fixed;
   padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 bdi{unicode-bidi:isolate}
@@ -37,7 +37,7 @@ header .hello{color:var(--soft);font-size:13px}
 .hero{padding:20px;margin-bottom:16px;position:relative;overflow:hidden}
 .hero .label{color:var(--soft);font-size:13px}
 .hero .big{font-size:46px;font-weight:800;letter-spacing:-1.5px;line-height:1.1;margin:4px 0 2px;
-  background:linear-gradient(90deg,#fff,#bfeeff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  background:linear-gradient(90deg,#fff,#ffd2b8);-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero .big small{font-size:18px;font-weight:600;color:var(--soft);-webkit-text-fill-color:var(--soft)}
 .hero svg{width:100%;height:56px;display:block;margin:6px 0 12px}
 .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
@@ -48,7 +48,7 @@ header .hello{color:var(--soft);font-size:13px}
 .row-title h2{margin:0;font-size:16px}
 .scenes{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 6px;scrollbar-width:none}
 .scene{flex:none;padding:12px 16px;border-radius:18px;display:flex;align-items:center;gap:8px;font-weight:600;border:1px solid var(--stroke);
-  background:linear-gradient(135deg,rgba(79,209,255,.16),rgba(167,139,250,.12))}
+  background:linear-gradient(135deg,rgba(255,138,76,.16),rgba(167,139,250,.12))}
 .scene .e{font-size:20px}
 .strip{padding:16px;margin-bottom:14px}
 .strip.offline{opacity:.6}
@@ -65,20 +65,20 @@ header .hello{color:var(--soft);font-size:13px}
 .pill.warn{color:var(--amber)}
 .actions{display:flex;gap:8px;margin-bottom:12px}
 .btn{flex:1;border:1px solid var(--stroke);background:var(--fill);border-radius:14px;padding:10px;font-weight:600}
-.btn.primary{border:0;background:linear-gradient(135deg,#1ed8a0,#14a9e0);color:#03201a}
+.btn.primary{border:0;background:linear-gradient(135deg,#ff7a3d,#ffb347);color:#2a0e00}
 .btn.small{flex:none;padding:8px 14px}
 .tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 @media(min-width:620px){.tiles{grid-template-columns:repeat(4,1fr)}}
 .tile{position:relative;text-align:start;border:1px solid var(--stroke);background:var(--fill);border-radius:20px;padding:12px;min-height:118px;
   transition:background .25s,border-color .25s,box-shadow .25s}
-.tile.on{background:linear-gradient(135deg,rgba(30,216,160,.28),rgba(20,169,224,.22));border-color:rgba(62,230,160,.6);
-  box-shadow:0 0 22px -6px rgba(62,230,160,.6)}
+.tile.on{background:linear-gradient(135deg,rgba(255,122,61,.38),rgba(255,179,71,.22));border-color:rgba(255,160,100,.7);
+  box-shadow:0 0 22px -6px rgba(255,160,100,.7)}
 .tile .e{font-size:26px;line-height:1}
 .tile .nm{font-weight:700;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile .mt{color:var(--soft);font-size:12px}
 .tile .sw{position:absolute;top:12px;inset-inline-end:12px;width:38px;height:22px;border-radius:999px;background:rgba(255,255,255,.18);transition:background .25s}
 .tile .sw::after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:inset-inline-start .25s}
-.tile.on .sw{background:var(--green)}
+.tile.on .sw{background:linear-gradient(90deg,#ff7a3d,#ffb347)}
 .tile.on .sw::after{inset-inline-start:19px}
 .tile .more{position:absolute;bottom:8px;inset-inline-end:8px;border:0;background:none;color:var(--soft);font-size:18px;padding:4px 8px}
 .tile .tm{color:var(--amber);font-size:11px;font-weight:600}
@@ -90,7 +90,7 @@ input{width:100%;font:inherit;color:var(--text);background:rgba(255,255,255,.06)
 input:focus{border-color:var(--cyan)}
 .err{color:var(--red);min-height:1.4em;font-size:13px}
 .toast{position:fixed;inset-inline:16px;bottom:calc(18px + env(safe-area-inset-bottom));margin:auto;max-width:420px;padding:12px 16px;border-radius:16px;
-  background:rgba(17,24,51,.95);border:1px solid var(--stroke);text-align:center;transform:translateY(20px);opacity:0;visibility:hidden;
+  background:rgba(30,19,13,.95);border:1px solid var(--stroke);text-align:center;transform:translateY(20px);opacity:0;visibility:hidden;
   transition:transform .25s,opacity .25s,visibility .25s;z-index:9}
 .toast.show{transform:none;opacity:1;visibility:visible}
 .install{display:none}
@@ -174,8 +174,8 @@ function spark(hours) {
   const pts = v.map((x, i) => [i * w / (v.length - 1), h - 6 - (x / max) * (h - 12)]);
   const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#4fd1ff" stop-opacity=".45"/><stop offset="1" stop-color="#4fd1ff" stop-opacity="0"/></linearGradient></defs>
-    <path d="${d} L${w} ${h} L0 ${h} Z" fill="url(#sg)"/><path d="${d}" fill="none" stroke="#4fd1ff" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
+    <stop offset="0" stop-color="#ff8a4c" stop-opacity=".45"/><stop offset="1" stop-color="#ff8a4c" stop-opacity="0"/></linearGradient></defs>
+    <path d="${d} L${w} ${h} L0 ${h} Z" fill="url(#sg)"/><path d="${d}" fill="none" stroke="#ff8a4c" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
 }
 
 function credit() { const c = document.querySelector("[data-credit]"); if (c) c.textContent = lang === "ar" ? "تطوير" : "Developed by"; }

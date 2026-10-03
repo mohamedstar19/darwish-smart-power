@@ -105,7 +105,7 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit, onSetup: () -> Unit, on
                         color = Glass.Amber, fill = Glass.Amber.copy(alpha = 0.12f))
                 }
                 if (!state.me.canControl) item {
-                    GlassPill("👁 " + stringResource(R.string.role_view_long), color = Glass.Cyan, fill = Glass.Cyan.copy(alpha = 0.12f))
+                    GlassPill("👁 " + stringResource(R.string.role_view_long), color = Glass.Orange, fill = Glass.Orange.copy(alpha = 0.12f))
                 }
                 item { Hero(state) }
                 val scenes = server?.scenes.orEmpty()
@@ -188,7 +188,7 @@ private fun Hero(state: UiState) {
         Text(stringResource(R.string.using_now), color = Glass.TextSoft, style = MaterialTheme.typography.bodyMedium)
         Text(
             watts(shown.toDouble()),
-            style = MaterialTheme.typography.displaySmall.copy(brush = Brush.linearGradient(listOf(Color.White, Glass.Cyan))),
+            style = MaterialTheme.typography.displaySmall.copy(brush = Brush.linearGradient(listOf(Color.White, Glass.Orange))),
         )
         Spacer(Modifier.height(8.dp))
         Sparkline(server.todayHours, Modifier.fillMaxWidth().height(56.dp))
@@ -233,10 +233,10 @@ fun Sparkline(values: List<Double>, modifier: Modifier = Modifier) {
             lineTo(0f, size.height)
             close()
         }
-        drawPath(area, Brush.verticalGradient(listOf(Glass.Cyan.copy(alpha = 0.35f), Color.Transparent)))
-        drawPath(line, Glass.Cyan, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+        drawPath(area, Brush.verticalGradient(listOf(Glass.Orange.copy(alpha = 0.35f), Color.Transparent)))
+        drawPath(line, Glass.Orange, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
         val last = data.indexOfLast { it > 0 }
-        if (last >= 0) drawCircle(Glass.Cyan, 4.dp.toPx(), Offset(last * step, y(data[last])))
+        if (last >= 0) drawCircle(Glass.Orange, 4.dp.toPx(), Offset(last * step, y(data[last])))
     }
 }
 
@@ -250,7 +250,7 @@ private fun ScenesRow(scenes: List<Scene>, onRun: (Scene) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         items(scenes, key = { it.id }) { scene ->
             GlassCard(
-                fill = Brush.linearGradient(listOf(Glass.Cyan.copy(alpha = 0.18f), Glass.Purple.copy(alpha = 0.14f))),
+                fill = Brush.linearGradient(listOf(Glass.Orange.copy(alpha = 0.18f), Glass.Gold.copy(alpha = 0.14f))),
                 shape = RoundedCornerShape(18.dp),
                 padding = 14.dp,
                 onClick = { onRun(scene) },
@@ -272,8 +272,8 @@ private fun FavoriteChip(strip: Strip, outlet: Outlet, busy: Boolean, onToggle: 
         modifier = Modifier.width(132.dp).alpha(if (strip.online) 1f else 0.6f),
         shape = Glass.Tile,
         padding = 12.dp,
-        fill = if (outlet.on) Glass.OnGlow.let { Brush.linearGradient(listOf(Glass.Green.copy(alpha = 0.3f), Glass.Cyan.copy(alpha = 0.22f))) } else null,
-        glow = if (outlet.on) Brush.linearGradient(listOf(Glass.Green, Glass.Cyan)) else null,
+        fill = if (outlet.on) Brush.linearGradient(listOf(Glass.Orange.copy(alpha = 0.38f), Glass.Gold.copy(alpha = 0.22f))) else null,
+        glow = if (outlet.on) Brush.linearGradient(listOf(Glass.Gold, Glass.Orange)) else null,
         onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onToggle() },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -374,13 +374,13 @@ private fun OutletTile(
 ) {
     val haptic = LocalHapticFeedback.current
     val knob by animateFloatAsState(if (outlet.on) 1f else 0f, label = "knob")
-    val track by animateColorAsState(if (outlet.on) Glass.Green else Color(0x33FFFFFF), label = "track")
+    val track by animateColorAsState(if (outlet.on) Glass.Orange else Color(0x33FFFFFF), label = "track")
     GlassCard(
         modifier = modifier,
         shape = Glass.Tile,
         padding = 12.dp,
-        fill = if (outlet.on) Brush.linearGradient(listOf(Glass.Green.copy(alpha = 0.28f), Glass.Cyan.copy(alpha = 0.2f))) else null,
-        glow = if (outlet.on) Brush.linearGradient(listOf(Glass.Green.copy(alpha = 0.9f), Glass.Cyan.copy(alpha = 0.6f))) else null,
+        fill = if (outlet.on) Brush.linearGradient(listOf(Glass.Orange.copy(alpha = 0.38f), Glass.Gold.copy(alpha = 0.22f))) else null,
+        glow = if (outlet.on) Brush.linearGradient(listOf(Glass.Gold.copy(alpha = 0.8f), Glass.Orange.copy(alpha = 0.9f))) else null,
         onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onToggle() },
         onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onMenu() },
     ) {

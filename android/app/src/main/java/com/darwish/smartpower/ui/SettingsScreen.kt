@@ -210,7 +210,7 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.developed_by) + " ", color = Glass.TextFaint, style = MaterialTheme.typography.labelMedium)
                 TextButton(onClick = { uri.openUri(OFFICIAL_SITE) }) {
-                    Text("Darwish Tech · darwish-tech.com", color = Glass.Cyan, fontWeight = FontWeight.Bold,
+                    Text("Darwish Tech · darwish-tech.com", color = Glass.Orange, fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
                 }
             }

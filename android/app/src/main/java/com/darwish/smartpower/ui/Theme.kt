@@ -30,31 +30,30 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** The "dark glass" look: a deep gradient with translucent cards and glowing accents. */
+/** The "dark glass" look: a deep warm gradient with translucent cards and orange and gold accents. */
 @Immutable
 object Glass {
-    val Night = Color(0xFF070B18)
-    val Deep = Color(0xFF111833)
-    val Violet = Color(0xFF231446)
-    val Teal = Color(0xFF0B3340)
+    val Night = Color(0xFF0D0907)
+    val Deep = Color(0xFF1E130D)
+    val Ember = Color(0xFF3A1A0C)
+    val Umber = Color(0xFF2A1F08)
 
     val Fill = Color(0x14FFFFFF)          // 8% white
     val FillStrong = Color(0x24FFFFFF)    // 14% white
     val Stroke = Color(0x26FFFFFF)        // 15% white
 
-    val Text = Color(0xFFF3F6FF)
-    val TextSoft = Color(0xFFA9B2CF)
-    val TextFaint = Color(0xFF6E7899)
+    val Text = Color(0xFFFFF4EC)
+    val TextSoft = Color(0xFFC9B8AC)
+    val TextFaint = Color(0xFF8A7A6F)
 
-    val Cyan = Color(0xFF4FD1FF)
+    val Orange = Color(0xFFFF7A3D)
+    val Gold = Color(0xFFFFB347)
     val Green = Color(0xFF3EE6A0)
-    val Amber = Color(0xFFFFB547)
+    val Amber = Color(0xFFFFC857)
     val Pink = Color(0xFFFF6B9A)
     val Red = Color(0xFFFF6B6B)
-    val Purple = Color(0xFFA78BFA)
 
-    val OnGlow = Brush.linearGradient(listOf(Color(0xFF1ED8A0), Color(0xFF14A9E0)))
-    val Accent = Brush.linearGradient(listOf(Cyan, Purple))
+    val Accent = Brush.linearGradient(listOf(Orange, Gold))
     val Warm = Brush.linearGradient(listOf(Amber, Pink))
 
     val Card = RoundedCornerShape(24.dp)
@@ -63,24 +62,24 @@ object Glass {
 }
 
 private val Scheme = darkColorScheme(
-    primary = Glass.Cyan,
-    onPrimary = Color(0xFF00222E),
-    primaryContainer = Color(0xFF103A4D),
+    primary = Glass.Orange,
+    onPrimary = Color(0xFF2A0E00),
+    primaryContainer = Color(0xFF4A2010),
     onPrimaryContainer = Glass.Text,
-    secondary = Glass.Green,
-    onSecondary = Color(0xFF00281A),
-    secondaryContainer = Color(0xFF0E3B2E),
+    secondary = Glass.Gold,
+    onSecondary = Color(0xFF2A1A00),
+    secondaryContainer = Color(0xFF3D2A0E),
     onSecondaryContainer = Glass.Text,
-    tertiary = Glass.Amber,
+    tertiary = Glass.Green,
     background = Glass.Night,
     onBackground = Glass.Text,
     surface = Glass.Deep,
     onSurface = Glass.Text,
-    surfaceVariant = Color(0xFF1C2445),
+    surfaceVariant = Color(0xFF2E1F17),
     onSurfaceVariant = Glass.TextSoft,
-    surfaceContainerHigh = Color(0xFF1A2142),
-    surfaceContainer = Color(0xFF151C3A),
-    surfaceContainerLow = Color(0xFF121834),
+    surfaceContainerHigh = Color(0xFF2A1B13),
+    surfaceContainer = Color(0xFF231710),
+    surfaceContainerLow = Color(0xFF1C120C),
     outline = Glass.Stroke,
     outlineVariant = Color(0x1AFFFFFF),
     error = Glass.Red,
@@ -109,10 +108,10 @@ fun GlassBackground(modifier: Modifier = Modifier, content: @Composable BoxScope
         modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(Glass.Deep, Glass.Night, Glass.Night)))
-            .background(Brush.radialGradient(listOf(Glass.Violet.copy(alpha = 0.85f), Color.Transparent), radius = 900f))
+            .background(Brush.radialGradient(listOf(Glass.Ember.copy(alpha = 0.9f), Color.Transparent), radius = 900f))
             .background(
                 Brush.radialGradient(
-                    listOf(Glass.Teal.copy(alpha = 0.7f), Color.Transparent),
+                    listOf(Glass.Umber.copy(alpha = 0.8f), Color.Transparent),
                     center = androidx.compose.ui.geometry.Offset(1400f, 2200f),
                     radius = 1100f,
                 )

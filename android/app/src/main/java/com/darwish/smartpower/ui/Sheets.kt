@@ -81,8 +81,8 @@ fun OutletSheet(vm: AppViewModel, strip: Strip, outlet: Outlet, onClose: () -> U
                         Modifier
                             .width(68.dp)
                             .clip(RoundedCornerShape(16.dp))
-                            .background(if (selected) Glass.Cyan.copy(alpha = 0.22f) else Glass.Fill)
-                            .border(1.dp, if (selected) Glass.Cyan else Glass.Stroke, RoundedCornerShape(16.dp))
+                            .background(if (selected) Glass.Orange.copy(alpha = 0.22f) else Glass.Fill)
+                            .border(1.dp, if (selected) Glass.Orange else Glass.Stroke, RoundedCornerShape(16.dp))
                             .clickable { vm.setOutletLook(strip.id, outlet.index, icon = icon.key) }
                             .padding(vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
