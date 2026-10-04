@@ -191,3 +191,23 @@ Developed by Darwish Tech · darwish-tech.com
 ## التحديثات بعد كده
 
 أي `git push` على main ← GitHub Actions يبني `.aab` جديد برقم أعلى ← نزّله من صفحة الإصدار ← ارفعه في Release جديد.
+
+## الرفع التلقائي من GitHub
+
+بعد ما أول نسخة تترفع بإيدك، كل `git push` على main بيرفع نسخة جديدة على Google Play لوحده:
+
+1. https://console.cloud.google.com ← اعمل مشروع (مثلاً `darwish-play`).
+2. APIs & Services ← Library ← فعّل **Google Play Android Developer API**.
+3. IAM & Admin ← Service Accounts ← **Create service account** (اسمه مثلاً `github-play`) ← Done، من غير أي Role.
+4. افتحه ← Keys ← Add key ← Create new key ← **JSON**. هينزل ملف؛ احفظه ومتبعتهوش لحد.
+5. Play Console ← **Users and permissions** ← Invite new users ← اكتب إيميل الـ Service Account
+   (`...@...iam.gserviceaccount.com`) ← App permissions ← اختار Darwish Smart Power ←
+   فعّل **Release apps to testing tracks** (وبعد الـ Production كمان **Release to production**) ← Invite.
+6. GitHub ← الريبو ← Settings ← Secrets and variables ← Actions ← New repository secret:
+   - Name: `PLAY_SERVICE_ACCOUNT_JSON`
+   - Secret: محتوى ملف الـ JSON كله
+7. (اختياري) نفس الصفحة ← تبويب **Variables**:
+   - `PLAY_TRACK`: `alpha` للاختبار المغلق (الافتراضي)، `internal` للاختبار الداخلي، `production` بعد الموافقة.
+   - `PLAY_STATUS`: `completed` (الافتراضي). لو ظهر خطأ "Only releases with status draft may be created on draft app" خليه `draft`.
+
+ملاحظات الإصدار بتتاخد من `store/whatsnew/whatsnew-ar` و `store/whatsnew/whatsnew-en-US`.
