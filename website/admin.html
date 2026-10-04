@@ -76,6 +76,9 @@ tr:last-child td{border-bottom:0}
 .btn.primary{border:0;background:linear-gradient(135deg,#ff7a3d,#ffb347);color:#2a0e00}
 .btn.danger{color:var(--bad)}
 .switch{display:flex;align-items:center;gap:10px}
+.resform{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.resform input{flex:1 1 180px;background:rgba(0,0,0,.3);border:1px solid var(--stroke);border-radius:10px;padding:8px 10px;color:var(--text);font:inherit}
+.resform select{flex:1 1 180px;max-width:none}
 select{background:rgba(0,0,0,.3);border:1px solid var(--stroke);border-radius:10px;padding:6px 8px;color:var(--text);font:inherit;max-width:220px}
 .switch input{width:40px;height:22px;accent-color:var(--brand)}
 
@@ -113,6 +116,9 @@ const L = {
        joined: "سجّل", noCustomers: "لسه مفيش عملاء سجلوا.",
        stripTitle: "المشتركات", stripNote: "اختار العميل من القايمة عشان تربط المشترك بحسابه، مثلاً لعميل معاه آيفون جهّزتله المشترك بنفسك.", strip: "المشترك", owner: "العميل", state: "الحالة", address: "العنوان", online: "أونلاين",
        offline: "أوفلاين", noStrips: "مفيش مشتركات لسه.", nobody: "—",
+       resTitle: "احجز مشترك لعميل", resNote: "لعميل بعيد (مثلاً معاه آيفون أو برّه مصر): جهّز المشترك عندك بواي فاي بيت العميل، واكتب هنا الكود اللي بعد TONLY_TAP_. أول ما المشترك يتصل من بيت العميل، هيروح لحسابه لوحده.",
+       resCode: "الكود (اللي بعد TONLY_TAP_)", resPick: "اختار العميل", resBtn: "احجز", resWaiting: "مستني يتصل", daysLeft: "يوم باقي",
+       cancel: "إلغاء", resNone: "مفيش مشتركات محجوزة.", resNoCustomers: "لازم العميل يعمل حساب الأول.",
        signupTitle: "تسجيل عملاء جداد", signupNote: "لو قفلته، محدش يقدر يعمل حساب جديد من التطبيق.", signupOn: "مفتوح",
        done: "تم", fail: "فشل: ", never: "ولا مرة", now: "دلوقتي", min: "د", hour: "س", dayU: "ي", ago: "من",
        credit: "تطوير"},
@@ -130,6 +136,9 @@ const L = {
        joined: "Joined", noCustomers: "No customers have signed up yet.",
        stripTitle: "Strips", stripNote: "Pick a customer to link the strip to their account, e.g. for an iPhone customer whose strip you set up yourself.", strip: "Strip", owner: "Customer", state: "State", address: "Address", online: "online",
        offline: "offline", noStrips: "No strips yet.", nobody: "—",
+       resTitle: "Reserve a strip for a customer", resNote: "For a far-away customer (an iPhone user, or abroad): set the strip up here with the customer's home Wi-Fi and enter the code after TONLY_TAP_. As soon as it connects from the customer's home, it goes to their account by itself.",
+       resCode: "Code (after TONLY_TAP_)", resPick: "Choose the customer", resBtn: "Reserve", resWaiting: "waiting to connect", daysLeft: "days left",
+       cancel: "Cancel", resNone: "No reserved strips.", resNoCustomers: "The customer has to create an account first.",
        signupTitle: "New customer sign-ups", signupNote: "When closed, nobody can create a new account in the app.", signupOn: "Open",
        done: "Done", fail: "Failed: ", never: "never", now: "just now", min: "m", hour: "h", dayU: "d", ago: "ago",
        credit: "Developed by"}
@@ -247,12 +256,30 @@ function render() {
         <td class="muted">${x.online ? t("now") : ago(x.last_seen)}</td><td class="muted"><bdi>${esc(x.address || t("nobody"))}</bdi></td></tr>`).join("") + `</table></div>`
       : `<div class="empty">${t("noStrips")}</div>`) + `</section>`;
 
+  html += `<section class="card glass"><h2>📦 ${t("resTitle")}</h2><p class="note">${t("resNote")}</p>` +
+    (d.customers.length ? `<form id="resf" class="resform"><input id="rescode" placeholder="${t("resCode")}" dir="ltr" autocomplete="off" required>
+        <select id="rescust" required><option value="">${t("resPick")}</option>
+        ${d.customers.map(c => `<option value="${esc(c.id)}">${esc(c.name)} · ${esc(c.login)}</option>`).join("")}</select>
+        <button class="btn primary" type="submit">${t("resBtn")}</button></form>` : `<div class="empty">${t("resNoCustomers")}</div>`) +
+    (d.reservations.length ? d.reservations.map(r => `<div class="row"><div class="grow"><b><bdi dir="ltr">TONLY_TAP_${esc(r.code)}</bdi></b>
+        <div class="muted" style="font-size:12px">${esc(r.customer)} · ${t("resWaiting")} · ${fmt(r.days_left)} ${t("daysLeft")}</div></div>
+        <button class="btn" data-unreserve="${esc(r.code)}">${t("cancel")}</button></div>`).join("") : "") + `</section>`;
+
   html += `<section class="card glass"><h2>${t("signupTitle")}</h2><p class="note">${t("signupNote")}</p>
     <label class="switch"><input type="checkbox" id="signup" ${d.signup ? "checked" : ""}> ${t("signupOn")}</label></section>`;
 
   document.getElementById("root").innerHTML = html;
   document.getElementById("lang").onclick = () => { lang = lang === "ar" ? "en" : "ar"; save("dsp-lang", lang); render(); };
   document.getElementById("logout").onclick = () => { save("dsp-token", null); token = ""; clearInterval(timer); renderLogin(); };
+  const resf = document.getElementById("resf");
+  if (resf) resf.onsubmit = async e => {
+    e.preventDefault();
+    try {
+      await api("/api/strips/reserve", {code: document.getElementById("rescode").value, customer: document.getElementById("rescust").value});
+      toast(t("done"));
+    } catch (err) { toast(t("fail") + err.message); }
+    refresh();
+  };
   document.getElementById("signup").onchange = async e => {
     try { await api("/api/settings", {signup: e.target.checked}); toast(t("done")); } catch (err) { toast(t("fail") + err.message); }
     refresh();
@@ -277,6 +304,11 @@ document.addEventListener("change", async ev => {
 });
 
 document.addEventListener("click", async ev => {
+  const un = ev.target.closest("[data-unreserve]");
+  if (un) {
+    try { await api("/api/strips/unreserve", {code: un.dataset.unreserve}); toast(t("done")); } catch (e) { toast(t("fail") + e.message); }
+    refresh(); return;
+  }
   const ap = ev.target.closest("[data-approve]"), bl = ev.target.closest("[data-block]");
   if (!ap && !bl) return;
   if (bl && !confirm(t("blockAsk"))) return;
@@ -297,7 +329,7 @@ async function refresh() {
 }
 function start() {
   refresh(); clearInterval(timer);
-  timer = setInterval(() => { if (!document.hidden && !(document.activeElement && document.activeElement.tagName === "SELECT")) refresh(); }, 15000);
+  timer = setInterval(() => { if (!document.hidden && !(document.activeElement && ["SELECT", "INPUT"].includes(document.activeElement.tagName))) refresh(); }, 15000);
 }
 token ? start() : renderLogin();
 </script>

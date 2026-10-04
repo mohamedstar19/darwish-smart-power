@@ -64,6 +64,7 @@ MAX_UNKNOWN_STRIPS = 64                  # never-named strips kept in memory bef
 MAX_STRIKES = 3                          # misbehaving connections (10 minutes) before a block
 BLOCK_SECONDS = 3600
 EXPECT_SECONDS = 1800                    # a strip announced by the app is approved if it connects this soon
+RESERVE_DAYS = 60                        # a strip the owner reserved for a customer (e.g. set up before shipping)
 LOGIN_FAILS = 10                         # different wrong passwords from one address (5 minutes) before a block
 LOGIN_BLOCK_SECONDS = 900
 ICONS = ("plug", "kettle", "router", "tv", "ac", "lamp", "heater", "fan", "fridge",
@@ -253,9 +254,9 @@ class Store:
             user["strips"] = sorted((user.get("strips") or []) + [mac])
         self.save()
 
-    def expect(self, code: str, by: str, now: float) -> None:
+    def expect(self, code: str, by: str, now: float, seconds: float = EXPECT_SECONDS) -> None:
         self.expected = {c: e for c, e in self.expected.items() if e.get("until", 0) > now}
-        self.expected[code] = {"by": by, "until": now + EXPECT_SECONDS}
+        self.expected[code] = {"by": by, "until": now + seconds}
         self.save()
 
     def claim_expected(self, macs: List[str], now: float) -> Optional[str]:
@@ -484,7 +485,7 @@ def password_ok(stored: str, password: str) -> bool:
     except (ValueError, AttributeError):
         return False
 OWNER_ONLY = ("/api/users", "/api/settings", "/api/lock", "/api/strips/approve", "/api/strips/remove", "/api/strips/assign",
-              "/api/admin")
+              "/api/strips/reserve", "/api/strips/unreserve", "/api/admin")
 
 
 def may_see(who: Dict[str, Any], mac: str) -> bool:
@@ -956,7 +957,8 @@ class Hub:
                 log("[strip] %s approved (%s)" % (self.label(strip),
                                                   "set up from the app" if by is not None else "home network"))
             else:
-                log("[strip] %s waits for the owner's approval" % self.label(strip))
+                log("[strip] %s waits for the owner's approval (MACs %s %s)"
+                    % (self.label(strip), strip.mac, boot.get("mac2", "")))
         return strip
 
     def detach(self, link: StripLink) -> None:
@@ -1212,6 +1214,11 @@ class Hub:
             "new_strips": [{"id": x.mac, "address": x.address, "online": x.online}
                            for x in self.strips.values() if not store.is_approved(x.mac)],
             "signup": bool(store.settings.get("signup", True)),
+            "reservations": sorted(({
+                "code": code, "customer": next((u["name"] for u in customers if u["id"] == e.get("by")), "?"),
+                "days_left": max(0, int((e.get("until", 0) - now) // 86400)),
+            } for code, e in store.expected.items()
+                if e.get("until", 0) > now and any(u["id"] == e.get("by") for u in customers)), key=lambda x: x["code"]),
         }
 
     def check_user_fields(self, req: Dict[str, Any], user: Dict[str, Any]) -> Optional[Tuple[int, Dict[str, Any]]]:
@@ -1317,6 +1324,30 @@ class Hub:
             return 404, {"error": "unknown strip"}
         self.store.approve(mac)
         log("[strip] %s approved by the owner" % mac[-6:])
+        return 200, {"ok": True}
+
+    async def reserve_strip(self, code: Any, customer_id: Any) -> Tuple[int, Dict[str, Any]]:
+        """The owner sets a strip up for a far-away customer (e.g. before shipping it): whenever a strip whose
+        MAC ends in [code] connects within RESERVE_DAYS, it is approved and given to that customer."""
+        code = re.sub(r"[^0-9A-Fa-f]", "", str(code or "").upper().replace("TONLY_TAP_", ""))
+        if not 4 <= len(code) <= 12:
+            return 400, {"error": "enter the letters/digits after TONLY_TAP_ (or the strip's MAC)"}
+        customer = next((u for u in self.store.users if u["id"] == customer_id and u.get("role") == CUSTOMER), None)
+        if customer is None:
+            return 404, {"error": "unknown customer"}
+        connected = next((x for x in self.strips.values() if x.mac.endswith(code)), None)
+        if connected is not None:                    # it is already here: approve and hand it over now
+            self.store.approve(connected.mac)
+            return await self.assign_strip(connected.mac, customer["id"])
+        self.store.expect(code, customer["id"], time.time(), RESERVE_DAYS * 86400)
+        log("[strip] code %s reserved for customer %s" % (code, customer["id"]))
+        return 200, {"ok": True, "waiting": True}
+
+    async def unreserve_strip(self, code: Any) -> Tuple[int, Dict[str, Any]]:
+        code = str(code or "").upper()
+        if self.store.expected.pop(code, None) is None:
+            return 404, {"error": "no such reservation"}
+        self.store.save()
         return 200, {"ok": True}
 
     async def assign_strip(self, strip_id: Any, customer_id: Any) -> Tuple[int, Dict[str, Any]]:
@@ -1989,6 +2020,10 @@ class WebHandler(BaseHTTPRequestHandler):
             elif path == "/api/strips/remove":
                 block = bool(req.get("block")) and who["role"] == "owner"
                 code, body = self.server.run_on_loop(hub.remove_strip(strip_id, block))
+            elif path == "/api/strips/reserve":
+                code, body = self.server.run_on_loop(hub.reserve_strip(req.get("code"), str(req.get("customer") or "")))
+            elif path == "/api/strips/unreserve":
+                code, body = self.server.run_on_loop(hub.unreserve_strip(req.get("code")))
             elif path == "/api/strips/assign":
                 code, body = self.server.run_on_loop(hub.assign_strip(strip_id, str(req.get("customer") or "")))
             elif path == "/api/logout":
@@ -2679,6 +2714,16 @@ async def selftest() -> None:
     status, _ = await loop.run_in_executor(None, http, "/api/strips/assign", {"strip": "A1B2C3D4E5F6", "customer": report["customers"][0]["id"]})
     assert status == 200 and "A1B2C3D4E5F6" in [x["id"] for x in (await loop.run_in_executor(None, http, "/api/state", None, ali))[1]["strips"]]
     assert (await loop.run_in_executor(None, http, "/api/strips/assign", {"strip": "A1B2C3D4E5F6", "customer": ""}))[0] == 200
+    # a strip reserved for the customer before it was ever plugged in goes to them when it connects, from anywhere
+    cust_id = report["customers"][0]["id"]
+    status, _ = await loop.run_in_executor(None, http, "/api/strips/reserve", {"code": "TONLY_TAP_77AB12", "customer": cust_id})
+    assert status == 200 and any(r["code"] == "77AB12" for r in (await hub.admin_report())["reservations"])
+    assert hub.attach(Remote("73.10.20.30"), {"mac": "C0FFEE77AB12", "mac2": "", "model": "lgutap", "fw": "x"}) is not None
+    assert "C0FFEE77AB12" in [x["id"] for x in (await loop.run_in_executor(None, http, "/api/state", None, ali))[1]["strips"]]
+    assert (await loop.run_in_executor(None, http, "/api/strips/reserve", {"code": "zz", "customer": cust_id}))[0] == 400
+    assert (await loop.run_in_executor(None, http, "/api/strips/reserve", {"code": "ABCDEF", "customer": cust_id}))[0] == 200
+    assert (await loop.run_in_executor(None, http, "/api/strips/unreserve", {"code": "ABCDEF"}))[0] == 200
+    assert not (await hub.admin_report())["reservations"]
     assert (await loop.run_in_executor(None, post, "/api/strips/assign", {"strip": "A1B2C3D4E5F6", "customer": ""}, ali))[0] == 403
     before = report["totals"]["downloads"]
     hub.store.count_download("41.33.1.1", time.time())
