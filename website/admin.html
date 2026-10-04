@@ -93,7 +93,31 @@ select{background:rgba(0,0,0,.3);border:1px solid var(--stroke);border-radius:10
 .toast.show{opacity:1}
 .credit{text-align:center;color:var(--faint);font-size:12px;padding:18px}
 .credit a{color:var(--brand);text-decoration:none}
+.hbtns{display:flex;gap:8px;flex-wrap:wrap}
+.resbox summary{list-style:none;display:inline-block;margin:2px 0 8px}
+.resbox summary::-webkit-details-marker{display:none}
+.resbox[open] summary{margin-bottom:10px}
 @media (max-width:520px){.tile .v{font-size:26px}}
+@media (max-width:640px){
+  header{flex-wrap:wrap}
+  header .t{flex:1 1 auto}
+  .hbtns{width:100%}
+  .hbtns .pill-btn{flex:1;text-align:center}
+  .tiles{grid-template-columns:1fr 1fr}
+  section.card{padding:14px}
+  /* tables become one small card per row */
+  .rtable,.rtable tbody,.rtable tr,.rtable td{display:block;width:100%}
+  .rtable tr:first-child{display:none}
+  .rtable tr{border:1px solid var(--line);border-radius:14px;padding:8px 12px;margin-top:8px}
+  .rtable td{border:0;padding:4px 0;white-space:normal;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .rtable td.head{display:block;padding-bottom:6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+  .rtable td[data-l]::before{content:attr(data-l);color:var(--faint);font-size:12px;flex:none}
+  .rtable select{max-width:62%}
+  .scroll{overflow:visible;margin:0}
+  .resform{flex-direction:column}
+  .resform input,.resform select,.resform .btn{flex:none;width:100%}
+  .row{flex-wrap:wrap}
+}
 </style>
 </head>
 <body>
@@ -116,7 +140,7 @@ const L = {
        joined: "سجّل", noCustomers: "لسه مفيش عملاء سجلوا.",
        stripTitle: "المشتركات", stripNote: "اختار العميل من القايمة عشان تربط المشترك بحسابه، مثلاً لعميل معاه آيفون جهّزتله المشترك بنفسك.", strip: "المشترك", owner: "العميل", state: "الحالة", address: "العنوان", online: "أونلاين",
        offline: "أوفلاين", noStrips: "مفيش مشتركات لسه.", nobody: "—",
-       resTitle: "احجز مشترك لعميل", resNote: "لعميل بعيد (مثلاً معاه آيفون أو برّه مصر): جهّز المشترك عندك بواي فاي بيت العميل، واكتب هنا الكود اللي بعد TONLY_TAP_. أول ما المشترك يتصل من بيت العميل، هيروح لحسابه لوحده.",
+       resTitle: "احجز مشترك لعميل", resNote: "لعميل بعيد: جهّز المشترك بواي فاي بيته واكتب الكود، وأول ما يتصل هيروح لحسابه.", resAdd: "＋ احجز مشترك",
        resCode: "الكود (اللي بعد TONLY_TAP_)", resPick: "اختار العميل", resBtn: "احجز", resWaiting: "مستني يتصل", daysLeft: "يوم باقي",
        cancel: "إلغاء", resNone: "مفيش مشتركات محجوزة.", resNoCustomers: "لازم العميل يعمل حساب الأول.",
        signupTitle: "تسجيل عملاء جداد", signupNote: "لو قفلته، محدش يقدر يعمل حساب جديد من التطبيق.", signupOn: "مفتوح",
@@ -136,7 +160,7 @@ const L = {
        joined: "Joined", noCustomers: "No customers have signed up yet.",
        stripTitle: "Strips", stripNote: "Pick a customer to link the strip to their account, e.g. for an iPhone customer whose strip you set up yourself.", strip: "Strip", owner: "Customer", state: "State", address: "Address", online: "online",
        offline: "offline", noStrips: "No strips yet.", nobody: "—",
-       resTitle: "Reserve a strip for a customer", resNote: "For a far-away customer (an iPhone user, or abroad): set the strip up here with the customer's home Wi-Fi and enter the code after TONLY_TAP_. As soon as it connects from the customer's home, it goes to their account by itself.",
+       resTitle: "Reserve a strip for a customer", resNote: "For a far-away customer: set the strip up with their home Wi-Fi and enter its code; it goes to their account when it connects.", resAdd: "＋ Reserve a strip",
        resCode: "Code (after TONLY_TAP_)", resPick: "Choose the customer", resBtn: "Reserve", resWaiting: "waiting to connect", daysLeft: "days left",
        cancel: "Cancel", resNone: "No reserved strips.", resNoCustomers: "The customer has to create an account first.",
        signupTitle: "New customer sign-ups", signupNote: "When closed, nobody can create a new account in the app.", signupOn: "Open",
@@ -146,7 +170,7 @@ const L = {
 let lang = (() => { try { return localStorage.getItem("dsp-lang") } catch (e) { return null } })() ||
            ((navigator.language || "").startsWith("ar") ? "ar" : "en");
 let token = (() => { try { return localStorage.getItem("dsp-token") || "" } catch (e) { return "" } })();
-let data = null, timer = null;
+let data = null, timer = null, resOpen = false;
 const t = k => (L[lang] || L.ar)[k] || k;
 const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const fmt = n => Number(n || 0).toLocaleString(lang === "ar" ? "ar-EG" : "en-US");
@@ -214,8 +238,8 @@ function render() {
   const d = data, T = d.totals;
   const tile = (k, v, s, cls = "") => `<div class="tile glass ${cls}"><div class="k">${k}</div><div class="v"><bdi>${v}</bdi></div><div class="s">${s}</div></div>`;
   let html = `<header><img src="/icons/icon-192.png" alt=""><div class="t"><h1>${t("title")}</h1><div class="sub"><bdi>${t("sub")}</bdi></div></div>
-    <a class="pill-btn" href="/panel" style="text-decoration:none;color:inherit">${t("panel")}</a>
-    <button class="pill-btn" id="lang">${t("lang")}</button><button class="pill-btn" id="logout">${t("logout")}</button></header>
+    <div class="hbtns"><a class="pill-btn" href="/panel" style="text-decoration:none;color:inherit">${t("panel")}</a>
+    <button class="pill-btn" id="lang">${t("lang")}</button><button class="pill-btn" id="logout">${t("logout")}</button></div></header>
     <div class="tiles">
       ${tile(t("downloads"), fmt(T.downloads), `${fmt(T.downloads_today)} ${t("today")} · ${fmt(T.downloads_7d)} ${t("week")}`)}
       ${tile(t("customers"), fmt(T.customers), `${fmt(T.new_customers_7d)} ${t("newWeek")}`)}
@@ -239,29 +263,31 @@ function render() {
   }
 
   html += `<section class="card glass"><h2>${t("custTitle")} (${fmt(d.customers.length)})</h2>` +
-    (d.customers.length ? `<div class="scroll"><table><tr><th>${t("name")}</th><th>${t("account")}</th><th>${t("stripsCol")}</th>
+    (d.customers.length ? `<div class="scroll"><table class="rtable"><tr><th>${t("name")}</th><th>${t("account")}</th><th>${t("stripsCol")}</th>
       <th>${t("lastSeen")}</th><th>${t("joined")}</th></tr>` +
-      d.customers.map(c => `<tr><td><b>${esc(c.name)}</b></td><td><bdi dir="ltr">${esc(c.login)}</bdi></td>
-        <td><span class="status${c.online ? " on" : ""}"><i></i><bdi>${fmt(c.online)} / ${fmt(c.strips)}</bdi></span></td>
-        <td class="muted">${ago(c.last_seen)}</td><td class="muted">${date(c.created)}</td></tr>`).join("") + `</table></div>`
+      d.customers.map(c => `<tr><td class="head"><b>${esc(c.name)}</b></td><td data-l="${t("account")}"><bdi dir="ltr">${esc(c.login)}</bdi></td>
+        <td data-l="${t("stripsCol")}"><span class="status${c.online ? " on" : ""}"><i></i><bdi>${fmt(c.online)} / ${fmt(c.strips)}</bdi></span></td>
+        <td class="muted" data-l="${t("lastSeen")}">${ago(c.last_seen)}</td><td class="muted" data-l="${t("joined")}">${date(c.created)}</td></tr>`).join("") + `</table></div>`
       : `<div class="empty">${t("noCustomers")}</div>`) + `</section>`;
 
   html += `<section class="card glass"><h2>${t("stripTitle")} (${fmt(d.strips.length)})</h2><p class="note">${t("stripNote")}</p>` +
-    (d.strips.length ? `<div class="scroll"><table><tr><th>${t("strip")}</th><th>${t("owner")}</th><th>${t("state")}</th>
+    (d.strips.length ? `<div class="scroll"><table class="rtable"><tr><th>${t("strip")}</th><th>${t("owner")}</th><th>${t("state")}</th>
       <th>${t("lastSeen")}</th><th>${t("address")}</th></tr>` +
-      d.strips.map(x => `<tr><td><b>${esc(x.name || t("strip") + " " + x.id.slice(-6))}</b><div class="muted" style="font-size:11px"><bdi>${esc(x.id)}</bdi></div></td>
-        <td><select data-assign="${esc(x.id)}" aria-label="${t("owner")}"><option value="">${t("nobody")}</option>
+      d.strips.map(x => `<tr><td class="head"><b>${esc(x.name || t("strip") + " " + x.id.slice(-6))}</b><div class="muted" style="font-size:11px"><bdi>${esc(x.id)}</bdi></div></td>
+        <td data-l="${t("owner")}"><select data-assign="${esc(x.id)}" aria-label="${t("owner")}"><option value="">${t("nobody")}</option>
           ${d.customers.map(c => `<option value="${esc(c.id)}"${c.id === x.customer ? " selected" : ""}>${esc(c.name)} · ${esc(c.login)}</option>`).join("")}
           </select></td>
-        <td><span class="status${x.online ? " on" : ""}"><i></i>${x.online ? t("online") : t("offline")}</span></td>
-        <td class="muted">${x.online ? t("now") : ago(x.last_seen)}</td><td class="muted"><bdi>${esc(x.address || t("nobody"))}</bdi></td></tr>`).join("") + `</table></div>`
+        <td data-l="${t("state")}"><span class="status${x.online ? " on" : ""}"><i></i>${x.online ? t("online") : t("offline")}</span></td>
+        <td class="muted" data-l="${t("lastSeen")}">${x.online ? t("now") : ago(x.last_seen)}</td>
+        <td class="muted" data-l="${t("address")}"><bdi>${esc(x.address || t("nobody"))}</bdi></td></tr>`).join("") + `</table></div>`
       : `<div class="empty">${t("noStrips")}</div>`) + `</section>`;
 
   html += `<section class="card glass"><h2>📦 ${t("resTitle")}</h2><p class="note">${t("resNote")}</p>` +
-    (d.customers.length ? `<form id="resf" class="resform"><input id="rescode" placeholder="${t("resCode")}" dir="ltr" autocomplete="off" required>
+    (d.customers.length ? `<details class="resbox"${resOpen ? " open" : ""}><summary class="btn">${t("resAdd")}</summary>
+        <form id="resf" class="resform"><input id="rescode" placeholder="${t("resCode")}" dir="ltr" autocomplete="off" required>
         <select id="rescust" required><option value="">${t("resPick")}</option>
         ${d.customers.map(c => `<option value="${esc(c.id)}">${esc(c.name)} · ${esc(c.login)}</option>`).join("")}</select>
-        <button class="btn primary" type="submit">${t("resBtn")}</button></form>` : `<div class="empty">${t("resNoCustomers")}</div>`) +
+        <button class="btn primary" type="submit">${t("resBtn")}</button></form></details>` : `<div class="empty">${t("resNoCustomers")}</div>`) +
     (d.reservations.length ? d.reservations.map(r => `<div class="row"><div class="grow"><b><bdi dir="ltr">TONLY_TAP_${esc(r.code)}</bdi></b>
         <div class="muted" style="font-size:12px">${esc(r.customer)} · ${t("resWaiting")} · ${fmt(r.days_left)} ${t("daysLeft")}</div></div>
         <button class="btn" data-unreserve="${esc(r.code)}">${t("cancel")}</button></div>`).join("") : "") + `</section>`;
@@ -272,12 +298,14 @@ function render() {
   document.getElementById("root").innerHTML = html;
   document.getElementById("lang").onclick = () => { lang = lang === "ar" ? "en" : "ar"; save("dsp-lang", lang); render(); };
   document.getElementById("logout").onclick = () => { save("dsp-token", null); token = ""; clearInterval(timer); renderLogin(); };
+  const box2 = document.querySelector(".resbox");
+  if (box2) box2.ontoggle = () => { resOpen = box2.open; };
   const resf = document.getElementById("resf");
   if (resf) resf.onsubmit = async e => {
     e.preventDefault();
     try {
       await api("/api/strips/reserve", {code: document.getElementById("rescode").value, customer: document.getElementById("rescust").value});
-      toast(t("done"));
+      toast(t("done")); resOpen = false;
     } catch (err) { toast(t("fail") + err.message); }
     refresh();
   };
