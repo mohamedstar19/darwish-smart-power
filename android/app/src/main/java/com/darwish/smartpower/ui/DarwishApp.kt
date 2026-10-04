@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.darwish.smartpower.ui
 
 import android.content.Context
@@ -12,11 +14,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -25,6 +30,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,8 +63,8 @@ enum class Tab(val icon: ImageVector, val label: Int) {
     SETTINGS(Icons.Filled.Settings, R.string.tab_settings),
 }
 
-/** Screens shown on top of the tabs. */
-enum class Overlay { NONE, SETUP, ALERTS }
+/** Screens shown on top of the tabs. CONNECT: server address and password, before anyone is signed in. */
+enum class Overlay { NONE, SETUP, ALERTS, CONNECT }
 
 fun Note.format(context: Context): String =
     if (arg != null) context.getString(text, arg) else context.getString(text)
@@ -74,6 +81,17 @@ fun DarwishApp(locked: Boolean, onUnlocked: () -> Unit, vm: AppViewModel = viewM
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val pin by vm.pinRequest.collectAsStateWithLifecycle()
+    val state by vm.state.collectAsStateWithLifecycle()
+    // nothing but the sign-in shows until this phone is signed in: no tabs, no settings, no strip setup
+    val signedIn = state.token.isNotEmpty() && state.problem != Problem.BAD_TOKEN && state.problem != Problem.NOT_CONFIGURED
+    LaunchedEffect(signedIn) {
+        if (!signedIn) {
+            tab = Tab.HOME
+            if (overlay != Overlay.CONNECT) overlay = Overlay.NONE
+        } else if (overlay == Overlay.CONNECT) {
+            overlay = Overlay.NONE
+        }
+    }
 
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it.format(context)) } }
     LaunchedEffect(lifecycleOwner) { lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { vm.pollForever() } }
@@ -86,11 +104,28 @@ fun DarwishApp(locked: Boolean, onUnlocked: () -> Unit, vm: AppViewModel = viewM
         when (overlay) {
             Overlay.SETUP -> SetupScreen(vm, snackbar, onBack = { overlay = Overlay.NONE })
             Overlay.ALERTS -> AlertsScreen(vm, onBack = { overlay = Overlay.NONE })
+            Overlay.CONNECT -> Scaffold(
+                containerColor = Color.Transparent,
+                snackbarHost = { SnackbarHost(snackbar) },
+                topBar = {
+                    TopAppBar(
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                        title = { Text(stringResource(R.string.section_server)) },
+                        navigationIcon = {
+                            IconButton(onClick = { overlay = Overlay.NONE }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                            }
+                        },
+                    )
+                },
+            ) { padding ->
+                Box(Modifier.padding(padding)) { SettingsScreen(vm, onSetup = {}, connectOnly = true) }
+            }
             Overlay.NONE -> Scaffold(
                 containerColor = Color.Transparent,
                 snackbarHost = { SnackbarHost(snackbar) },
                 bottomBar = {
-                    NavigationBar(containerColor = Glass.Night.copy(alpha = 0.92f), tonalElevation = 0.dp) {
+                    if (signedIn) NavigationBar(containerColor = Glass.Night.copy(alpha = 0.92f), tonalElevation = 0.dp) {
                         Tab.entries.forEach { t ->
                             NavigationBarItem(
                                 selected = tab == t,
@@ -110,12 +145,12 @@ fun DarwishApp(locked: Boolean, onUnlocked: () -> Unit, vm: AppViewModel = viewM
                 },
             ) { padding ->
                 Box(Modifier.padding(padding)) {
-                    when (tab) {
+                    when (if (signedIn) tab else Tab.HOME) {
                         Tab.HOME -> HomeScreen(
                             vm,
-                            onSettings = { tab = Tab.SETTINGS },
-                            onSetup = { overlay = Overlay.SETUP },
-                            onAlerts = { overlay = Overlay.ALERTS },
+                            onSettings = { if (signedIn) tab = Tab.SETTINGS else overlay = Overlay.CONNECT },
+                            onSetup = { if (signedIn) overlay = Overlay.SETUP },
+                            onAlerts = if (signedIn) ({ overlay = Overlay.ALERTS }) else null,
                         )
                         Tab.ENERGY -> EnergyScreen(vm)
                         Tab.AUTOMATION -> AutomationScreen(vm)

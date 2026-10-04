@@ -71,7 +71,7 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 @Composable
-fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit, onSetup: () -> Unit, onAlerts: () -> Unit) {
+fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit, onSetup: () -> Unit, onAlerts: (() -> Unit)?) {
     val state by vm.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var outletSheet by remember { mutableStateOf<Pair<String, Int>?>(null) }
@@ -192,7 +192,7 @@ private fun NewStripsCard(strips: List<NewStrip>, onApprove: (String) -> Unit, o
 }
 
 @Composable
-private fun Header(onAlerts: () -> Unit) {
+private fun Header(onAlerts: (() -> Unit)?) {
     val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
@@ -205,7 +205,7 @@ private fun Header(onAlerts: () -> Unit) {
                 color = Glass.TextSoft, style = MaterialTheme.typography.bodyMedium)
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge, maxLines = 1)
         }
-        IconButton(onClick = onAlerts) {
+        if (onAlerts != null) IconButton(onClick = onAlerts) {   // none before signing in
             Icon(Icons.Filled.Notifications, contentDescription = stringResource(R.string.alerts), tint = Glass.TextSoft)
         }
     }

@@ -57,7 +57,7 @@ import com.darwish.smartpower.security.Biometric
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
+fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit, connectOnly: Boolean = false) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -79,17 +79,17 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
         Modifier.imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(stringResource(R.string.tab_settings), style = MaterialTheme.typography.headlineMedium)
+        if (!connectOnly) Text(stringResource(R.string.tab_settings), style = MaterialTheme.typography.headlineMedium)
 
         // ---- my account: who this phone is signed in as, with sign out (and delete for customers)
-        if (state.server != null) {
+        if (!connectOnly && state.server != null) {
             Text(stringResource(R.string.my_account), style = SectionTitleStyle)
             if (state.me.isOwner) OwnerAccountCard(onSignOut = vm::signOut)
             else SignedInAsCard(state.me, onSignOut = vm::signOut, onDeleteAccount = vm::deleteAccount.takeIf { state.me.isCustomer })
         }
 
         // ---- connection (customers just sign in; the address and token are for the owner and family)
-        if (!state.me.isCustomer) GlassCard(Modifier.fillMaxWidth()) {
+        if (connectOnly || !state.me.isCustomer) GlassCard(Modifier.fillMaxWidth()) {
             CardTitle("🌐", stringResource(R.string.section_server))
             OutlinedTextField(
                 value = address,
@@ -130,97 +130,100 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit) {
             testResult?.let { Spacer(Modifier.height(8.dp)); Text(it, color = Glass.TextSoft) }
         }
 
-        // ---- family: the owner manages it, members see who they are
-        if (state.server != null) {
-            if (state.me.isOwner) FamilyCard(vm, state)
-        }
-
-        // ---- strips the owner blocked; one tap lets a strip in again
-        val blocked = state.server?.blockedStrips.orEmpty()
-        if (state.me.isOwner && blocked.isNotEmpty()) {
-            GlassCard(Modifier.fillMaxWidth()) {
-                CardTitle("⛔", stringResource(R.string.blocked_strips_title))
-                blocked.forEach { id ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(R.string.new_strip_line, ltr(id.takeLast(6))), modifier = Modifier.weight(1f))
-                        TextButton(onClick = { vm.approveStrip(id) }) { Text(stringResource(R.string.unblock)) }
-                    }
-                }
+        // before signing in (connectOnly) only the connection above shows
+        if (!connectOnly) {
+            // ---- family: the owner manages it, members see who they are
+            if (state.server != null) {
+                if (state.me.isOwner) FamilyCard(vm, state)
             }
-        }
 
-        // ---- bill and alert limits (kept on the server, owner only)
-        state.server?.settings?.takeIf { state.me.isOwner }?.let { current ->
-            var price by remember(current) { mutableStateOf(number(current.pricePerKwh, 2)) }
-            var maxTemp by remember(current) { mutableStateOf(current.maxTempC.toInt().toString()) }
-            var maxWatts by remember(current) { mutableStateOf(current.maxWatts.toInt().toString()) }
-            GlassCard(Modifier.fillMaxWidth()) {
-                CardTitle("💰", stringResource(R.string.section_bill))
-                NumberField(price, stringResource(R.string.price_per_kwh, currencyLabel(current.currency)), decimal = true) { price = it }
-                Spacer(Modifier.height(4.dp))
-                Text(stringResource(R.string.price_hint), color = Glass.TextFaint, style = MaterialTheme.typography.labelSmall)
-                Spacer(Modifier.height(10.dp))
-                CardTitle("🚨", stringResource(R.string.section_alert_limits))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    NumberField(maxTemp, stringResource(R.string.max_temp), Modifier.weight(1f)) { maxTemp = it }
-                    NumberField(maxWatts, stringResource(R.string.max_watts), Modifier.weight(1f)) { maxWatts = it }
-                }
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = {
-                    vm.saveServerSettings(current.copy(
-                        pricePerKwh = price.toDoubleOrNull() ?: current.pricePerKwh,
-                        maxTempC = maxTemp.toDoubleOrNull() ?: current.maxTempC,
-                        maxWatts = maxWatts.toDoubleOrNull() ?: current.maxWatts,
-                    ))
-                }) { Text(stringResource(R.string.save)) }
-            }
-        }
-
-        // ---- Alexa (on the server, inside the home network)
-        state.server?.settings?.takeIf { state.me.isOwner }?.let { current ->
-            GlassCard(Modifier.fillMaxWidth()) {
-                CardTitle("🗣️", stringResource(R.string.section_alexa))
-                SwitchRow(stringResource(R.string.alexa_enable), stringResource(R.string.alexa_hint), current.alexa) { on ->
-                    vm.saveServerSettings(current.copy(alexa = on))
-                }
-                Text(stringResource(R.string.alexa_steps), color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-
-        // ---- this phone
-        GlassCard(Modifier.fillMaxWidth()) {
-            CardTitle("📱", stringResource(R.string.section_phone))
-            SwitchRow(stringResource(R.string.notifications), stringResource(R.string.notifications_hint), notify) { on ->
-                if (on && Build.VERSION.SDK_INT >= 33) {
-                    askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else {
-                    notify = on
-                    vm.setNotifications(on)
-                }
-            }
-            if (Biometric.available(context)) {
-                val title = stringResource(R.string.lock_title)
-                SwitchRow(stringResource(R.string.app_lock), stringResource(R.string.app_lock_hint), appLock) { on ->
-                    // confirm with the fingerprint before turning the lock on or off
-                    Biometric.authenticate(context, title, null) { ok ->
-                        if (ok) {
-                            appLock = on
-                            vm.prefs.appLock = on
+            // ---- strips the owner blocked; one tap lets a strip in again
+            val blocked = state.server?.blockedStrips.orEmpty()
+            if (state.me.isOwner && blocked.isNotEmpty()) {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    CardTitle("⛔", stringResource(R.string.blocked_strips_title))
+                    blocked.forEach { id ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(R.string.new_strip_line, ltr(id.takeLast(6))), modifier = Modifier.weight(1f))
+                            TextButton(onClick = { vm.approveStrip(id) }) { Text(stringResource(R.string.unblock)) }
                         }
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            Text(stringResource(R.string.section_language), fontWeight = FontWeight.SemiBold)
-            LanguagePicker()
-        }
 
-        // ---- new strip
-        GlassCard(Modifier.fillMaxWidth()) {
-            CardTitle("➕", stringResource(R.string.section_setup))
-            Text(stringResource(R.string.setup_intro), color = Glass.TextSoft)
-            Spacer(Modifier.height(10.dp))
-            Button(onClick = onSetup) { Text(stringResource(R.string.setup_strip)) }
+            // ---- bill and alert limits (kept on the server, owner only)
+            state.server?.settings?.takeIf { state.me.isOwner }?.let { current ->
+                var price by remember(current) { mutableStateOf(number(current.pricePerKwh, 2)) }
+                var maxTemp by remember(current) { mutableStateOf(current.maxTempC.toInt().toString()) }
+                var maxWatts by remember(current) { mutableStateOf(current.maxWatts.toInt().toString()) }
+                GlassCard(Modifier.fillMaxWidth()) {
+                    CardTitle("💰", stringResource(R.string.section_bill))
+                    NumberField(price, stringResource(R.string.price_per_kwh, currencyLabel(current.currency)), decimal = true) { price = it }
+                    Spacer(Modifier.height(4.dp))
+                    Text(stringResource(R.string.price_hint), color = Glass.TextFaint, style = MaterialTheme.typography.labelSmall)
+                    Spacer(Modifier.height(10.dp))
+                    CardTitle("🚨", stringResource(R.string.section_alert_limits))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        NumberField(maxTemp, stringResource(R.string.max_temp), Modifier.weight(1f)) { maxTemp = it }
+                        NumberField(maxWatts, stringResource(R.string.max_watts), Modifier.weight(1f)) { maxWatts = it }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = {
+                        vm.saveServerSettings(current.copy(
+                            pricePerKwh = price.toDoubleOrNull() ?: current.pricePerKwh,
+                            maxTempC = maxTemp.toDoubleOrNull() ?: current.maxTempC,
+                            maxWatts = maxWatts.toDoubleOrNull() ?: current.maxWatts,
+                        ))
+                    }) { Text(stringResource(R.string.save)) }
+                }
+            }
+
+            // ---- Alexa (on the server, inside the home network)
+            state.server?.settings?.takeIf { state.me.isOwner }?.let { current ->
+                GlassCard(Modifier.fillMaxWidth()) {
+                    CardTitle("🗣️", stringResource(R.string.section_alexa))
+                    SwitchRow(stringResource(R.string.alexa_enable), stringResource(R.string.alexa_hint), current.alexa) { on ->
+                        vm.saveServerSettings(current.copy(alexa = on))
+                    }
+                    Text(stringResource(R.string.alexa_steps), color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            // ---- this phone
+            GlassCard(Modifier.fillMaxWidth()) {
+                CardTitle("📱", stringResource(R.string.section_phone))
+                SwitchRow(stringResource(R.string.notifications), stringResource(R.string.notifications_hint), notify) { on ->
+                    if (on && Build.VERSION.SDK_INT >= 33) {
+                        askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        notify = on
+                        vm.setNotifications(on)
+                    }
+                }
+                if (Biometric.available(context)) {
+                    val title = stringResource(R.string.lock_title)
+                    SwitchRow(stringResource(R.string.app_lock), stringResource(R.string.app_lock_hint), appLock) { on ->
+                        // confirm with the fingerprint before turning the lock on or off
+                        Biometric.authenticate(context, title, null) { ok ->
+                            if (ok) {
+                                appLock = on
+                                vm.prefs.appLock = on
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.section_language), fontWeight = FontWeight.SemiBold)
+                LanguagePicker()
+            }
+
+            // ---- new strip
+            GlassCard(Modifier.fillMaxWidth()) {
+                CardTitle("➕", stringResource(R.string.section_setup))
+                Text(stringResource(R.string.setup_intro), color = Glass.TextSoft)
+                Spacer(Modifier.height(10.dp))
+                Button(onClick = onSetup) { Text(stringResource(R.string.setup_strip)) }
+            }
         }
 
         // ---- about
