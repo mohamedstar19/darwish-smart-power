@@ -72,6 +72,11 @@ tr:last-child td{border-bottom:0}
 .row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
 .row .grow{flex:1;min-width:0}
+.wstrip{border-top:1px solid var(--line);padding:6px 0}
+.wstrip:first-of-type{border-top:0}
+.wstrip .row{border-top:0}
+.guess{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:4px 0;padding:8px 10px;border-radius:12px;background:rgba(255,181,71,.08);font-size:13px}
+.guess .grow{flex:1;min-width:180px}
 .btn{border:1px solid var(--stroke);background:var(--fill);border-radius:12px;padding:7px 14px;font-weight:600}
 .btn.primary{border:0;background:linear-gradient(135deg,#ff7a3d,#ffb347);color:#2a0e00}
 .btn.danger{color:var(--bad)}
@@ -141,6 +146,10 @@ const L = {
        day: "اليوم", count: "التحميلات",
        newTitle: "مشتركات جديدة مستنية موافقتك", from: "من", approve: "موافقة", block: "حظر",
        blockAsk: "تحظر المشترك ده؟ مش هيقدر يتصل بالسيرفر تاني.", noneWaiting: "مفيش مشتركات مستنية.",
+       arrived: "وصل", probably: "غالباً تبع", you: "إنت (صاحب السيرفر)", giveTo: "وافق وادّيه لـ", codeWas: "الكود",
+       whyCode: "الكود اللي جهّزه بيه مطابق", whyApp: "جهّز مشترك من التطبيق قبلها بـ {m} دقيقة",
+       whyNetwork: "بيستخدم التطبيق من نفس شبكة المشترك",
+       unknownOwner: "مش معروف مين جهّزه. لو عميل قال إنه بتاعه، اسأله عن الحروف اللي بعد TONLY_TAP_ أو وافق عليه واربطه من جدول المشتركات.",
        custTitle: "العملاء", name: "الاسم", account: "الموبايل / الإيميل", stripsCol: "المشتركات", lastSeen: "آخر استخدام",
        joined: "سجّل", noCustomers: "لسه مفيش عملاء سجلوا.",
        stripTitle: "المشتركات", stripNote: "اختار العميل من القايمة عشان تربط المشترك بحسابه، مثلاً لعميل معاه آيفون جهّزتله المشترك بنفسك.", strip: "المشترك", owner: "العميل", state: "الحالة", address: "العنوان", online: "أونلاين",
@@ -166,6 +175,10 @@ const L = {
        day: "Day", count: "Downloads",
        newTitle: "New strips waiting for your approval", from: "from", approve: "Approve", block: "Block",
        blockAsk: "Block this strip? It will not be able to connect again.", noneWaiting: "No strips waiting.",
+       arrived: "first connected", probably: "Probably", you: "You (the owner)", giveTo: "Approve for", codeWas: "code",
+       whyCode: "its setup code matches", whyApp: "set up a strip in the app {m} min before",
+       whyNetwork: "uses the app from the strip's network",
+       unknownOwner: "Nobody known set it up. If a customer says it is theirs, ask for the letters after TONLY_TAP_, or approve it and link it in the strips table.",
        custTitle: "Customers", name: "Name", account: "Phone / e-mail", stripsCol: "Strips", lastSeen: "Last used",
        joined: "Joined", noCustomers: "No customers have signed up yet.",
        stripTitle: "Strips", stripNote: "Pick a customer to link the strip to their account, e.g. for an iPhone customer whose strip you set up yourself.", strip: "Strip", owner: "Customer", state: "State", address: "Address", online: "online",
@@ -271,10 +284,14 @@ function render() {
 
   if (d.new_strips.length) {
     html += `<section class="card glass" style="border-color:rgba(255,181,71,.55)"><h2>🆕 ${t("newTitle")}</h2>` +
-      d.new_strips.map(n => `<div class="row"><div class="grow"><b>${t("strip")} <bdi>${esc(n.id.slice(-6))}</bdi></b>
-        <div class="muted" style="font-size:12px">${t("from")} <bdi>${esc(n.address || "?")}</bdi></div></div>
+      d.new_strips.map(n => `<div class="wstrip"><div class="row"><div class="grow"><b>${t("strip")} <bdi>${esc(n.id.slice(-6))}</bdi></b>
+        <div class="muted" style="font-size:12px">${t("from")} <bdi>${esc(n.address || "?")}</bdi>${n.first_seen ? ` · ${t("arrived")} ${ago(n.first_seen)}` : ""}</div></div>
         <button class="btn danger" data-block="${esc(n.id)}">${t("block")}</button>
-        <button class="btn primary" data-approve="${esc(n.id)}">${t("approve")}</button></div>`).join("") + `</section>`;
+        <button class="btn primary" data-approve="${esc(n.id)}">${t("approve")}</button></div>
+        ${(n.guesses || []).length ? n.guesses.map(g => `<div class="guess"><div class="grow">👤 ${t("probably")} <b>${g.id ? esc(g.name) : t("you")}</b>
+          <div class="muted">${g.why.map(w => w === "code" ? t("whyCode") : w === "app" ? t("whyApp").replace("{m}", fmt(g.minutes || 0)) : t("whyNetwork")).join(" · ")}${g.codes.length ? ` · ${t("codeWas")} <bdi>${esc(g.codes.join(", "))}</bdi>` : ""}</div></div>
+          ${g.customer ? `<button class="btn primary" data-approve="${esc(n.id)}" data-customer="${esc(g.id)}">${t("giveTo")} ${esc(g.name)}</button>` : ""}</div>`).join("")
+          : `<div class="muted" style="font-size:12px;margin:2px 0 6px">${t("unknownOwner")}</div>`}</div>`).join("") + `</section>`;
   }
 
   html += `<section class="card glass"><h2>${t("custTitle")} (${fmt(d.customers.length)})</h2>` +
@@ -376,7 +393,8 @@ document.addEventListener("click", async ev => {
   if (!ap && !bl) return;
   if (bl && !confirm(t("blockAsk"))) return;
   try {
-    await api(ap ? "/api/strips/approve" : "/api/strips/remove", ap ? {strip: ap.dataset.approve} : {strip: bl.dataset.block, block: true});
+    await api(ap ? "/api/strips/approve" : "/api/strips/remove",
+      ap ? Object.assign({strip: ap.dataset.approve}, ap.dataset.customer ? {customer: ap.dataset.customer} : {}) : {strip: bl.dataset.block, block: true});
     toast(t("done"));
   } catch (e) { toast(t("fail") + e.message); }
   refresh();

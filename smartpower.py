@@ -124,6 +124,11 @@ def is_mac(text: str) -> bool:
     return len(text) == 12 and all(c in "0123456789abcdefABCDEF" for c in text)
 
 
+def code_matches(code: str, macs: List[str]) -> bool:
+    """Is [code] (what follows TONLY_TAP_ in the setup Wi-Fi name) one of these MACs? Their end, or anywhere for 6+ characters."""
+    return bool(code) and any(m and (m.endswith(code) or (len(code) >= 6 and code in m)) for m in macs)
+
+
 def parse_bootinfo(line: str) -> Optional[Dict[str, str]]:
     """up:bootinfo:<model>;<mac>;<mac>;<firmware>;connect"""
     prefix = "up:bootinfo:"
@@ -189,6 +194,10 @@ class Store:
         self.blocked_strips: List[str] = []
         # strips the app is setting up right now: setup-Wi-Fi code -> {"by": member id or "", "until"}
         self.expected: Dict[str, Dict[str, Any]] = {}
+        # every strip the app said it was setting up (last 7 days): {"code", "by", "at", "ip"}, to tell whose a
+        # strip waiting for approval probably is; and when each waiting strip first connected
+        self.announced: List[Dict[str, Any]] = []
+        self.first_seen: Dict[str, float] = {}
         # app downloads: total, per day, and today's (hashed) addresses so a retry is not counted twice
         self.stats: Dict[str, Any] = {}
         # the owner's admin page lives at a random, unguessable address instead of /admin
@@ -208,6 +217,8 @@ class Store:
             self.settings.update(data.get("settings", {}))
             self.blocked_strips = list(data.get("blocked_strips", []))
             self.expected = dict(data.get("expected", {}))
+            self.announced = list(data.get("announced", []))
+            self.first_seen = dict(data.get("first_seen", {}))
             self.stats = dict(data.get("stats", {}))
             self.admin_path = str(data.get("admin_path", ""))
             self.oauth.update({k: dict(v) for k, v in data.get("oauth", {}).items()})
@@ -226,6 +237,7 @@ class Store:
                            "alexa_ports": self.alexa_ports, "users": self.users,
                            "settings": self.settings, "approved": self.approved,
                            "blocked_strips": self.blocked_strips, "expected": self.expected,
+                           "announced": self.announced, "first_seen": self.first_seen,
                            "stats": self.stats, "admin_path": self.admin_path, "oauth": self.oauth},
                           ensure_ascii=False, indent=1)
         fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), prefix=".smartpower-")
@@ -327,6 +339,7 @@ class Store:
             self.blocked_strips.remove(mac)
         if mac not in self.approved:
             self.approved.append(mac)
+        self.first_seen.pop(mac, None)
         user = next((u for u in self.users if u["id"] == by), None)
         if user and (user.get("role") == CUSTOMER or user.get("strips")) and mac not in (user.get("strips") or []):
             user["strips"] = sorted((user.get("strips") or []) + [mac])
@@ -340,11 +353,25 @@ class Store:
     def claim_expected(self, macs: List[str], now: float) -> Optional[str]:
         """The member id ("" = owner) that announced this strip from the app, or None."""
         for code, entry in list(self.expected.items()):
-            if entry.get("until", 0) > now and any(m and m.endswith(code) for m in macs):
+            if entry.get("until", 0) > now and code_matches(code, macs):
                 del self.expected[code]
                 self.save()
                 return str(entry.get("by", ""))
         return None
+
+    def announce(self, code: str, by: str, ip: str, now: float) -> None:
+        self.announced = [a for a in self.announced if now - a.get("at", 0) < 7 * 86400][-299:]
+        self.announced.append({"code": code, "by": by, "at": int(now), "ip": ip})
+        self.save()
+
+    def note_waiting(self, mac: str, now: float) -> float:
+        """When a strip waiting for approval first connected (kept across restarts)."""
+        if mac not in self.first_seen:
+            self.first_seen = {m: t for m, t in self.first_seen.items()
+                               if m not in self.approved and now - t < 30 * 86400}
+            self.first_seen[mac] = now
+            self.save()
+        return self.first_seen[mac]
 
     def forget_strip(self, mac: str, block: bool) -> None:
         """Remove everything about a strip; [block] also refuses it from now on."""
@@ -684,6 +711,8 @@ class Outlet:
 class Strip:
     def __init__(self, mac: str):
         self.mac = mac
+        self.mac2 = ""
+        self.first_seen = 0.0                   # while waiting for approval: when it first connected
         self.model = ""
         self.fw = ""
         self.address = ""
@@ -1042,6 +1071,8 @@ class Hub:
         self.cycle_phase: Dict[str, bool] = {}
         self.pin_failures: Dict[str, Tuple[int, float]] = {}
         self.user_seen: Dict[str, float] = {}
+        self.user_ips: Dict[str, Dict[str, float]] = {}     # member id -> internet addresses their app used lately
+        self.ips_lock = threading.Lock()                    # written from the web threads
         self.guard = Guard()
 
     @staticmethod
@@ -1066,6 +1097,7 @@ class Hub:
         if strip.link is not None and strip.link is not link:
             strip.link.close()                      # the strip re-dialled; the old socket is dead
         strip.model, strip.fw, strip.address = boot["model"], boot["fw"], link.address
+        strip.mac2 = boot.get("mac2", "")
         strip.link, strip.last_seen = link, time.time()
         log("[strip] %s online (model %s, firmware %s, from %s)" % (self.label(strip), strip.model, strip.fw, link.address))
         if not self.store.is_approved(strip.mac):
@@ -1075,6 +1107,7 @@ class Hub:
                 log("[strip] %s approved (%s)" % (self.label(strip),
                                                   "set up from the app" if by is not None else "home network"))
             else:
+                strip.first_seen = self.store.note_waiting(strip.mac, time.time())
                 log("[strip] %s waits for the owner's approval (MACs %s %s)"
                     % (self.label(strip), strip.mac, boot.get("mac2", "")))
         return strip
@@ -1323,9 +1356,15 @@ class Hub:
                 })
         return out
 
-    def saw_user(self, user: Dict[str, Any]) -> None:
+    def saw_user(self, user: Dict[str, Any], ip: str = "") -> None:
         now = time.time()
         self.user_seen[user["id"]] = now
+        if ip and not is_local_address(ip):
+            with self.ips_lock:
+                ips = self.user_ips.setdefault(user["id"], {})
+                ips[ip] = now
+                for old in sorted(ips, key=ips.get)[:-8]:
+                    del ips[old]
         if now - user.get("last_seen", 0) > 300:   # remembered across restarts, written at most every 5 minutes
             user["last_seen"] = int(now)
             self.store.save()
@@ -1419,7 +1458,8 @@ class Hub:
                 "online": m in online, "address": self.strips[m].address if m in self.strips else "",
                 "last_seen": int(self.strips[m].last_seen) if m in self.strips else 0,
             } for m in approved), key=lambda x: (not x["online"], x["id"])),
-            "new_strips": [{"id": x.mac, "address": x.address, "online": x.online}
+            "new_strips": [{"id": x.mac, "mac2": x.mac2, "address": x.address, "online": x.online,
+                            "first_seen": int(x.first_seen), "guesses": self.owner_guesses(x, now)}
                            for x in self.strips.values() if not store.is_approved(x.mac)],
             "signup": bool(store.settings.get("signup", True)),
             "voice": {c: bool(store.oauth["clients"].get(c)) for c in OAUTH_CLIENTS},
@@ -1520,12 +1560,53 @@ class Hub:
 
     # ---- approving, removing and blocking strips
 
-    async def expect_strip(self, code: Any, by: str) -> Tuple[int, Dict[str, Any]]:
+    async def expect_strip(self, code: Any, by: str, ip: str = "") -> Tuple[int, Dict[str, Any]]:
         code = str(code or "").strip().upper()
-        if not re.fullmatch(r"[0-9A-F]{4,12}", code):
-            return 400, {"error": "code must be the 4-12 letters/digits after TONLY_TAP_"}
-        self.store.expect(code, by, time.time())
+        if not re.fullmatch(r"[0-9A-Z]{4,16}", code):
+            return 400, {"error": "code must be the 4-16 letters/digits after TONLY_TAP_"}
+        now = time.time()
+        self.store.expect(code, by, now)
+        self.store.announce(code, by, ip, now)
+        log("[strip] app is setting up TONLY_TAP_%s (%s, from %s)" % (code, "account " + by if by else "the owner", ip or "?"))
         return 200, {"ok": True}
+
+    def owner_guesses(self, strip: Strip, now: float) -> List[Dict[str, Any]]:
+        """Who probably set up a strip that waits for approval, best first. Reasons: "code" their app set up a
+        strip with this code; "app" their app set up a strip shortly before this one first connected;
+        "network" their app is used from the same internet address as the strip."""
+        users = {u["id"]: u for u in self.store.users}
+        found: Dict[str, Dict[str, Any]] = {}
+
+        def add(uid: str, why: str, points: int, announced: Optional[Dict[str, Any]] = None) -> None:
+            if uid and uid not in users:
+                return
+            g = found.setdefault(uid, {"id": uid, "name": users[uid]["name"] if uid else "",
+                                       "customer": bool(uid) and users[uid].get("role") == CUSTOMER,
+                                       "why": [], "codes": [], "minutes": None, "points": 0})
+            if why not in g["why"]:
+                g["why"].append(why)
+                g["points"] += points
+            if announced is not None:
+                if announced["code"] not in g["codes"]:
+                    g["codes"].append(announced["code"])
+                gap = int(abs((strip.first_seen or now) - announced.get("at", 0)) // 60)
+                g["minutes"] = gap if g["minutes"] is None else min(g["minutes"], gap)
+
+        first = strip.first_seen or now
+        for a in self.store.announced:
+            if code_matches(a.get("code", ""), [strip.mac, strip.mac2]):
+                add(a.get("by", ""), "code", 100, a)
+            elif -300 <= first - a.get("at", 0) <= 7200:
+                add(a.get("by", ""), "app", 30 if first - a.get("at", 0) <= 900 else 10, a)
+        if strip.address and not is_local_address(strip.address):
+            with self.ips_lock:
+                same = [uid for uid, ips in self.user_ips.items() if strip.address in ips]
+            for uid in same:
+                add(uid, "network", 40)
+        out = sorted(found.values(), key=lambda g: -g["points"])[:3]
+        for g in out:
+            del g["points"]
+        return out
 
     async def approve_strip(self, strip_id: Any) -> Tuple[int, Dict[str, Any]]:
         mac = str(strip_id or "").upper()
@@ -1963,7 +2044,7 @@ class WebHandler(BaseHTTPRequestHandler):
         for o in offered:
             user = self.server.hub.store.user_by_token(o) if o else None
             if user:
-                self.server.hub.saw_user(user)
+                self.server.hub.saw_user(user, self.client_ip())
                 strips = set(user.get("strips") or [])
                 return {"role": user["role"], "name": user["name"], "id": user["id"], "login": user.get("login", ""),
                         "strips": strips if user["role"] == CUSTOMER else (strips or None)}
@@ -2332,9 +2413,11 @@ class WebHandler(BaseHTTPRequestHandler):
         try:
             outlets = outlet_list(req) if "outlets" in req else None
             if path == "/api/strips/expect":
-                code, body = self.server.run_on_loop(hub.expect_strip(req.get("code"), who.get("id") or ""))
+                code, body = self.server.run_on_loop(hub.expect_strip(req.get("code"), who.get("id") or "", self.client_ip()))
             elif path == "/api/strips/approve":
                 code, body = self.server.run_on_loop(hub.approve_strip(strip_id))
+                if code == 200 and req.get("customer"):     # approve and give it to the customer who set it up
+                    code, body = self.server.run_on_loop(hub.assign_strip(strip_id, str(req["customer"])))
             elif path == "/api/strips/remove":
                 block = bool(req.get("block")) and who["role"] == "owner"
                 code, body = self.server.run_on_loop(hub.remove_strip(strip_id, block))
@@ -3057,6 +3140,16 @@ async def selftest() -> None:
     assert (await loop.run_in_executor(None, http, "/api/strips/reserve", {"code": "ABCDEF", "customer": cust_id}))[0] == 200
     assert (await loop.run_in_executor(None, http, "/api/strips/unreserve", {"code": "ABCDEF"}))[0] == 200
     assert not (await hub.admin_report())["reservations"]
+    # a strip whose setup code is not in its MAC waits, but the admin page says whose it probably is
+    assert (await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "Q7X91C0"}, ali, "102.40.7.7"))[0] == 200
+    assert hub.attach(Remote("102.40.7.7"), {"mac": "C0FFEE5A5A5A", "mac2": "C0FFEE5A5A5B", "model": "lgutap", "fw": "x"}) is not None
+    assert not hub.store.is_approved("C0FFEE5A5A5A") and hub.store.first_seen.get("C0FFEE5A5A5A")
+    waiting = next(x for x in (await hub.admin_report())["new_strips"] if x["id"] == "C0FFEE5A5A5A")
+    best = waiting["guesses"][0]
+    assert best["id"] == cust_id and best["customer"] and set(best["why"]) == {"app", "network"} and "Q7X91C0" in best["codes"]
+    status, _ = await loop.run_in_executor(None, http, "/api/strips/approve", {"strip": "C0FFEE5A5A5A", "customer": cust_id})
+    assert status == 200 and "C0FFEE5A5A5A" not in hub.store.first_seen
+    assert "C0FFEE5A5A5A" in [x["id"] for x in (await loop.run_in_executor(None, http, "/api/state", None, ali))[1]["strips"]]
     assert (await loop.run_in_executor(None, post, "/api/strips/assign", {"strip": "A1B2C3D4E5F6", "customer": ""}, ali))[0] == 403
     before = report["totals"]["downloads"]
     hub.store.count_download("41.33.1.1", time.time())
@@ -3112,7 +3205,7 @@ async def selftest() -> None:
         return {"directive": d}
     found = await hub.alexa(directive("Alexa.Discovery", "Discover", tokens["access_token"]))
     ids = [e["endpointId"] for e in found["event"]["payload"]["endpoints"]]
-    assert {i.split("-")[0] for i in ids} == {"C0FFEEAA0001", "C0FFEE77AB12"} and len(ids) == 10  # their strips only
+    assert {i.split("-")[0] for i in ids} == {"C0FFEEAA0001", "C0FFEE77AB12", "C0FFEE5A5A5A"} and len(ids) == 15  # theirs only
     bad = await hub.alexa(directive("Alexa.Discovery", "Discover", "nope"))
     assert bad["event"]["payload"]["type"] == "INVALID_AUTHORIZATION_CREDENTIAL"
     nosuch = await hub.alexa(directive("Alexa.PowerController", "TurnOn", tokens["access_token"], "A1B2C3D4E5F6-1"))
