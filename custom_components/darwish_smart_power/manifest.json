@@ -1,0 +1,12 @@
+{
+  "domain": "darwish_smart_power",
+  "name": "Darwish Smart Power",
+  "codeowners": ["@mohamedstar19"],
+  "config_flow": true,
+  "documentation": "https://github.com/mohamedstar19/darwish-smart-power#home-assistant",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/mohamedstar19/darwish-smart-power/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}

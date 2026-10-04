@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Darwish Smart Power",
+        "menu_options": {
+          "account": "ادخل بحسابي (موبايل أو إيميل)",
+          "code": "عندي كود دعوة"
+        }
+      },
+      "account": {
+        "title": "دخول",
+        "data": {"url": "عنوان السيرفر", "username": "رقم الموبايل أو الإيميل", "password": "الباسورد"}
+      },
+      "code": {
+        "title": "كود الدعوة",
+        "data": {"url": "عنوان السيرفر", "code": "كود الدعوة"}
+      }
+    },
+    "error": {
+      "invalid_auth": "الرقم أو الإيميل أو الباسورد أو الكود غلط.",
+      "cannot_connect": "مش قادرين نوصل للسيرفر."
+    },
+    "abort": {
+      "already_configured": "الحساب ده متضاف بالفعل.",
+      "reauth_successful": "تم الدخول تاني."
+    }
+  },
+  "entity": {
+    "switch": {"all_outlets": {"name": "كل المخارج"}},
+    "sensor": {
+      "power": {"name": "القدرة"},
+      "energy": {"name": "الاستهلاك"},
+      "voltage": {"name": "الجهد"},
+      "current": {"name": "التيار"},
+      "rssi": {"name": "إشارة الواي فاي"}
+    }
+  }
+}

@@ -140,6 +140,20 @@ python3 smartpower.py provision --server-ip 192.168.1.20 --ssid "اسم-الوا
   المشتركات الأونلاين، المشتركات المستنية موافقة، وتقدر تقفل التسجيل.
 - أي مشترك يتصل من برّه البيت من غير ما يتضاف من التطبيق بيستنى موافقتك.
 
+<a id="home-assistant"></a>
+## Home Assistant
+
+المشتركات بتظهر في Home Assistant كسويتشات وحساسات (قدرة، استهلاك kWh مع **Energy Dashboard**، حرارة، جهد، تيار، إشارة الواي فاي).
+
+1. **HACS ← Integrations ← ⋮ ← Custom repositories**: حط `https://github.com/mohamedstar19/darwish-smart-power` واختار **Integration**.
+2. دوّر على **Darwish Smart Power** ← Download، وبعدين اعمل Restart لـ Home Assistant.
+3. **Settings ← Devices & services ← Add integration ← Darwish Smart Power**:
+   - **ادخل بحسابي**: رقم الموبايل أو الإيميل والباسورد بتوع التطبيق، أو
+   - **عندي كود دعوة**.
+4. المشتركات بتاعتك هتظهر لوحدها، وأي مشترك تضيفه بعد كده هيظهر كمان.
+
+ومن Home Assistant تقدر توصّلهم بـ Alexa و Google Home (مثلاً عن طريق Home Assistant Cloud).
+
 ## الحماية
 
 بورت المشترك (10086) مفتوح على الإنترنت، فأي حد يقدر يتصل بيه ويدّعي إنه مشترك. السيرفر بيحمي نفسه:

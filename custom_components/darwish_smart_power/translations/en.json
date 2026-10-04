@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Darwish Smart Power",
+        "menu_options": {
+          "account": "Sign in with my account (mobile or e-mail)",
+          "code": "I have an invite code"
+        }
+      },
+      "account": {
+        "title": "Sign in",
+        "data": {"url": "Server address", "username": "Mobile number or e-mail", "password": "Password"}
+      },
+      "code": {
+        "title": "Invite code",
+        "data": {"url": "Server address", "code": "Invite code"}
+      }
+    },
+    "error": {
+      "invalid_auth": "Wrong mobile/e-mail, password or code.",
+      "cannot_connect": "Could not reach the server."
+    },
+    "abort": {
+      "already_configured": "This account is already added.",
+      "reauth_successful": "Signed in again."
+    }
+  },
+  "entity": {
+    "switch": {"all_outlets": {"name": "All outlets"}},
+    "sensor": {
+      "power": {"name": "Power"},
+      "energy": {"name": "Energy"},
+      "voltage": {"name": "Voltage"},
+      "current": {"name": "Current"},
+      "rssi": {"name": "Wi-Fi signal"}
+    }
+  }
+}
