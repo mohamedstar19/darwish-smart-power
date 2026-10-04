@@ -36,7 +36,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import parse_qs, urlsplit
+from html import escape as html_escape
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 VERSION = "2.0.0"
 STRIP_PORT = 10086                       # fixed in the strip firmware
@@ -65,6 +66,12 @@ MAX_STRIKES = 3                          # misbehaving connections (10 minutes) 
 BLOCK_SECONDS = 3600
 EXPECT_SECONDS = 1800                    # a strip announced by the app is approved if it connects this soon
 RESERVE_DAYS = 60                        # a strip the owner reserved for a customer (e.g. set up before shipping)
+# Voice assistants link a customer's account with OAuth 2 (authorization code grant)
+OAUTH_CLIENTS = ("alexa", "google")
+OAUTH_REDIRECT_HOSTS = ("pitangui.amazon.com", "layla.amazon.com", "alexa.amazon.co.jp",
+                        "oauth-redirect.googleusercontent.com", "oauth-redirect-sandbox.googleusercontent.com")
+OAUTH_CODE_SECONDS = 300
+OAUTH_TOKEN_SECONDS = 3600
 LOGIN_FAILS = 10                         # different wrong passwords from one address (5 minutes) before a block
 LOGIN_BLOCK_SECONDS = 900
 ICONS = ("plug", "kettle", "router", "tv", "ac", "lamp", "heater", "fan", "fridge",
@@ -186,6 +193,8 @@ class Store:
         self.stats: Dict[str, Any] = {}
         # the owner's admin page lives at a random, unguessable address instead of /admin
         self.admin_path = ""
+        # voice assistant links: {"clients": {name: secret hash}, "codes": {...}, "access": {...}, "refresh": {...}}
+        self.oauth: Dict[str, Dict[str, Any]] = {"clients": {}, "codes": {}, "access": {}, "refresh": {}}
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             self.names = dict(data.get("names", {}))
@@ -201,6 +210,7 @@ class Store:
             self.expected = dict(data.get("expected", {}))
             self.stats = dict(data.get("stats", {}))
             self.admin_path = str(data.get("admin_path", ""))
+            self.oauth.update({k: dict(v) for k, v in data.get("oauth", {}).items()})
             if "approved" in data:
                 self.approved = list(data["approved"])
             else:                                   # before approvals existed: every strip in use counts
@@ -216,7 +226,7 @@ class Store:
                            "alexa_ports": self.alexa_ports, "users": self.users,
                            "settings": self.settings, "approved": self.approved,
                            "blocked_strips": self.blocked_strips, "expected": self.expected,
-                           "stats": self.stats, "admin_path": self.admin_path},
+                           "stats": self.stats, "admin_path": self.admin_path, "oauth": self.oauth},
                           ensure_ascii=False, indent=1)
         fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), prefix=".smartpower-")
         try:
@@ -229,6 +239,65 @@ class Store:
                 os.unlink(tmp)
             except OSError:
                 pass
+
+    # ---- voice assistant account linking (OAuth 2). Only hashes of secrets and tokens are kept.
+
+    @staticmethod
+    def _digest(value: str) -> str:
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+    def oauth_new_secret(self, client: str) -> str:
+        secret = base64.urlsafe_b64encode(os.urandom(24)).decode().rstrip("=")
+        self.oauth["clients"][client] = self._digest(secret)
+        self.save()
+        return secret
+
+    def oauth_client_ok(self, client: str, secret: str) -> bool:
+        stored = self.oauth["clients"].get(client, "")
+        return bool(stored) and hmac.compare_digest(stored, self._digest(secret or ""))
+
+    def _oauth_prune(self, now: float) -> None:
+        for kind in ("codes", "access", "refresh"):
+            self.oauth[kind] = {k: v for k, v in self.oauth[kind].items() if v.get("until", 0) > now}
+
+    def oauth_new_code(self, client: str, subject: str, redirect: str, now: float) -> str:
+        code = base64.urlsafe_b64encode(os.urandom(18)).decode().rstrip("=")
+        self._oauth_prune(now)
+        self.oauth["codes"][self._digest(code)] = {"client": client, "subject": subject, "redirect": redirect,
+                                                   "until": now + OAUTH_CODE_SECONDS}
+        self.save()
+        return code
+
+    def oauth_tokens(self, client: str, subject: str, now: float) -> Dict[str, Any]:
+        access = base64.urlsafe_b64encode(os.urandom(24)).decode().rstrip("=")
+        refresh = base64.urlsafe_b64encode(os.urandom(30)).decode().rstrip("=")
+        self.oauth["access"][self._digest(access)] = {"client": client, "subject": subject,
+                                                      "until": now + OAUTH_TOKEN_SECONDS}
+        self.oauth["refresh"][self._digest(refresh)] = {"client": client, "subject": subject,
+                                                        "until": now + 3650 * 86400}
+        self.save()
+        return {"access_token": access, "token_type": "bearer", "expires_in": OAUTH_TOKEN_SECONDS,
+                "refresh_token": refresh}
+
+    def oauth_take_code(self, code: str, client: str, redirect: str, now: float) -> Optional[str]:
+        entry = self.oauth["codes"].pop(self._digest(code or ""), None)
+        self.save()
+        if not entry or entry["until"] <= now or entry["client"] != client:
+            return None
+        if redirect and redirect != entry["redirect"]:
+            return None
+        return entry["subject"]
+
+    def oauth_refresh(self, refresh: str, client: str, now: float) -> Optional[str]:
+        entry = self.oauth["refresh"].get(self._digest(refresh or ""))
+        if not entry or entry["until"] <= now or entry["client"] != client:
+            return None
+        return entry["subject"]
+
+    def oauth_subject(self, access: str, now: float) -> Optional[str]:
+        """"owner" or a customer/member id for a voice assistant's access token."""
+        entry = self.oauth["access"].get(self._digest(access or ""))
+        return entry["subject"] if entry and entry["until"] > now else None
 
     def owner_path(self) -> str:
         """"/owner-<random>": made once and kept, so the owner can bookmark it."""
@@ -494,7 +563,24 @@ def password_ok(stored: str, password: str) -> bool:
     except (ValueError, AttributeError):
         return False
 OWNER_ONLY = ("/api/users", "/api/settings", "/api/lock", "/api/strips/approve", "/api/strips/remove", "/api/strips/assign",
-              "/api/strips/reserve", "/api/strips/unreserve", "/api/admin")
+              "/api/strips/reserve", "/api/strips/unreserve", "/api/admin", "/api/oauth/secret")
+
+LINK_PAGE = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Darwish Smart Power</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:15px/1.6 system-ui,Tahoma,sans-serif;color:#fff4ec;
+background:linear-gradient(180deg,#1e130d,#0d0907)}form{width:min(380px,92vw);padding:24px;border-radius:22px;
+background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);text-align:center}img{width:72px;border-radius:18px}
+h1{font-size:19px;margin:10px 0 2px}p{color:#c9b8ac;margin:0 0 14px;font-size:13px}input{width:100%%;box-sizing:border-box;
+margin:6px 0;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.3);color:inherit;
+font:inherit;text-align:center}button{width:100%%;margin-top:10px;padding:12px;border:0;border-radius:12px;font:inherit;
+font-weight:700;background:linear-gradient(135deg,#ff7a3d,#ffb347);color:#2a0e00}.err{color:#ff6b6b;min-height:22px}
+small{display:block;margin-top:12px;color:#8a7a6f}</style></head><body>
+<form method="post" action="/oauth/authorize"><img src="/icons/icon-192.png" alt="">
+<h1>اربط حسابك بـ %(who)s</h1><p>ادخل برقم الموبايل أو الإيميل والباسورد بتوع تطبيق Darwish Smart Power</p>
+%(hidden)s<input name="login" placeholder="رقم الموبايل أو الإيميل" dir="ltr" autocomplete="username" required>
+<input name="password" type="password" placeholder="الباسورد أو كود الدعوة" dir="ltr" autocomplete="current-password" required>
+<div class="err">%(error)s</div><button type="submit">اربط</button>
+<small>Sign in with your Darwish Smart Power account to link it to %(who)s.</small></form></body></html>"""
 
 
 def may_see(who: Dict[str, Any], mac: str) -> bool:
@@ -784,6 +870,29 @@ class StripLink:
             self.closed = True
             self.hub.detach(self)
             self.writer.close()
+
+
+def alexa_header(namespace: str, name: str, correlation: Optional[str] = None) -> Dict[str, Any]:
+    header = {"namespace": namespace, "name": name, "payloadVersion": "3", "messageId": os.urandom(16).hex()}
+    if correlation:
+        header["correlationToken"] = correlation
+    return header
+
+
+def alexa_reply(header: Dict[str, Any], endpoint: Dict[str, Any], namespace: str, name: str,
+                properties: List[Dict[str, Any]]) -> Dict[str, Any]:
+    return {"event": {"header": alexa_header(namespace, name, header.get("correlationToken")),
+                      "endpoint": {"scope": endpoint.get("scope", {}), "endpointId": endpoint.get("endpointId", "")},
+                      "payload": {}},
+            "context": {"properties": properties}}
+
+
+def alexa_error(header: Dict[str, Any], endpoint: Dict[str, Any], kind: str, message: str) -> Dict[str, Any]:
+    event: Dict[str, Any] = {"header": alexa_header("Alexa", "ErrorResponse", header.get("correlationToken")),
+                             "payload": {"type": kind, "message": message}}
+    if endpoint.get("endpointId"):
+        event["endpoint"] = {"endpointId": endpoint["endpointId"]}
+    return {"event": event}
 
 
 def is_local_address(ip: str) -> bool:
@@ -1124,6 +1233,96 @@ class Hub:
         """Family members (customers are on the admin page)."""
         return {"users": [self.user_json(u) for u in self.store.users if u.get("role") != CUSTOMER]}
 
+    def who_for(self, subject: str) -> Optional[Dict[str, Any]]:
+        """The person behind a voice assistant link: "owner" or a member/customer id."""
+        if subject == "owner":
+            return OWNER
+        user = next((u for u in self.store.users if u["id"] == subject), None)
+        if user is None:
+            return None
+        strips = set(user.get("strips") or [])
+        return {"role": user["role"], "name": user["name"], "id": user["id"], "login": user.get("login", ""),
+                "strips": strips if user["role"] == CUSTOMER else (strips or None)}
+
+    # ---- Alexa Smart Home (directives arrive through the skill's AWS Lambda, which only forwards them)
+
+    async def alexa(self, request: Dict[str, Any], now: Optional[float] = None) -> Dict[str, Any]:
+        now = time.time() if now is None else now
+        directive = request.get("directive") or {}
+        header = directive.get("header") or {}
+        ns, name = header.get("namespace", ""), header.get("name", "")
+        payload = directive.get("payload") or {}
+        endpoint = directive.get("endpoint") or {}
+        if ns == "Alexa.Authorization":
+            token = (payload.get("grantee") or {}).get("token", "")
+        else:
+            token = (payload.get("scope") or endpoint.get("scope") or {}).get("token", "")
+        subject = self.store.oauth_subject(token, now)
+        who = self.who_for(subject) if subject else None
+        if who is None:
+            return alexa_error(header, endpoint, "INVALID_AUTHORIZATION_CREDENTIAL", "sign in to the skill again")
+        if ns == "Alexa.Authorization" and name == "AcceptGrant":
+            return {"event": {"header": alexa_header("Alexa.Authorization", "AcceptGrant.Response"), "payload": {}}}
+        if ns == "Alexa.Discovery" and name == "Discover":
+            return {"event": {"header": alexa_header("Alexa.Discovery", "Discover.Response"),
+                              "payload": {"endpoints": self.alexa_endpoints(who)}}}
+        mac, _, part = str(endpoint.get("endpointId", "")).partition("-")
+        strip = self.find(mac)
+        if strip is None or not may_see(who, strip.mac) or self.store.locked(strip.mac) \
+                or not part.isdigit() or int(part) not in (0,) + OUTLETS:
+            return alexa_error(header, endpoint, "NO_SUCH_ENDPOINT", "this outlet is not on your account")
+        outlet = int(part)
+        if ns == "Alexa.PowerController" and name in ("TurnOn", "TurnOff"):
+            if who["role"] == "view":
+                return alexa_error(header, endpoint, "INVALID_DIRECTIVE", "view-only access")
+            if not strip.online:
+                return alexa_error(header, endpoint, "ENDPOINT_UNREACHABLE", "the strip is offline")
+            code, body = await self.switch(strip.mac, outlet, name == "TurnOn")
+            if code >= 400:
+                return alexa_error(header, endpoint, "INTERNAL_ERROR", str(body.get("error", "")))
+            return alexa_reply(header, endpoint, "Alexa", "Response", self.alexa_properties(strip, outlet))
+        if ns == "Alexa" and name == "ReportState":
+            return alexa_reply(header, endpoint, "Alexa", "StateReport", self.alexa_properties(strip, outlet))
+        return alexa_error(header, endpoint, "INVALID_DIRECTIVE", "not supported: %s.%s" % (ns, name))
+
+    def alexa_properties(self, strip: Strip, outlet: int) -> List[Dict[str, Any]]:
+        on = any(o.on for o in strip.outlets.values()) if outlet == 0 else strip.outlets[outlet].on
+        stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.00Z")
+        return [
+            {"namespace": "Alexa.PowerController", "name": "powerState", "value": "ON" if on else "OFF",
+             "timeOfSample": stamp, "uncertaintyInMilliseconds": 500},
+            {"namespace": "Alexa.EndpointHealth", "name": "connectivity",
+             "value": {"value": "OK" if strip.online else "UNREACHABLE"}, "timeOfSample": stamp,
+             "uncertaintyInMilliseconds": 500},
+        ]
+
+    def alexa_endpoints(self, who: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Every outlet (and each whole strip) the person may see; strips locked with a PIN stay out."""
+        out = []
+        for strip in sorted(self.strips.values(), key=lambda x: x.mac):
+            if not self.store.is_approved(strip.mac) or not may_see(who, strip.mac) or self.store.locked(strip.mac):
+                continue
+            strip_name = self.store.name(strip.mac, 0) or "مشترك %s" % strip.mac[-4:]
+            for n in (0,) + OUTLETS:
+                name = strip_name if n == 0 else (self.store.name(strip.mac, n) or "%s مخرج %d" % (strip_name, n))
+                out.append({
+                    "endpointId": "%s-%d" % (strip.mac, n),
+                    "manufacturerName": "Darwish Tech",
+                    "description": "Darwish Smart Power" + (" - all outlets" if n == 0 else " outlet"),
+                    "friendlyName": name[:120],
+                    "displayCategories": ["SMARTPLUG"],
+                    "capabilities": [
+                        {"type": "AlexaInterface", "interface": "Alexa", "version": "3"},
+                        {"type": "AlexaInterface", "interface": "Alexa.PowerController", "version": "3",
+                         "properties": {"supported": [{"name": "powerState"}], "proactivelyReported": False,
+                                        "retrievable": True}},
+                        {"type": "AlexaInterface", "interface": "Alexa.EndpointHealth", "version": "3.2",
+                         "properties": {"supported": [{"name": "connectivity"}], "proactivelyReported": False,
+                                        "retrievable": True}},
+                    ],
+                })
+        return out
+
     def saw_user(self, user: Dict[str, Any]) -> None:
         now = time.time()
         self.user_seen[user["id"]] = now
@@ -1223,6 +1422,7 @@ class Hub:
             "new_strips": [{"id": x.mac, "address": x.address, "online": x.online}
                            for x in self.strips.values() if not store.is_approved(x.mac)],
             "signup": bool(store.settings.get("signup", True)),
+            "voice": {c: bool(store.oauth["clients"].get(c)) for c in OAUTH_CLIENTS},
             "reservations": sorted(({
                 "code": code, "customer": next((u["name"] for u in customers if u["id"] == e.get("by")), "?"),
                 "days_left": max(0, int((e.get("until", 0) - now) // 86400)),
@@ -1885,6 +2085,9 @@ class WebHandler(BaseHTTPRequestHandler):
             return
         if self.send_static(path):                  # public: website, control panel (asks for the password), PWA files
             return
+        if path == "/oauth/authorize":              # public: Alexa / Google account linking sign-in page
+            self.oauth_authorize_page()
+            return
         who = self.signed_in()
         if who is None:
             return
@@ -1953,6 +2156,99 @@ class WebHandler(BaseHTTPRequestHandler):
             self.reply_json(400, {"error": "bad request: %s" % err})
             return None
 
+    # ---- voice assistant account linking (OAuth 2, authorization code grant)
+
+    def oauth_params(self, values: Dict[str, List[str]]) -> Optional[Dict[str, str]]:
+        """client_id, redirect_uri and state, if they belong to a configured voice assistant."""
+        get = lambda k: (values.get(k) or [""])[0]
+        client, redirect = get("client_id"), get("redirect_uri")
+        parts = urlsplit(redirect)
+        if client not in OAUTH_CLIENTS or not self.server.hub.store.oauth["clients"].get(client):
+            return None
+        if parts.scheme != "https" or parts.hostname not in OAUTH_REDIRECT_HOSTS:
+            return None
+        return {"client_id": client, "redirect_uri": redirect, "state": get("state")}
+
+    def oauth_authorize_page(self, params: Optional[Dict[str, str]] = None, error: str = "") -> None:
+        params = params or self.oauth_params(parse_qs(urlsplit(self.path).query))
+        if params is None:
+            self.reply(400, b"Unknown app or address.", "text/plain; charset=utf-8")
+            return
+        hidden = "".join('<input type="hidden" name="%s" value="%s">' % (k, html_escape(v)) for k, v in params.items())
+        who = "Google" if params["client_id"] == "google" else "Alexa"
+        page = LINK_PAGE % {"who": who, "hidden": hidden, "error": html_escape(error)}
+        self.reply(200 if not error else 401, page.encode("utf-8"), "text/html; charset=utf-8",
+                   {"Content-Security-Policy": "frame-ancestors 'none'"})
+
+    def read_form(self) -> Dict[str, List[str]]:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if not 0 < length <= MAX_BODY:
+            return {}
+        return parse_qs(self.rfile.read(length).decode("utf-8", "replace"))
+
+    def oauth_authorize_post(self) -> None:
+        guard, ip, hub = self.server.hub.guard, self.client_ip(), self.server.hub
+        form = self.read_form()
+        params = self.oauth_params(form)
+        if params is None:
+            self.reply(400, b"Unknown app or address.", "text/plain; charset=utf-8")
+            return
+        if guard.is_blocked(ip):
+            self.oauth_authorize_page(params, "محاولات كتير، جرّب بعد شوية. Too many attempts.")
+            return
+        login = (form.get("login") or [""])[0]
+        password = (form.get("password") or [""])[0]
+        subject = None
+        account = hub.store.account_by_login(normalise_login(login) or "")
+        if account and password_ok(account.get("pw", ""), password):
+            subject = account["id"]
+        elif self.server.token and hmac.compare_digest(password.strip().encode(), self.server.token.encode()):
+            subject = "owner"                           # the owner signs in with the server password
+        else:
+            member = hub.store.user_by_token(password.strip()) if password.strip() else None
+            subject = member["id"] if member else None  # a family member with their invite code
+        if subject is None:
+            guard.login_failed(ip, ["%s|%s" % (login, password)])
+            self.oauth_authorize_page(params, "الرقم أو الباسورد غلط. Wrong login or password.")
+            return
+        code = hub.store.oauth_new_code(params["client_id"], subject, params["redirect_uri"], time.time())
+        sep = "&" if "?" in params["redirect_uri"] else "?"
+        target = "%s%scode=%s&state=%s" % (params["redirect_uri"], sep, quote(code), quote(params["state"]))
+        log("[oauth] %s linked by %s" % (params["client_id"], "the owner" if subject == "owner" else "account " + subject))
+        self.reply(302, b"", "text/plain", {"Location": target})
+
+    def oauth_token(self) -> None:
+        store = self.server.hub.store
+        form = self.read_form()
+        get = lambda k: (form.get(k) or [""])[0]
+        client, secret = get("client_id"), get("client_secret")
+        auth = self.headers.get("Authorization", "")
+        if auth[:6].lower() == "basic ":
+            try:
+                client, _, secret = base64.b64decode(auth[6:]).decode("utf-8").partition(":")
+                client, secret = unquote(client), unquote(secret)
+            except (ValueError, UnicodeDecodeError):
+                pass
+        if not store.oauth_client_ok(client, secret):
+            self.reply_json(401, {"error": "invalid_client"})
+            return
+        now = time.time()
+        grant = get("grant_type")
+        if grant == "authorization_code":
+            subject = store.oauth_take_code(get("code"), client, get("redirect_uri"), now)
+        elif grant == "refresh_token":
+            subject = store.oauth_refresh(get("refresh_token"), client, now)
+        else:
+            self.reply_json(400, {"error": "unsupported_grant_type"})
+            return
+        if subject is None or self.server.hub.who_for(subject) is None:
+            self.reply_json(400, {"error": "invalid_grant"})
+            return
+        self.reply_json(200, store.oauth_tokens(client, subject, now))
+
     def account_request(self, path: str) -> None:
         """Public: a customer creates an account or signs in from the app."""
         guard, ip = self.server.hub.guard, self.client_ip()
@@ -1978,6 +2274,17 @@ class WebHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path in ("/api/signup", "/api/login"):
             self.account_request(path)
+            return
+        if path == "/oauth/authorize":
+            self.oauth_authorize_post()
+            return
+        if path == "/oauth/token":
+            self.oauth_token()
+            return
+        if path == "/api/alexa":
+            req = self.read_json()
+            if req is not None:
+                self.reply_json(200, self.server.run_on_loop(self.server.hub.alexa(req)))
             return
         who = self.signed_in()
         if who is None:
@@ -2031,6 +2338,12 @@ class WebHandler(BaseHTTPRequestHandler):
             elif path == "/api/strips/remove":
                 block = bool(req.get("block")) and who["role"] == "owner"
                 code, body = self.server.run_on_loop(hub.remove_strip(strip_id, block))
+            elif path == "/api/oauth/secret":
+                client = str(req.get("client") or "")
+                if client not in OAUTH_CLIENTS:
+                    code, body = 400, {"error": "client must be alexa or google"}
+                else:
+                    code, body = 200, {"ok": True, "client_id": client, "client_secret": hub.store.oauth_new_secret(client)}
             elif path == "/api/strips/reserve":
                 code, body = self.server.run_on_loop(hub.reserve_strip(req.get("code"), str(req.get("customer") or "")))
             elif path == "/api/strips/unreserve":
@@ -2750,6 +3063,70 @@ async def selftest() -> None:
     hub.store.count_download("41.33.1.1", time.time())                          # same phone again: not counted
     hub.store.count_download("41.33.1.2", time.time())
     assert (await hub.admin_report())["totals"]["downloads"] == before + 2
+    # ---- Alexa: account linking (OAuth) and smart home directives
+    from http.client import HTTPConnection
+
+    def raw(method: str, path: str, body: str = "", headers: Optional[dict] = None) -> Tuple[int, Dict[str, str], bytes]:
+        conn = HTTPConnection("127.0.0.1", web.server_address[1], timeout=10)
+        conn.request(method, path, body=body.encode(), headers=headers or {})
+        resp = conn.getresponse()
+        out = (resp.status, dict(resp.getheaders()), resp.read())
+        conn.close()
+        return out
+    redirect = "https://pitangui.amazon.com/api/skill/link/M2X"
+    query = "/oauth/authorize?client_id=alexa&response_type=code&state=st8&redirect_uri=" + quote(redirect, safe="")
+    assert (await loop.run_in_executor(None, raw, "GET", query))[0] == 400            # no secret made yet
+    status, made = await loop.run_in_executor(None, http, "/api/oauth/secret", {"client": "alexa"})
+    assert status == 200 and len(made["client_secret"]) > 20
+    secret = made["client_secret"]
+    status, _, page_html = await loop.run_in_executor(None, raw, "GET", query)
+    assert status == 200 and b'name="state" value="st8"' in page_html
+    assert (await loop.run_in_executor(None, raw, "GET", query.replace("pitangui.amazon.com", "evil.example")))[0] == 400
+    form = {"Content-Type": "application/x-www-form-urlencoded"}
+    fields = "client_id=alexa&state=st8&redirect_uri=%s" % quote(redirect, safe="")
+    status, _, _ = await loop.run_in_executor(None, raw, "POST", "/oauth/authorize", fields + "&login=01012345678&password=bad", form)
+    assert status == 401
+    status, hdrs, _ = await loop.run_in_executor(None, raw, "POST", "/oauth/authorize",
+                                                 fields + "&login=01012345678&password=secret1", form)
+    assert status == 302 and hdrs["Location"].startswith(redirect + "?code=") and hdrs["Location"].endswith("&state=st8")
+    code = parse_qs(urlsplit(hdrs["Location"]).query)["code"][0]
+    basic = {"Authorization": "Basic " + base64.b64encode(("alexa:" + secret).encode()).decode(), **form}
+    grant = "grant_type=authorization_code&code=%s&redirect_uri=%s" % (code, quote(redirect, safe=""))
+    assert (await loop.run_in_executor(None, raw, "POST", "/oauth/token", grant,
+                                       {**form, "Authorization": "Basic " + base64.b64encode(b"alexa:wrong").decode()}))[0] == 401
+    status, _, tok = await loop.run_in_executor(None, raw, "POST", "/oauth/token", grant, basic)
+    tokens = json.loads(tok)
+    assert status == 200 and tokens["access_token"] and tokens["refresh_token"]
+    assert (await loop.run_in_executor(None, raw, "POST", "/oauth/token", grant, basic))[0] == 400   # a code works once
+    status, _, tok = await loop.run_in_executor(None, raw, "POST", "/oauth/token",
+                                                "grant_type=refresh_token&refresh_token=" + tokens["refresh_token"], basic)
+    assert status == 200 and json.loads(tok)["access_token"] != tokens["access_token"]
+
+    def directive(ns: str, name: str, token: str, endpoint: Optional[str] = None) -> dict:
+        d: Dict[str, Any] = {"header": {"namespace": ns, "name": name, "payloadVersion": "3", "messageId": "m1",
+                                        "correlationToken": "c1"}, "payload": {}}
+        if endpoint:
+            d["endpoint"] = {"endpointId": endpoint, "scope": {"type": "BearerToken", "token": token}}
+        else:
+            d["payload"] = {"scope": {"type": "BearerToken", "token": token}}
+        return {"directive": d}
+    found = await hub.alexa(directive("Alexa.Discovery", "Discover", tokens["access_token"]))
+    ids = [e["endpointId"] for e in found["event"]["payload"]["endpoints"]]
+    assert {i.split("-")[0] for i in ids} == {"C0FFEEAA0001", "C0FFEE77AB12"} and len(ids) == 10  # their strips only
+    bad = await hub.alexa(directive("Alexa.Discovery", "Discover", "nope"))
+    assert bad["event"]["payload"]["type"] == "INVALID_AUTHORIZATION_CREDENTIAL"
+    nosuch = await hub.alexa(directive("Alexa.PowerController", "TurnOn", tokens["access_token"], "A1B2C3D4E5F6-1"))
+    assert nosuch["event"]["payload"]["type"] == "NO_SUCH_ENDPOINT"            # someone else's strip
+    owner_tok = hub.store.oauth_tokens("alexa", "owner", time.time())["access_token"]
+    relays[2] = False
+    on = await hub.alexa(directive("Alexa.PowerController", "TurnOn", owner_tok, "A1B2C3D4E5F6-2"))
+    assert on["event"]["header"]["name"] == "Response" and on["event"]["header"]["correlationToken"] == "c1"
+    assert on["context"]["properties"][0]["value"] == "ON" and relays[2]
+    state_report = await hub.alexa(directive("Alexa", "ReportState", owner_tok, "A1B2C3D4E5F6-2"))
+    assert state_report["event"]["header"]["name"] == "StateReport"
+    status, via_web = await loop.run_in_executor(None, post, "/api/alexa", directive("Alexa.Discovery", "Discover", owner_tok))
+    assert status == 200 and via_web["event"]["header"]["name"] == "Discover.Response"
+
     assert (await loop.run_in_executor(None, post, "/api/logout", {}, ali))[0] == 200
     assert (await loop.run_in_executor(None, http, "/api/state", None, ali))[0] == 401
     assert (await loop.run_in_executor(None, post, "/api/account/delete", {}, res["token"]))[0] == 200
@@ -2909,7 +3286,7 @@ async def selftest() -> None:
     writer.close()
     srv.close()
     print("selftest OK: protocol, switching, button events, names, timers, energy history, rooms/icons, "
-          "schedules, cycles, scenes, PIN locks, offline queue, alerts, settings, Alexa, family sharing, protection, strip approval, customer accounts, admin, web API + token")
+          "schedules, cycles, scenes, PIN locks, offline queue, alerts, settings, Alexa, family sharing, protection, strip approval, customer accounts, admin, Alexa skill, web API + token")
 
 
 # --------------------------------------------------------------------------- main

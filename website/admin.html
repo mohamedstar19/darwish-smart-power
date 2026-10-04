@@ -94,6 +94,11 @@ select{background:rgba(0,0,0,.3);border:1px solid var(--stroke);border-radius:10
 .credit{text-align:center;color:var(--faint);font-size:12px;padding:18px}
 .credit a{color:var(--brand);text-decoration:none}
 .hbtns{display:flex;gap:8px;flex-wrap:wrap}
+.kv{display:flex;align-items:center;gap:8px;padding:6px 0;flex-wrap:wrap}
+.kv span{color:var(--soft);font-size:12px;min-width:110px}
+.kv code{flex:1;min-width:0;overflow-wrap:anywhere;background:rgba(0,0,0,.3);border-radius:8px;padding:5px 8px;font-size:12px}
+.btn.small{padding:5px 10px;font-size:12px}
+.secret{margin-top:8px;padding:8px;border:1px dashed rgba(255,179,71,.6);border-radius:12px}
 .resbox summary{list-style:none;display:inline-block;margin:2px 0 8px}
 .resbox summary::-webkit-details-marker{display:none}
 .resbox[open] summary{margin-bottom:10px}
@@ -143,6 +148,11 @@ const L = {
        resTitle: "احجز مشترك لعميل", resNote: "لعميل بعيد: جهّز المشترك بواي فاي بيته واكتب الكود، وأول ما يتصل هيروح لحسابه.", resAdd: "＋ احجز مشترك",
        resCode: "الكود (اللي بعد TONLY_TAP_)", resPick: "اختار العميل", resBtn: "احجز", resWaiting: "مستني يتصل", daysLeft: "يوم باقي",
        cancel: "إلغاء", resNone: "مفيش مشتركات محجوزة.", resNoCustomers: "لازم العميل يعمل حساب الأول.",
+       voiceTitle: "ربط أليكسا وجوجل", voiceNote: "البيانات دي بتتحط في صفحة المهارة عند أمازون أو جوجل (ربط الحساب). كلمة السر بتظهر مرة واحدة بس.",
+       authUrl: "رابط الدخول", tokenUrl: "رابط التوكن", clientId: "رقم العميل", clientSecret: "كلمة السر",
+       newSecret: "اعمل كلمة سر جديدة", secretReady: "متعملة", secretMissing: "لسه متعملتش",
+       secretOnce: "انسخها دلوقتي وحطها عند أمازون/جوجل، مش هتظهر تاني.", copy: "نسخ", copied: "اتنسخت",
+       secretAsk: "كلمة السر القديمة هتبطل تشتغل وأليكسا هيحتاج تحطها من جديد. تكمّل؟",
        signupTitle: "تسجيل عملاء جداد", signupNote: "لو قفلته، محدش يقدر يعمل حساب جديد من التطبيق.", signupOn: "مفتوح",
        done: "تم", fail: "فشل: ", never: "ولا مرة", now: "دلوقتي", min: "د", hour: "س", dayU: "ي", ago: "من",
        credit: "تطوير"},
@@ -163,6 +173,11 @@ const L = {
        resTitle: "Reserve a strip for a customer", resNote: "For a far-away customer: set the strip up with their home Wi-Fi and enter its code; it goes to their account when it connects.", resAdd: "＋ Reserve a strip",
        resCode: "Code (after TONLY_TAP_)", resPick: "Choose the customer", resBtn: "Reserve", resWaiting: "waiting to connect", daysLeft: "days left",
        cancel: "Cancel", resNone: "No reserved strips.", resNoCustomers: "The customer has to create an account first.",
+       voiceTitle: "Alexa and Google link", voiceNote: "Enter these in the skill's Account Linking page at Amazon or Google. The secret is shown only once.",
+       authUrl: "Authorization URI", tokenUrl: "Access token URI", clientId: "Client ID", clientSecret: "Client secret",
+       newSecret: "Make a new secret", secretReady: "set", secretMissing: "not made yet",
+       secretOnce: "Copy it now into Amazon/Google; it will not be shown again.", copy: "Copy", copied: "Copied",
+       secretAsk: "The old secret stops working and must be replaced at Amazon/Google. Continue?",
        signupTitle: "New customer sign-ups", signupNote: "When closed, nobody can create a new account in the app.", signupOn: "Open",
        done: "Done", fail: "Failed: ", never: "never", now: "just now", min: "m", hour: "h", dayU: "d", ago: "ago",
        credit: "Developed by"}
@@ -170,7 +185,7 @@ const L = {
 let lang = (() => { try { return localStorage.getItem("dsp-lang") } catch (e) { return null } })() ||
            ((navigator.language || "").startsWith("ar") ? "ar" : "en");
 let token = (() => { try { return localStorage.getItem("dsp-token") || "" } catch (e) { return "" } })();
-let data = null, timer = null, resOpen = false;
+let data = null, timer = null, resOpen = false, shownSecret = null;
 const t = k => (L[lang] || L.ar)[k] || k;
 const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const fmt = n => Number(n || 0).toLocaleString(lang === "ar" ? "ar-EG" : "en-US");
@@ -292,6 +307,16 @@ function render() {
         <div class="muted" style="font-size:12px">${esc(r.customer)} · ${t("resWaiting")} · ${fmt(r.days_left)} ${t("daysLeft")}</div></div>
         <button class="btn" data-unreserve="${esc(r.code)}">${t("cancel")}</button></div>`).join("") : "") + `</section>`;
 
+  const base = location.origin;
+  const field = (label, value, id) => `<div class="kv"><span>${label}</span><code dir="ltr" ${id ? `id="${id}"` : ""}>${esc(value)}</code>
+      <button class="btn small" data-copy="${esc(value)}">${t("copy")}</button></div>`;
+  html += `<section class="card glass"><h2>🗣️ ${t("voiceTitle")}</h2><p class="note">${t("voiceNote")}</p>
+    ${field(t("authUrl"), base + "/oauth/authorize")}${field(t("tokenUrl"), base + "/oauth/token")}` +
+    ["alexa", "google"].map(c => `<div class="row"><div class="grow"><b>${c === "alexa" ? "Alexa" : "Google"}</b>
+      <div class="muted" style="font-size:12px">${t("clientId")}: <code dir="ltr">${c}</code> · ${t("clientSecret")}: ${(d.voice || {})[c] ? t("secretReady") : t("secretMissing")}</div>
+      ${shownSecret && shownSecret.client === c ? `<div class="secret">${field(t("clientSecret"), shownSecret.secret)}<div class="muted" style="font-size:12px">${t("secretOnce")}</div></div>` : ""}</div>
+      <button class="btn" data-secret="${c}">${t("newSecret")}</button></div>`).join("") + `</section>`;
+
   html += `<section class="card glass"><h2>${t("signupTitle")}</h2><p class="note">${t("signupNote")}</p>
     <label class="switch"><input type="checkbox" id="signup" ${d.signup ? "checked" : ""}> ${t("signupOn")}</label></section>`;
 
@@ -333,6 +358,15 @@ document.addEventListener("change", async ev => {
 });
 
 document.addEventListener("click", async ev => {
+  const cp = ev.target.closest("[data-copy]");
+  if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); toast(t("copied")); } catch (e) {} return; }
+  const sc = ev.target.closest("[data-secret]");
+  if (sc) {
+    if ((data.voice || {})[sc.dataset.secret] && !confirm(t("secretAsk"))) return;
+    try { const r = await api("/api/oauth/secret", {client: sc.dataset.secret}); shownSecret = {client: r.client_id, secret: r.client_secret}; }
+    catch (e) { toast(t("fail") + e.message); }
+    refresh(); return;
+  }
   const un = ev.target.closest("[data-unreserve]");
   if (un) {
     try { await api("/api/strips/unreserve", {code: un.dataset.unreserve}); toast(t("done")); } catch (e) { toast(t("fail") + e.message); }
