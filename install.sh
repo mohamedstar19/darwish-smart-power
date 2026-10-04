@@ -62,7 +62,12 @@ if ! port_free 10086; then
     systemctl start smartpower 2>/dev/null || true
     exit 1
 fi
-PORT="${SP_WEB_PORT:-8095}"
+# later runs keep the port the service already has (a Cloudflare tunnel may point at it)
+OLD_PORT=""
+if [ -f "$UNIT" ]; then
+    OLD_PORT="$(sed -n 's/^Environment=SP_WEB_PORT=//p' "$UNIT")"
+fi
+PORT="${SP_WEB_PORT:-${OLD_PORT:-8095}}"
 FIRST="$PORT"
 while ! port_free "$PORT"; do
     PORT=$((PORT + 1))
@@ -112,6 +117,24 @@ Environment=SP_WEB_PORT=$PORT
 ExecStart=$(command -v python3) $DIR/smartpower.py serve
 Restart=always
 RestartSec=3
+# sandbox: even if someone found a hole in the server, it can only touch its own folder
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=$DIR
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+CapabilityBoundingSet=
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

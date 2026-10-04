@@ -79,6 +79,9 @@ ICONS = ("plug", "kettle", "router", "tv", "ac", "lamp", "heater", "fan", "fridg
 DEFAULT_SETTINGS = {"price_kwh": 1.5, "currency": "EGP", "max_temp_c": 60, "max_watts": 3000, "alexa": True,
                     "signup": True}
 SIGNUPS_PER_HOUR = 5                     # new customer accounts from one internet address
+SIGNUPS_PER_HOUR_ALL = 100               # new customer accounts per hour from everywhere together
+ACCOUNT_FAILS = 10                       # wrong passwords for one account (15 minutes, from anywhere) before it pauses
+ANNOUNCES_PER_HOUR = 12                  # strips one account may say it is setting up, per hour
 MAX_SESSIONS = 10                        # signed-in phones per customer account
 PASSWORD_ROUNDS = 200_000
 SSDP_GROUP = "239.255.255.250"
@@ -137,7 +140,8 @@ def parse_bootinfo(line: str) -> Optional[Dict[str, str]]:
     parts = line[len(prefix):].split(";")
     if len(parts) != 5 or parts[4] != "connect" or not is_mac(parts[1]):
         return None
-    return {"model": parts[0], "mac": parts[1].upper(), "fw": parts[3],
+    printable = lambda x: re.sub(r"[^\x20-\x7e]", "", x)[:40]
+    return {"model": printable(parts[0]), "mac": parts[1].upper(), "fw": printable(parts[3]),
             "mac2": parts[2].upper() if is_mac(parts[2]) else ""}
 
 
@@ -350,7 +354,13 @@ class Store:
 
     def expect(self, code: str, by: str, now: float, seconds: float = EXPECT_SECONDS) -> None:
         self.expected = {c: e for c, e in self.expected.items() if e.get("until", 0) > now}
-        self.expected[code] = {"by": by, "until": now + seconds}
+        old = self.expected.get(code)
+        entry = {"by": by, "until": max(now + seconds, old.get("until", 0) if old else 0)}
+        if old and (old.get("conflict") or str(old.get("by", "")) != by):
+            # two accounts claim the same strip (e.g. a neighbour who saw its Wi-Fi name): the owner decides
+            entry["conflict"] = True
+            log("[strip] TONLY_TAP_%s claimed by two accounts; it will wait for the owner" % code)
+        self.expected[code] = entry
         self.save()
 
     def claim_expected(self, macs: List[str], now: float) -> Optional[str]:
@@ -359,7 +369,7 @@ class Store:
             if entry.get("until", 0) > now and code_matches(code, macs):
                 del self.expected[code]
                 self.save()
-                return str(entry.get("by", ""))
+                return None if entry.get("conflict") else str(entry.get("by", ""))
         return None
 
     def announce(self, code: str, by: str, ip: str, now: float) -> None:
@@ -586,6 +596,9 @@ def hash_password(password: str, salt: Optional[bytes] = None) -> str:
     salt = salt or os.urandom(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PASSWORD_ROUNDS)
     return "pbkdf2$%d$%s$%s" % (PASSWORD_ROUNDS, salt.hex(), digest.hex())
+
+
+DUMMY_HASH = hash_password(os.urandom(16).hex())       # checked against when a login does not exist
 
 
 def password_ok(stored: str, password: str) -> bool:
@@ -949,6 +962,8 @@ class Guard:
         self.new_strips: Dict[str, List[float]] = {}              # ip -> times a new strip was added
         self.login_fails: Dict[str, Dict[str, float]] = {}        # ip -> {wrong password hash: when}
         self.signups: Dict[str, List[float]] = {}                 # ip -> times an account was made
+        self.all_signups: List[float] = []                        # every account made, from anywhere
+        self.account_fails: Dict[str, List[float]] = {}           # login -> wrong passwords, from any address
         self.refused = 0
         self.lock = threading.Lock()                              # the web side runs in other threads
 
@@ -1050,10 +1065,30 @@ class Guard:
         now = time.time() if now is None else now
         with self.lock:
             recent = self._recent(self.signups.setdefault(ip, []), 3600, now)
-            if len(recent) >= SIGNUPS_PER_HOUR:
+            everyone = self._recent(self.all_signups, 3600, now)
+            if len(recent) >= SIGNUPS_PER_HOUR or len(everyone) >= SIGNUPS_PER_HOUR_ALL:
                 return False
             recent.append(now)
+            everyone.append(now)
             return True
+
+    def account_paused(self, login: str, now: Optional[float] = None) -> bool:
+        """Too many wrong passwords for this account lately, from any number of addresses."""
+        now = time.time() if now is None else now
+        with self.lock:
+            return len(self._recent(self.account_fails.get(login, []), 900, now)) >= ACCOUNT_FAILS
+
+    def account_failed(self, login: str, now: Optional[float] = None) -> None:
+        if not login:
+            return
+        now = time.time() if now is None else now
+        with self.lock:
+            if len(self.account_fails) > 5000:                  # someone trying endless made-up logins
+                self.account_fails = {k: v for k, v in self.account_fails.items() if v and now - v[-1] < 900}
+            fails = self._recent(self.account_fails.setdefault(login, []), 900, now)
+            fails.append(now)
+            if len(fails) == ACCOUNT_FAILS:
+                log("[guard] account %s paused for 15 min: %d wrong passwords" % (login[:3] + "…", len(fails)))
 
     def report(self, now: Optional[float] = None) -> Dict[str, Any]:
         now = time.time() if now is None else now
@@ -1399,16 +1434,15 @@ class Hub:
         if self.store.account_by_login(login):
             return 409, {"error": "an account with this phone or e-mail exists; sign in instead", "field": "login"}
         user = {"id": os.urandom(4).hex(), "name": name, "role": CUSTOMER, "login": login,
-                "pw": hash_password(password), "strips": [], "created": int(time.time()), "sessions": []}
+                "pw": req.get("pw") or hash_password(password), "strips": [], "created": int(time.time()), "sessions": []}
         self.store.users.append(user)
         token = self.store.new_session(user)
         log("[account] new customer %s" % user["id"])
         return 200, {"ok": True, "token": token, "me": {"role": CUSTOMER, "name": name}}
 
-    async def sign_in(self, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
-        login = normalise_login(req.get("login"))
-        user = self.store.account_by_login(login) if login else None
-        if user is None or not password_ok(user.get("pw", ""), str(req.get("password") or "")):
+    async def sign_in(self, user: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        """A new session for a customer whose password was already checked."""
+        if user not in self.store.users:
             return 401, {"error": "wrong phone/e-mail or password"}
         token = self.store.new_session(user)
         return 200, {"ok": True, "token": token, "me": {"role": CUSTOMER, "name": user["name"]}}
@@ -1580,6 +1614,10 @@ class Hub:
         if not re.fullmatch(r"[0-9A-Z]{4,16}", code):
             return 400, {"error": "code must be the 4-16 letters/digits after TONLY_TAP_"}
         now = time.time()
+        if by:                                          # an account may not flood the list with codes
+            recent = [a for a in self.store.announced if a.get("by") == by and now - a.get("at", 0) < 3600]
+            if len(recent) >= ANNOUNCES_PER_HOUR:
+                return 429, {"error": "too many strips set up in an hour, try again later"}
         self.store.expect(code, by, now)
         self.store.announce(code, by, ip, now)
         log("[strip] app is setting up TONLY_TAP_%s (%s, from %s)" % (code, "account " + by if by else "the owner", ip or "?"))
@@ -2037,9 +2075,19 @@ class WebServer(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",                           # no page of ours inside someone else's frame
+    "Content-Security-Policy": "frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
+    "Referrer-Policy": "no-referrer",                    # the owner page's address never leaks in a Referer
+    "Strict-Transport-Security": "max-age=31536000",     # browsers keep to HTTPS (only counts over HTTPS)
+}
+
+
 class WebHandler(BaseHTTPRequestHandler):
     server: WebServer
-    server_version = "DarwishSmartPower/" + VERSION
+    server_version = "DarwishSmartPower"                 # no version: nothing to look up for known holes
+    timeout = 30                                         # a client that stalls mid-request is dropped
 
     def log_message(self, fmt, *args):
         pass
@@ -2104,10 +2152,9 @@ class WebHandler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        extra = dict(extra or {})
-        self.send_header("Cache-Control", extra.pop("Cache-Control", "no-store"))
-        self.send_header("X-Content-Type-Options", "nosniff")
-        for k, v in extra.items():
+        headers = dict(SECURITY_HEADERS, **{"Cache-Control": "no-store"})
+        headers.update(extra or {})
+        for k, v in headers.items():
             self.send_header(k, v)
         self.end_headers()
         if self.command != "HEAD":
@@ -2131,8 +2178,8 @@ class WebHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(size))
             self.send_header("Content-Disposition", 'attachment; filename="%s"' % filename)
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Content-Type-Options", "nosniff")
+            for k, v in dict(SECURITY_HEADERS, **{"Cache-Control": "no-store"}).items():
+                self.send_header(k, v)
             self.end_headers()
             if self.command != "HEAD":
                 shutil.copyfileobj(fh, self.wfile, 64 * 1024)
@@ -2298,7 +2345,11 @@ class WebHandler(BaseHTTPRequestHandler):
         login = (form.get("login") or [""])[0]
         password = (form.get("password") or [""])[0]
         subject = None
-        account = hub.store.account_by_login(normalise_login(login) or "")
+        normal = normalise_login(login) or ""
+        if normal and guard.account_paused(normal):
+            self.oauth_authorize_page(params, "محاولات كتير، جرّب بعد شوية. Too many attempts.")
+            return
+        account = hub.store.account_by_login(normal)
         if account and password_ok(account.get("pw", ""), password):
             subject = account["id"]
         elif self.server.token and hmac.compare_digest(password.strip().encode(), self.server.token.encode()):
@@ -2308,6 +2359,7 @@ class WebHandler(BaseHTTPRequestHandler):
             subject = member["id"] if member else None  # a family member with their invite code
         if subject is None:
             guard.login_failed(ip, ["%s|%s" % (login, password)])
+            guard.account_failed(normal)
             self.oauth_authorize_page(params, "الرقم أو الباسورد غلط. Wrong login or password.")
             return
         code = hub.store.oauth_new_code(params["client_id"], subject, params["redirect_uri"], time.time())
@@ -2357,13 +2409,26 @@ class WebHandler(BaseHTTPRequestHandler):
         hub = self.server.hub
         if path == "/api/signup":
             if not guard.may_sign_up(ip):
-                self.reply_json(429, {"error": "too many new accounts from here, try again later"})
+                self.reply_json(429, {"error": "too many new accounts, try again later"})
                 return
+            # the slow password hash runs here, not on the loop that talks to the strips
+            req["pw"] = hash_password(str(req.get("password") or "")) if 6 <= len(str(req.get("password") or "")) <= 128 else ""
             code, body = self.server.run_on_loop(hub.sign_up(req))
-        else:
-            code, body = self.server.run_on_loop(hub.sign_in(req))
-            if code == 401:
-                guard.login_failed(ip, ["%s|%s" % (req.get("login"), req.get("password"))])
+            self.reply_json(code, body)
+            return
+        login = normalise_login(req.get("login")) or ""
+        if guard.account_paused(login):
+            self.reply_json(429, {"error": "too many wrong passwords for this account, try again in 15 minutes"})
+            return
+        user = hub.store.account_by_login(login) if login else None
+        # an unknown login takes as long as a known one, so the time does not tell which accounts exist
+        ok = password_ok(user.get("pw", "") if user else DUMMY_HASH, str(req.get("password") or "")) and user is not None
+        if not ok:
+            guard.login_failed(ip, ["%s|%s" % (req.get("login"), req.get("password"))])
+            guard.account_failed(login)
+            self.reply_json(401, {"error": "wrong phone/e-mail or password"})
+            return
+        code, body = self.server.run_on_loop(hub.sign_in(user))
         self.reply_json(code, body)
 
     def do_POST(self):
@@ -2532,7 +2597,10 @@ class Alexa:
     def devices(self) -> Dict[str, Dict[str, Any]]:
         """key "MAC/outlet" -> {"name", "port", "serial", "mac", "outlet"}; outlet 0 = the whole strip."""
         store = self.hub.store
-        strips = [x for x in self.hub.strips.values() if store.is_approved(x.mac) and not store.locked(x.mac)]
+        customers = {m for u in store.users if u.get("role") == CUSTOMER for m in (u.get("strips") or [])}
+        # customers' strips are not offered to the Echo in the owner's house (they use the Alexa skill)
+        strips = [x for x in self.hub.strips.values()
+                  if store.is_approved(x.mac) and not store.locked(x.mac) and x.mac not in customers]
         out: Dict[str, Dict[str, Any]] = {}
         for strip in strips:
             strip_name = store.name(strip.mac, 0) or "مشترك %s" % strip.mac[-4:]
@@ -2569,6 +2637,8 @@ class Alexa:
 
     def answer(self, text: str, addr: Tuple[str, int]) -> None:
         if "M-SEARCH" not in text or not self.hub.store.settings.get("alexa", True):
+            return
+        if not is_local_address(addr[0]):           # home network only (and never a reflector for floods)
             return
         lowered = text.lower()
         if "urn:belkin:device:**" in lowered:
@@ -2620,6 +2690,10 @@ class Alexa:
     # ---- the per-outlet "smart plug"
 
     async def serve_device(self, key: str, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        peer = writer.get_extra_info("peername")
+        if not peer or not is_local_address(peer[0]):  # the home network only
+            writer.close()
+            return
         try:
             head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 10)
             lines = head.decode("utf-8", "replace").split("\r\n")
@@ -3168,6 +3242,30 @@ async def selftest() -> None:
     status, _ = await loop.run_in_executor(None, http, "/api/strips/approve", {"strip": "C0FFEE5A5A5A", "customer": cust_id})
     assert status == 200 and "C0FFEE5A5A5A" not in hub.store.waiting
     assert "C0FFEE5A5A5A" in [x["id"] for x in (await loop.run_in_executor(None, http, "/api/state", None, ali))[1]["strips"]]
+    # two accounts claiming one setup code (a neighbour who saw its Wi-Fi name): it waits for the owner
+    status, nres = await loop.run_in_executor(None, post, "/api/signup", {"name": "N", "login": "n@example.com", "password": "secret1"}, None, "102.50.1.1")
+    assert status == 200
+    assert (await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "CC0001"}, ali, "102.40.7.7"))[0] == 200
+    assert (await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "CC0001"}, nres["token"], "102.50.1.1"))[0] == 200
+    assert hub.attach(Remote("102.40.7.7"), {"mac": "C0FFEECC0001", "mac2": "", "model": "lgutap", "fw": "x"}) is not None
+    assert not hub.store.is_approved("C0FFEECC0001")
+    await hub.remove_strip("C0FFEECC0001", block=False)
+    # an account may not flood the server with setup codes
+    codes = [(await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "DD%04d" % n}, nres["token"], "102.50.1.1"))[0]
+             for n in range(ANNOUNCES_PER_HOUR + 1)]
+    assert codes[-1] == 429 and 429 not in codes[:-2]
+    # guessing one account's password from many addresses pauses that account, even for the right password
+    for n in range(ACCOUNT_FAILS):
+        assert (await loop.run_in_executor(None, post, "/api/login", {"login": "n@example.com", "password": "bad%d" % n}, None, "103.0.0.%d" % n))[0] == 401
+    assert (await loop.run_in_executor(None, post, "/api/login", {"login": "n@example.com", "password": "secret1"}, None, "103.1.1.1"))[0] == 429
+    assert (await loop.run_in_executor(None, post, "/api/login", {"login": "01012345678", "password": "secret1"}, None, "103.1.1.1"))[0] == 200
+    # every reply carries the browser protections, and customers' strips stay off the owner's local Alexa
+    with urllib.request.urlopen(base + "/privacy", timeout=10) as r:
+        assert r.headers["X-Frame-Options"] == "DENY" and r.headers["Referrer-Policy"] == "no-referrer"
+        assert "frame-ancestors 'none'" in r.headers["Content-Security-Policy"] and VERSION not in r.headers["Server"]
+    local = Alexa(hub, "127.0.0.1").devices()
+    assert not any(k.startswith("C0FFEEAA0001/") for k in local)
+    assert (await loop.run_in_executor(None, post, "/api/account/delete", {}, nres["token"], "102.50.1.1"))[0] == 200
     assert (await loop.run_in_executor(None, post, "/api/strips/assign", {"strip": "A1B2C3D4E5F6", "customer": ""}, ali))[0] == 403
     before = report["totals"]["downloads"]
     hub.store.count_download("41.33.1.1", time.time())
