@@ -158,6 +158,12 @@ sys.exit(0 if json.load(urllib.request.urlopen(req, timeout=2)).get('app') == 'd
         echo "   Android app:       http://$IP:$PORT/app.apk"
         echo "   App settings:      address $IP:$PORT (or your domain) + the password"
         echo "   New strips connect to: $STRIP_IP port 10086"
+        OWNER_PATH="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('admin_path',''))" "$DIR/smartpower-data.json" 2>/dev/null || true)"
+        DOMAIN="$(sed -n 's/^  - hostname: //p' /etc/cloudflared/darwish-smart-power.yml 2>/dev/null | head -1)"
+        if [ -n "$OWNER_PATH" ]; then
+            if [ -n "$DOMAIN" ]; then BASE="https://$DOMAIN"; else BASE="http://$IP:$PORT"; fi
+            echo "   Owner page (private): $BASE$OWNER_PATH"
+        fi
         echo
         if [ "$FRESH_TOKEN" = 1 ]; then
             echo " New password: enter it in the app (Settings > Connection) and the control panel."

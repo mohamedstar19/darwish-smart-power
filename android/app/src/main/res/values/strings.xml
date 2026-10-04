@@ -65,8 +65,8 @@
     <string name="server_address">Server address</string>
     <string name="server_address_hint">For example 192.168.1.20, 203.0.113.5:7896 or https://power.example.com (port 8080 if none is given).</string>
     <string name="settings_bad_address">That doesn\'t look like an address. Use an IP or host name, optionally with :port.</string>
-    <string name="token">Token</string>
-    <string name="token_hint">Leave empty if the server runs without --token.</string>
+    <string name="token">Invite code</string>
+    <string name="token_hint">The code from your invitation.</string>
     <string name="test">Test</string>
     <string name="test_ok">Connected · version %1$s strips online</string>
     <string name="section_language">Language</string>
@@ -329,7 +329,7 @@
     <string name="account_login">Mobile number or e-mail</string>
     <string name="account_password">Password</string>
     <string name="account_password_hint">At least 6 characters</string>
-    <string name="account_have_password">I have a server password or an invite code</string>
+    <string name="account_have_password">I have an invite code</string>
     <string name="account_err_name">Enter your name.</string>
     <string name="account_err_login">Enter a mobile number or an e-mail address.</string>
     <string name="account_err_password">The password needs at least 6 characters.</string>

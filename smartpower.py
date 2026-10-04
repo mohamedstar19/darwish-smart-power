@@ -90,7 +90,6 @@ STATIC = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/welcome": ("index.html", "text/html; charset=utf-8"),
     "/panel": ("panel.html", "text/html; charset=utf-8"),
-    "/admin": ("admin.html", "text/html; charset=utf-8"),
     "/delete-account": ("delete-account.html", "text/html; charset=utf-8"),
     "/privacy": ("privacy.html", "text/html; charset=utf-8"),
     "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
@@ -185,6 +184,8 @@ class Store:
         self.expected: Dict[str, Dict[str, Any]] = {}
         # app downloads: total, per day, and today's (hashed) addresses so a retry is not counted twice
         self.stats: Dict[str, Any] = {}
+        # the owner's admin page lives at a random, unguessable address instead of /admin
+        self.admin_path = ""
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             self.names = dict(data.get("names", {}))
@@ -199,6 +200,7 @@ class Store:
             self.blocked_strips = list(data.get("blocked_strips", []))
             self.expected = dict(data.get("expected", {}))
             self.stats = dict(data.get("stats", {}))
+            self.admin_path = str(data.get("admin_path", ""))
             if "approved" in data:
                 self.approved = list(data["approved"])
             else:                                   # before approvals existed: every strip in use counts
@@ -214,7 +216,7 @@ class Store:
                            "alexa_ports": self.alexa_ports, "users": self.users,
                            "settings": self.settings, "approved": self.approved,
                            "blocked_strips": self.blocked_strips, "expected": self.expected,
-                           "stats": self.stats},
+                           "stats": self.stats, "admin_path": self.admin_path},
                           ensure_ascii=False, indent=1)
         fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), prefix=".smartpower-")
         try:
@@ -227,6 +229,13 @@ class Store:
                 os.unlink(tmp)
             except OSError:
                 pass
+
+    def owner_path(self) -> str:
+        """"/owner-<random>": made once and kept, so the owner can bookmark it."""
+        if not re.fullmatch(r"/owner-[A-Za-z0-9_-]{12,}", self.admin_path or ""):
+            self.admin_path = "/owner-" + base64.urlsafe_b64encode(os.urandom(12)).decode().rstrip("=")
+            self.save()
+        return self.admin_path
 
     def strips_in_use(self) -> set:
         """Strips something refers to: names, rooms/icons, schedules, scenes or a family member."""
@@ -1839,6 +1848,8 @@ class WebHandler(BaseHTTPRequestHandler):
         if path in STATIC:
             name, ctype = STATIC[path]
             target = WEBSITE / name
+        elif path == self.server.hub.store.owner_path():
+            target, ctype = WEBSITE / "admin.html", "text/html; charset=utf-8"
         elif re.fullmatch(r"/icons/[a-z0-9-]+\.(png|svg)", path):
             target = WEBSITE / path.lstrip("/")
             ctype = ICON_TYPES[target.suffix]
@@ -2352,6 +2363,7 @@ async def serve(args) -> int:
     print("  strip port       TCP %d" % STRIP_PORT)
     print("  security         %s" % ("token required" if args.token else "NO TOKEN - only use on a home network you trust"))
     print("  saved settings   %s" % store.path)
+    print("  owner page       %s%s   (keep this address private)" % (url.rstrip("/"), store.owner_path()))
     print("  Android app      %sapp.apk" % url)
     print("  provision with   python3 smartpower.py provision --server-ip %s --ssid WIFI --wifi-password PASS" % ip)
     print("  Ctrl+C to stop", flush=True)
@@ -2598,6 +2610,14 @@ async def selftest() -> None:
         with urllib.request.urlopen(base + path, timeout=10) as r:
             return r.read().decode()
     assert "Privacy Policy" in await loop.run_in_executor(None, page, "/privacy")
+    owner_page = hub.store.owner_path()
+    assert owner_page.startswith("/owner-") and "<title>Admin" in await loop.run_in_executor(None, page, owner_page)
+    assert hub.store.owner_path() == owner_page                               # stays the same
+    try:
+        await loop.run_in_executor(None, page, "/admin")
+        raise AssertionError("/admin must not exist")
+    except urllib.error.HTTPError as err:
+        assert err.code == 401                                                # not a page: same as any unknown path
 
     # ---- protection: limits per internet address, impersonation, silent connections, password guessing
     g, t0 = Guard(), 1_000_000.0

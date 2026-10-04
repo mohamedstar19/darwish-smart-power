@@ -90,6 +90,7 @@ header .hello{color:var(--soft);font-size:13px}
 .login .hint{color:var(--faint);font-size:12px;text-align:start}
 .tabs{display:flex;gap:6px;margin:12px 0 8px;background:rgba(0,0,0,.2);border-radius:999px;padding:4px}
 .tab{flex:1;border:0;background:transparent;border-radius:999px;padding:7px 6px;font-size:13px;color:var(--soft)}
+.linkish{display:block;margin:12px auto 0;border:0;background:none;color:var(--faint);font-size:12px;text-decoration:underline}
 .tab.on{background:linear-gradient(135deg,#ff7a3d,#ffb347);color:#2a0e00;font-weight:700}
 input{width:100%;font:inherit;color:var(--text);background:rgba(255,255,255,.06);border:1px solid var(--stroke);border-radius:14px;padding:13px 14px;margin:14px 0 10px;outline:none;direction:ltr;text-align:center}
 input:focus{border-color:var(--cyan)}
@@ -126,7 +127,7 @@ const L = {
        viewOnly: "صلاحية مشاهدة بس", hi: "أهلاً",
        newTitle: "مشتركات جديدة مستنية موافقتك", newBody: "اتصلت بالسيرفر من غير ما حد يضيفها من التطبيق. وافق بس على اللي تعرفه.",
        from: "من", approve: "موافقة", block: "حظر", blockAsk: "تحظر المشترك ده؟ مش هيقدر يتصل بالسيرفر تاني.",
-       welcome: "أهلاً بيك", tabNew: "حساب جديد", tabIn: "دخول", tabServer: "صاحب السيرفر", name: "اسمك",
+       welcome: "أهلاً بيك", tabNew: "حساب جديد", tabIn: "دخول", tabServer: "صاحب السيرفر", invite: "عندي كود دعوة", inviteCode: "كود الدعوة اللي وصلك", back: "رجوع", name: "اسمك",
        loginId: "رقم الموبايل أو الإيميل", password: "الباسورد", pwHint: "6 حروف أو أرقام على الأقل",
        create: "اعمل الحساب", signIn: "دخول", e409: "فيه حساب بالرقم ده. ادخل بيه.", e401: "الرقم أو الباسورد غلط.",
        e403: "التسجيل مقفول دلوقتي.", e429: "محاولات كتير، جرّب بعد شوية.", eName: "اكتب اسمك.", eLogin: "اكتب رقم موبايل أو إيميل.",
@@ -142,7 +143,7 @@ const L = {
        viewOnly: "View only", hi: "Hi",
        newTitle: "New strips waiting for your approval", newBody: "They connected without being added from the app. Approve only strips you know.",
        from: "from", approve: "Approve", block: "Block", blockAsk: "Block this strip? It will not be able to connect again.",
-       welcome: "Welcome", tabNew: "New account", tabIn: "Sign in", tabServer: "Server owner", name: "Your name",
+       welcome: "Welcome", tabNew: "New account", tabIn: "Sign in", tabServer: "Server owner", invite: "I have an invite code", inviteCode: "The invite code you received", back: "Back", name: "Your name",
        loginId: "Mobile number or e-mail", password: "Password", pwHint: "At least 6 characters",
        create: "Create account", signIn: "Sign in", e409: "An account with this number exists. Sign in.", e401: "Wrong number or password.",
        e403: "New accounts are closed.", e429: "Too many attempts, try later.", eName: "Enter your name.", eLogin: "Enter a mobile number or e-mail.",
@@ -180,16 +181,18 @@ function renderLogin(msg) {
   credit();
   document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
   const m = loginMode, tab = (k, label) => `<button class="tab${m === k ? " on" : ""}" data-mode="${k}">${label}</button>`;
+  const tabs = m === "server" ? "" : `<div class="tabs">${tab("new", t("tabNew"))}${tab("in", t("tabIn"))}</div>`;
   document.getElementById("root").innerHTML = `<form class="login glass" id="lf">
       <img src="/icons/icon-192.png" alt=""><h2 style="margin:4px 0">${t("welcome")}</h2>
-      <div class="tabs">${tab("new", t("tabNew"))}${tab("in", t("tabIn"))}${tab("server", t("tabServer"))}</div>
+      ${tabs}
       ${m === "new" ? `<input id="nm" placeholder="${t("name")}" autocomplete="name">` : ""}
       ${m !== "server" ? `<input id="id" placeholder="${t("loginId")}" autocomplete="username" dir="ltr" inputmode="email">` : ""}
-      <input id="pw" type="password" placeholder="${m === "server" ? t("login") : t("password")}" autocomplete="${m === "new" ? "new-password" : "current-password"}" dir="ltr">
+      <input id="pw" type="password" placeholder="${m === "server" ? t("inviteCode") : t("password")}" autocomplete="${m === "new" ? "new-password" : "current-password"}" dir="ltr">
       ${m === "new" ? `<div class="hint">${t("pwHint")}</div>` : ""}
       <div class="err">${esc(msg || "")}</div>
       <button class="btn primary" style="width:100%" type="submit">${m === "new" ? t("create") : t("signIn")}</button>
-      <button class="icon-btn" style="margin-top:14px" type="button" id="lang">${t("lang")}</button></form>`;
+      <button class="linkish" type="button" data-mode="${m === "server" ? "in" : "server"}">${m === "server" ? t("back") : t("invite")}</button>
+      <button class="icon-btn" style="margin-top:10px" type="button" id="lang">${t("lang")}</button></form>`;
   document.querySelectorAll("[data-mode]").forEach(b => b.onclick = e => { e.preventDefault(); loginMode = b.dataset.mode; renderLogin(); });
   document.getElementById("lf").onsubmit = async e => {
     e.preventDefault();

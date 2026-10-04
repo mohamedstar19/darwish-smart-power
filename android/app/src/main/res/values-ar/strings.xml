@@ -60,8 +60,8 @@
     <string name="server_address">عنوان السيرفر</string>
     <string name="server_address_hint">مثلاً 192.168.1.20 أو 203.0.113.5:7896 أو https://power.example.com (البورت 8080 لو ما كتبتش بورت).</string>
     <string name="settings_bad_address">ده مش شكل عنوان. اكتب IP أو اسم سيرفر، وممكن تضيف :بورت.</string>
-    <string name="token">الرمز (Token)</string>
-    <string name="token_hint">سيبه فاضي لو السيرفر شغال من غير --token.</string>
+    <string name="token">كود الدعوة</string>
+    <string name="token_hint">الكود اللي وصلك في الدعوة.</string>
     <string name="test">اختبار</string>
     <string name="test_ok">متصل · الإصدار %1$s مشترك متصل</string>
     <string name="section_language">اللغة</string>
@@ -315,7 +315,7 @@
     <string name="account_login">رقم الموبايل أو الإيميل</string>
     <string name="account_password">الباسورد</string>
     <string name="account_password_hint">6 حروف أو أرقام على الأقل</string>
-    <string name="account_have_password">عندي باسورد سيرفر أو كود دعوة</string>
+    <string name="account_have_password">عندي كود دعوة</string>
     <string name="account_err_name">اكتب اسمك.</string>
     <string name="account_err_login">اكتب رقم موبايل أو إيميل.</string>
     <string name="account_err_password">الباسورد لازم يكون 6 حروف أو أرقام على الأقل.</string>

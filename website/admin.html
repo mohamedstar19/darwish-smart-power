@@ -102,7 +102,7 @@ select{background:rgba(0,0,0,.3);border:1px solid var(--stroke);border-radius:10
 <div class="toast" id="toast"></div>
 <script>
 const L = {
-  ar: {title: "لوحة الإدارة", sub: "Darwish Smart Power", lang: "English", logout: "خروج", refresh: "تحديث",
+  ar: {title: "لوحة الإدارة", sub: "Darwish Smart Power", lang: "English", logout: "خروج", panel: "لوحة التحكم", refresh: "تحديث",
        login: "ادخل باسورد السيرفر", enter: "دخول", wrong: "الباسورد غلط", ownerOnly: "الصفحة دي لصاحب السيرفر بس",
        unreachable: "السيرفر مش بيرد",
        downloads: "تحميلات التطبيق", today: "النهارده", week: "آخر 7 أيام", customers: "العملاء", newWeek: "جداد في آخر 7 أيام",
@@ -122,7 +122,7 @@ const L = {
        signupTitle: "تسجيل عملاء جداد", signupNote: "لو قفلته، محدش يقدر يعمل حساب جديد من التطبيق.", signupOn: "مفتوح",
        done: "تم", fail: "فشل: ", never: "ولا مرة", now: "دلوقتي", min: "د", hour: "س", dayU: "ي", ago: "من",
        credit: "تطوير"},
-  en: {title: "Admin", sub: "Darwish Smart Power", lang: "العربية", logout: "Sign out", refresh: "Refresh",
+  en: {title: "Admin", sub: "Darwish Smart Power", lang: "العربية", logout: "Sign out", panel: "Control panel", refresh: "Refresh",
        login: "Enter the server password", enter: "Sign in", wrong: "Wrong password", ownerOnly: "This page is for the server owner",
        unreachable: "The server is not answering",
        downloads: "App downloads", today: "today", week: "last 7 days", customers: "Customers", newWeek: "new in 7 days",
@@ -214,6 +214,7 @@ function render() {
   const d = data, T = d.totals;
   const tile = (k, v, s, cls = "") => `<div class="tile glass ${cls}"><div class="k">${k}</div><div class="v"><bdi>${v}</bdi></div><div class="s">${s}</div></div>`;
   let html = `<header><img src="/icons/icon-192.png" alt=""><div class="t"><h1>${t("title")}</h1><div class="sub"><bdi>${t("sub")}</bdi></div></div>
+    <a class="pill-btn" href="/panel" style="text-decoration:none;color:inherit">${t("panel")}</a>
     <button class="pill-btn" id="lang">${t("lang")}</button><button class="pill-btn" id="logout">${t("logout")}</button></header>
     <div class="tiles">
       ${tile(t("downloads"), fmt(T.downloads), `${fmt(T.downloads_today)} ${t("today")} · ${fmt(T.downloads_7d)} ${t("week")}`)}
