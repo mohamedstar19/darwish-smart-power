@@ -285,7 +285,8 @@ function render() {
   if (d.new_strips.length) {
     html += `<section class="card glass" style="border-color:rgba(255,181,71,.55)"><h2>🆕 ${t("newTitle")}</h2>` +
       d.new_strips.map(n => `<div class="wstrip"><div class="row"><div class="grow"><b>${t("strip")} <bdi>${esc(n.id.slice(-6))}</bdi></b>
-        <div class="muted" style="font-size:12px">${t("from")} <bdi>${esc(n.address || "?")}</bdi>${n.first_seen ? ` · ${t("arrived")} ${ago(n.first_seen)}` : ""}</div></div>
+        <div class="muted" style="font-size:12px">${t("from")} <bdi>${esc(n.address || "?")}</bdi>${n.first_seen ? ` · ${t("arrived")} ${ago(n.first_seen)}` : ""}
+          · <span style="color:${n.online ? "var(--good,#3ee6a0)" : "inherit"}">${n.online ? t("online") : `${t("offline")}, ${t("lastSeen")} ${ago(n.last_seen)}`}</span></div></div>
         <button class="btn danger" data-block="${esc(n.id)}">${t("block")}</button>
         <button class="btn primary" data-approve="${esc(n.id)}">${t("approve")}</button></div>
         ${(n.guesses || []).length ? n.guesses.map(g => `<div class="guess"><div class="grow">👤 ${t("probably")} <b>${g.id ? esc(g.name) : t("you")}</b>

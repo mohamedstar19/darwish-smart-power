@@ -195,9 +195,10 @@ class Store:
         # strips the app is setting up right now: setup-Wi-Fi code -> {"by": member id or "", "until"}
         self.expected: Dict[str, Dict[str, Any]] = {}
         # every strip the app said it was setting up (last 7 days): {"code", "by", "at", "ip"}, to tell whose a
-        # strip waiting for approval probably is; and when each waiting strip first connected
+        # strip waiting for approval probably is; and the strips waiting for approval, so a restart does not
+        # hide them: {MAC: {"first", "last", "address", "mac2"}}
         self.announced: List[Dict[str, Any]] = []
-        self.first_seen: Dict[str, float] = {}
+        self.waiting: Dict[str, Dict[str, Any]] = {}
         # app downloads: total, per day, and today's (hashed) addresses so a retry is not counted twice
         self.stats: Dict[str, Any] = {}
         # the owner's admin page lives at a random, unguessable address instead of /admin
@@ -218,7 +219,9 @@ class Store:
             self.blocked_strips = list(data.get("blocked_strips", []))
             self.expected = dict(data.get("expected", {}))
             self.announced = list(data.get("announced", []))
-            self.first_seen = dict(data.get("first_seen", {}))
+            self.waiting = dict(data.get("waiting", {}))
+            for mac, at in data.get("first_seen", {}).items():     # kept by one earlier version
+                self.waiting.setdefault(mac, {"first": at, "last": at, "address": "", "mac2": ""})
             self.stats = dict(data.get("stats", {}))
             self.admin_path = str(data.get("admin_path", ""))
             self.oauth.update({k: dict(v) for k, v in data.get("oauth", {}).items()})
@@ -237,7 +240,7 @@ class Store:
                            "alexa_ports": self.alexa_ports, "users": self.users,
                            "settings": self.settings, "approved": self.approved,
                            "blocked_strips": self.blocked_strips, "expected": self.expected,
-                           "announced": self.announced, "first_seen": self.first_seen,
+                           "announced": self.announced, "waiting": self.waiting,
                            "stats": self.stats, "admin_path": self.admin_path, "oauth": self.oauth},
                           ensure_ascii=False, indent=1)
         fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), prefix=".smartpower-")
@@ -339,7 +342,7 @@ class Store:
             self.blocked_strips.remove(mac)
         if mac not in self.approved:
             self.approved.append(mac)
-        self.first_seen.pop(mac, None)
+        self.waiting.pop(mac, None)
         user = next((u for u in self.users if u["id"] == by), None)
         if user and (user.get("role") == CUSTOMER or user.get("strips")) and mac not in (user.get("strips") or []):
             user["strips"] = sorted((user.get("strips") or []) + [mac])
@@ -364,20 +367,23 @@ class Store:
         self.announced.append({"code": code, "by": by, "at": int(now), "ip": ip})
         self.save()
 
-    def note_waiting(self, mac: str, now: float) -> float:
-        """When a strip waiting for approval first connected (kept across restarts)."""
-        if mac not in self.first_seen:
-            self.first_seen = {m: t for m, t in self.first_seen.items()
-                               if m not in self.approved and now - t < 30 * 86400}
-            self.first_seen[mac] = now
-            self.save()
-        return self.first_seen[mac]
+    def note_waiting(self, mac: str, mac2: str, address: str, now: float) -> float:
+        """Remembers a strip waiting for approval; returns when it first connected."""
+        entry = self.waiting.get(mac)
+        if entry is None:
+            self.waiting = {m: e for m, e in self.waiting.items()
+                            if m not in self.approved and now - e.get("last", 0) < 30 * 86400}
+            entry = self.waiting[mac] = {"first": now}
+        entry.update({"last": now, "address": address, "mac2": mac2})
+        self.save()
+        return entry["first"]
 
     def forget_strip(self, mac: str, block: bool) -> None:
         """Remove everything about a strip; [block] also refuses it from now on."""
         self.names.pop(mac, None)
         self.meta.pop(mac, None)
         self.pending.pop(mac, None)
+        self.waiting.pop(mac, None)
         self.timers = {k: v for k, v in self.timers.items() if not k.startswith(mac + "/")}
         self.alexa_ports = {k: v for k, v in self.alexa_ports.items() if not k.startswith(mac + "/")}
         self.schedules = [x for x in self.schedules if x.get("strip") != mac]
@@ -1074,6 +1080,11 @@ class Hub:
         self.user_ips: Dict[str, Dict[str, float]] = {}     # member id -> internet addresses their app used lately
         self.ips_lock = threading.Lock()                    # written from the web threads
         self.guard = Guard()
+        for mac, entry in store.waiting.items():        # strips waiting for approval stay listed after a restart
+            if not store.is_approved(mac) and mac not in store.blocked_strips:
+                strip = self.strips[mac] = Strip(mac)
+                strip.mac2, strip.address = entry.get("mac2", ""), entry.get("address", "")
+                strip.first_seen, strip.last_seen = entry.get("first", 0), entry.get("last", 0)
 
     @staticmethod
     def label(strip: Strip) -> str:
@@ -1107,7 +1118,7 @@ class Hub:
                 log("[strip] %s approved (%s)" % (self.label(strip),
                                                   "set up from the app" if by is not None else "home network"))
             else:
-                strip.first_seen = self.store.note_waiting(strip.mac, time.time())
+                strip.first_seen = self.store.note_waiting(strip.mac, strip.mac2, strip.address, time.time())
                 log("[strip] %s waits for the owner's approval (MACs %s %s)"
                     % (self.label(strip), strip.mac, boot.get("mac2", "")))
         return strip
@@ -1117,6 +1128,10 @@ class Hub:
         if strip is not None and strip.link is link:
             strip.link = None
             log("[strip] %s offline" % self.label(strip))
+            entry = self.store.waiting.get(strip.mac)
+            if entry is not None and not self.store.is_approved(strip.mac):
+                entry["last"] = strip.last_seen
+                self.store.save()
 
     async def accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         peer = writer.get_extra_info("peername")
@@ -1459,7 +1474,7 @@ class Hub:
                 "last_seen": int(self.strips[m].last_seen) if m in self.strips else 0,
             } for m in approved), key=lambda x: (not x["online"], x["id"])),
             "new_strips": [{"id": x.mac, "mac2": x.mac2, "address": x.address, "online": x.online,
-                            "first_seen": int(x.first_seen), "guesses": self.owner_guesses(x, now)}
+                            "first_seen": int(x.first_seen), "last_seen": int(x.last_seen), "guesses": self.owner_guesses(x, now)}
                            for x in self.strips.values() if not store.is_approved(x.mac)],
             "signup": bool(store.settings.get("signup", True)),
             "voice": {c: bool(store.oauth["clients"].get(c)) for c in OAUTH_CLIENTS},
@@ -3143,12 +3158,15 @@ async def selftest() -> None:
     # a strip whose setup code is not in its MAC waits, but the admin page says whose it probably is
     assert (await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "Q7X91C0"}, ali, "102.40.7.7"))[0] == 200
     assert hub.attach(Remote("102.40.7.7"), {"mac": "C0FFEE5A5A5A", "mac2": "C0FFEE5A5A5B", "model": "lgutap", "fw": "x"}) is not None
-    assert not hub.store.is_approved("C0FFEE5A5A5A") and hub.store.first_seen.get("C0FFEE5A5A5A")
+    assert not hub.store.is_approved("C0FFEE5A5A5A") and hub.store.waiting["C0FFEE5A5A5A"]["address"] == "102.40.7.7"
+    restarted = Hub(Store(hub.store.path), hub.history)          # still listed after a restart, as offline
+    listed = {x["id"]: x for x in (await restarted.admin_report())["new_strips"]}
+    assert "C0FFEE5A5A5A" in listed and not listed["C0FFEE5A5A5A"]["online"] and listed["C0FFEE5A5A5A"]["guesses"]
     waiting = next(x for x in (await hub.admin_report())["new_strips"] if x["id"] == "C0FFEE5A5A5A")
     best = waiting["guesses"][0]
     assert best["id"] == cust_id and best["customer"] and set(best["why"]) == {"app", "network"} and "Q7X91C0" in best["codes"]
     status, _ = await loop.run_in_executor(None, http, "/api/strips/approve", {"strip": "C0FFEE5A5A5A", "customer": cust_id})
-    assert status == 200 and "C0FFEE5A5A5A" not in hub.store.first_seen
+    assert status == 200 and "C0FFEE5A5A5A" not in hub.store.waiting
     assert "C0FFEE5A5A5A" in [x["id"] for x in (await loop.run_in_executor(None, http, "/api/state", None, ali))[1]["strips"]]
     assert (await loop.run_in_executor(None, post, "/api/strips/assign", {"strip": "A1B2C3D4E5F6", "customer": ""}, ali))[0] == 403
     before = report["totals"]["downloads"]
