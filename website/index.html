@@ -125,6 +125,12 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--soft);font-si
 footer .dt{color:var(--brand);font-weight:700;text-decoration:none}
 footer .dt:hover{text-decoration:underline}
 footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.soon{display:inline-flex;align-items:center;gap:10px;margin-top:18px;padding:9px 18px;border-radius:14px;
+  background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.35);color:#fff}
+.soon svg{width:22px;height:22px;fill:#fff;flex:none}
+.soon span{display:flex;flex-direction:column;line-height:1.15;text-align:start}
+.soon small{font-size:11px;opacity:.85}
+.soon b{font-size:17px;letter-spacing:.2px;direction:ltr}
 </style>
 </head>
 <body>
@@ -262,6 +268,8 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
     </a>
     <div class="req" data-i="dl_req">أندرويد 8.0 أو أحدث · حجم صغير · مجاني</div>
     <div class="req"><a href="#iphone" style="color:inherit" data-i="dl_ios">معاك آيفون؟ استخدمه من Safari</a></div>
+    <div class="soon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5v17a1 1 0 0 0 1.5.86l14-8.5a1 1 0 0 0 0-1.72l-14-8.5A1 1 0 0 0 5 3.5Z"/></svg>
+      <span><small data-i="soon_k">قريباً على</small><b>Google Play</b></span></div>
   </div>
 </div></section>
 
@@ -306,7 +314,7 @@ const EN = {
   i2h:"Create your account", i2p:"Tap <b>New account</b> and enter your name, mobile number and a password.",
   i3h:"Add it to the home screen", i3p:"Tap Safari's Share button <b>⬆︎</b>, then <b>Add to Home Screen</b>. The Darwish Power icon appears next to your apps.",
   i4h:"First-time strip setup", i4p:'An iPhone cannot talk to the strip while it is in setup mode, so this is done <b>once</b>: from any Android phone with our app, signed in to the same account, or <a href="https://darwish-tech.com" target="_blank" rel="noopener">contact us</a> and we set it up and link it to your account. After that you control it from your iPhone from anywhere.',
-  ios_btn:"Open the control panel", dl_ios:"Got an iPhone? Use it from Safari",
+  soon_k:"Coming soon to", ios_btn:"Open the control panel", dl_ios:"Got an iPhone? Use it from Safari",
   by:"Developed by", privacy:"Privacy policy", lang:"العربية"
 };
 const AR = {};
