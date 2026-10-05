@@ -101,6 +101,19 @@ select{background:rgba(0,0,0,.3);border:1px solid var(--stroke);border-radius:10
 .credit{text-align:center;color:var(--faint);font-size:12px;padding:18px}
 .credit a{color:var(--brand);text-decoration:none}
 .hbtns{display:flex;gap:8px;flex-wrap:wrap}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:4px;margin:4px 0 2px;scrollbar-width:none;position:sticky;top:0;z-index:5;
+  background:rgba(13,9,7,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:16px}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;border:1px solid var(--stroke);background:var(--fill);border-radius:999px;padding:8px 14px;font-size:13px;font-weight:600;white-space:nowrap}
+.tab.on{border:0;background:linear-gradient(135deg,#ff7a3d,#ffb347);color:#2a0e00}
+.tab .n{display:inline-block;min-width:18px;padding:0 5px;margin-inline-start:6px;border-radius:9px;background:rgba(0,0,0,.25);font-size:11px;text-align:center}
+.tab .n.hot{background:var(--warn);color:#2a1600}
+.search{width:100%;margin:2px 0 10px;padding:10px 14px;border-radius:12px;border:1px solid var(--stroke);background:rgba(0,0,0,.3);color:var(--text);font:inherit}
+.count{color:var(--faint);font-size:12px;margin:-4px 0 8px}
+.results .row{cursor:pointer}
+.results .row:hover{background:var(--fill);border-radius:10px}
+.tile[data-go]{cursor:pointer}
+.tile[data-go]:hover{border-color:rgba(255,138,76,.6)}
 .kv{display:flex;align-items:center;gap:8px;padding:6px 0;flex-wrap:wrap}
 .kv span{color:var(--soft);font-size:12px;min-width:110px}
 .kv code{flex:1;min-width:0;overflow-wrap:anywhere;background:rgba(0,0,0,.3);border-radius:8px;padding:5px 8px;font-size:12px}
@@ -150,6 +163,9 @@ const L = {
        blockAsk: "تحظر المشترك ده؟ مش هيقدر يتصل بالسيرفر تاني.", noneWaiting: "مفيش مشتركات مستنية.",
        assignAsk: "تدّي المشترك ده لـ {to}؟", moveAsk: "تنقل المشترك ده من {from} لـ {to}؟ {from} مش هيشوفه تاني.",
        unassignAsk: "تشيل المشترك ده من حساب {from}؟ مش هيشوفه تاني.",
+       tabOverview: "📊 نظرة عامة", tabWaiting: "🆕 مستنية", tabCustomers: "👥 العملاء", tabStrips: "🔌 المشتركات",
+       tabReserve: "📦 الحجز", tabSettings: "⚙️ الإعدادات", search: "🔍 دوّر بالاسم أو الرقم أو الإيميل أو رقم المشترك",
+       noMatch: "مفيش نتايج.", searchAll: "🔍 دوّر على عميل أو مشترك…", goStrip: "افتح", customerW: "عميل", stripW: "مشترك", hisStrips: "مشتركاته", shown: "ظاهر",
        actions: "إجراءات", remove: "🗑 حذف", removeAsk: "تحذف المشترك ده؟ هيتشال من حساب العميل وتتمسح أسماؤه ومواعيده. لو العميل جهّزه تاني من التطبيق هيرجعله لوحده.",
        arrived: "وصل", probably: "غالباً تبع", you: "إنت (صاحب السيرفر)", giveTo: "وافق وادّيه لـ", codeWas: "الكود",
        whyCode: "الكود اللي جهّزه بيه مطابق", whyApp: "جهّز مشترك من التطبيق قبلها بـ {m} دقيقة",
@@ -182,6 +198,9 @@ const L = {
        blockAsk: "Block this strip? It will not be able to connect again.", noneWaiting: "No strips waiting.",
        assignAsk: "Give this strip to {to}?", moveAsk: "Move this strip from {from} to {to}? {from} will no longer see it.",
        unassignAsk: "Take this strip from {from}'s account? They will no longer see it.",
+       tabOverview: "📊 Overview", tabWaiting: "🆕 Waiting", tabCustomers: "👥 Customers", tabStrips: "🔌 Strips",
+       tabReserve: "📦 Reserve", tabSettings: "⚙️ Settings", search: "🔍 Search by name, phone, e-mail or strip",
+       noMatch: "No matches.", searchAll: "🔍 Find a customer or strip…", goStrip: "Open", customerW: "customer", stripW: "strip", hisStrips: "Their strips", shown: "shown",
        actions: "Actions", remove: "🗑 Remove", removeAsk: "Remove this strip? It leaves the customer's account and its names and schedules are deleted. If the customer sets it up again in the app, it comes back to them.",
        arrived: "first connected", probably: "Probably", you: "You (the owner)", giveTo: "Approve for", codeWas: "code",
        whyCode: "its setup code matches", whyApp: "set up a strip in the app {m} min before",
@@ -207,6 +226,10 @@ let lang = (() => { try { return localStorage.getItem("dsp-lang") } catch (e) { 
            ((navigator.language || "").startsWith("ar") ? "ar" : "en");
 let token = (() => { try { return localStorage.getItem("dsp-token") || "" } catch (e) { return "" } })();
 let data = null, timer = null, resOpen = false, shownSecret = null;
+const TABS = ["overview", "waiting", "customers", "strips", "reserve", "settings"];
+let tab = (() => { try { return localStorage.getItem("dsp-admin-tab") } catch (e) { return null } })();
+if (!TABS.includes(tab)) tab = "overview";
+const query = {overview: "", waiting: "", customers: "", strips: "", reserve: ""};      // what is typed in each list's search box, kept across refreshes
 const t = k => (L[lang] || L.ar)[k] || k;
 const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const fmt = n => Number(n || 0).toLocaleString(lang === "ar" ? "ar-EG" : "en-US");
@@ -272,27 +295,40 @@ function chart(days) {
 function render() {
   frame();
   const d = data, T = d.totals;
-  const tile = (k, v, s, cls = "") => `<div class="tile glass ${cls}"><div class="k">${k}</div><div class="v"><bdi>${v}</bdi></div><div class="s">${s}</div></div>`;
+  const tile = (k, v, s, cls = "", go = "") => `<div class="tile glass ${cls}"${go ? ` data-go="${go}"` : ""}><div class="k">${k}</div><div class="v"><bdi>${v}</bdi></div><div class="s">${s}</div></div>`;
+  const count = (n, hot) => `<span class="n${hot ? " hot" : ""}">${fmt(n)}</span>`;
   let html = `<header><img src="/icons/icon-192.png" alt=""><div class="t"><h1>${t("title")}</h1><div class="sub"><bdi>${t("sub")}</bdi></div></div>
     <div class="hbtns"><a class="pill-btn" href="/panel" style="text-decoration:none;color:inherit">${t("panel")}</a>
     <button class="pill-btn" id="lang">${t("lang")}</button><button class="pill-btn" id="logout">${t("logout")}</button></div></header>
-    <div class="tiles">
+    <nav class="tabs" role="tablist">
+      ${[["overview", t("tabOverview"), ""], ["waiting", t("tabWaiting"), count(d.new_strips.length, d.new_strips.length > 0)],
+         ["customers", t("tabCustomers"), count(d.customers.length)], ["strips", t("tabStrips"), count(d.strips.length)],
+         ["reserve", t("tabReserve"), d.reservations.length ? count(d.reservations.length) : ""], ["settings", t("tabSettings"), ""]]
+        .map(([id, label, n]) => `<button class="tab${tab === id ? " on" : ""}" role="tab" aria-selected="${tab === id}" data-tab="${id}">${label}${n}</button>`).join("")}
+    </nav>`;
+
+  if (tab === "overview") {
+    html += `<section class="card glass"><input class="search" type="search" data-search="overview" placeholder="${t("searchAll")}"
+      value="${esc(query.overview)}" style="margin:0"><div class="results" id="results-overview"></div></section>`;
+    html += `<div class="tiles" style="margin-top:12px">
       ${tile(t("downloads"), fmt(T.downloads), `${fmt(T.downloads_today)} ${t("today")} · ${fmt(T.downloads_7d)} ${t("week")}`)}
-      ${tile(t("customers"), fmt(T.customers), `${fmt(T.new_customers_7d)} ${t("newWeek")}`)}
+      ${tile(t("customers"), fmt(T.customers), `${fmt(T.new_customers_7d)} ${t("newWeek")}`, "", "customers")}
       ${tile(t("active"), fmt(T.active_1d), `${t("d1")} · ${fmt(T.active_7d)} ${t("d7")}`)}
       ${tile(t("strips"), `${fmt(T.online)} <span style="font-size:15px;color:var(--soft)">${t("of")} ${fmt(T.strips)}</span>`,
-             `<span class="status on"><i></i>${t("online")}</span>`)}
-      ${tile(t("waiting"), fmt(T.waiting), `${fmt(T.blocked)} ${t("blocked")}`, T.waiting ? "alert" : "")}
+             `<span class="status on"><i></i>${t("online")}</span>`, "", "strips")}
+      ${tile(t("waiting"), fmt(T.waiting), `${fmt(T.blocked)} ${t("blocked")}`, T.waiting ? "alert" : "", "waiting")}
     </div>`;
-
-  html += `<section class="card glass"><h2>${t("chartTitle")}</h2><p class="note">${t("chartNote")}</p>
+    html += `<section class="card glass"><h2>${t("chartTitle")}</h2><p class="note">${t("chartNote")}</p>
     <div class="chart" id="chart">${chart(d.downloads_by_day)}<div class="tip" id="tip"></div></div>
     <details><summary>${t("asTable")}</summary><div class="scroll"><table><tr><th>${t("day")}</th><th>${t("count")}</th></tr>
     ${d.downloads_by_day.slice().reverse().map(x => `<tr><td><bdi>${esc(x.day)}</bdi></td><td>${fmt(x.count)}</td></tr>`).join("")}</table></div></details></section>`;
+  }
 
-  if (d.new_strips.length) {
-    html += `<section class="card glass" style="border-color:rgba(255,181,71,.55)"><h2>🆕 ${t("newTitle")}</h2>` +
-      d.new_strips.map(n => `<div class="wstrip"><div class="row"><div class="grow"><b>${t("strip")} <bdi>${esc(n.id.slice(-6))}</bdi></b>
+  if (tab === "waiting") {
+    html += `<section class="card glass"${d.new_strips.length ? ' style="border-color:rgba(255,181,71,.55)"' : ""}><h2>🆕 ${t("newTitle")}</h2>` +
+      (d.new_strips.length ? `<input class="search" type="search" data-search="waiting" placeholder="${t("search")}" value="${esc(query.waiting)}">
+      <div class="count" id="count-waiting"></div><div id="list-waiting">` + d.new_strips.map(n => `<div class="wstrip" data-find="${esc([n.id, n.mac2, n.address,
+          ...(n.guesses || []).flatMap(g => [g.name, ...g.codes])].join(" ").toLowerCase())}"><div class="row"><div class="grow"><b>${t("strip")} <bdi>${esc(n.id.slice(-6))}</bdi></b>
         <div class="muted" style="font-size:12px">${t("from")} <bdi>${esc(n.address || "?")}</bdi>${n.first_seen ? ` · ${t("arrived")} ${ago(n.first_seen)}` : ""}
           · <span style="color:${n.online ? "var(--good,#3ee6a0)" : "inherit"}">${n.online ? t("online") : `${t("offline")}, ${t("lastSeen")} ${ago(n.last_seen)}`}</span></div></div>
         <button class="btn danger" data-block="${esc(n.id)}">${t("block")}</button>
@@ -300,21 +336,34 @@ function render() {
         ${(n.guesses || []).length ? n.guesses.map(g => `<div class="guess"><div class="grow">👤 ${t("probably")} <b>${g.id ? esc(g.name) : t("you")}</b>
           <div class="muted">${g.why.map(w => w === "code" ? t("whyCode") : w === "app" ? t("whyApp").replace("{m}", fmt(g.minutes || 0)) : t("whyNetwork")).join(" · ")}${g.codes.length ? ` · ${t("codeWas")} <bdi>${esc(g.codes.join(", "))}</bdi>` : ""}</div></div>
           ${g.customer ? `<button class="btn primary" data-approve="${esc(n.id)}" data-customer="${esc(g.id)}">${t("giveTo")} ${esc(g.name)}</button>` : ""}</div>`).join("")
-          : `<div class="muted" style="font-size:12px;margin:2px 0 6px">${t("unknownOwner")}</div>`}</div>`).join("") + `</section>`;
+          : `<div class="muted" style="font-size:12px;margin:2px 0 6px">${t("unknownOwner")}</div>`}</div>`).join("") + `</div>`
+        : `<div class="empty">${t("noneWaiting")}</div>`) + `</section>`;
   }
 
-  html += `<section class="card glass"><h2>${t("custTitle")} (${fmt(d.customers.length)})</h2>` +
-    (d.customers.length ? `<div class="scroll"><table class="rtable"><tr><th>${t("name")}</th><th>${t("account")}</th><th>${t("stripsCol")}</th>
-      <th>${t("lastSeen")}</th><th>${t("joined")}</th></tr>` +
-      d.customers.map(c => `<tr><td class="head"><b>${esc(c.name)}</b></td><td data-l="${t("account")}"><bdi dir="ltr">${esc(c.login)}</bdi></td>
+  if (tab === "customers") {
+    const owned = id => d.strips.filter(x => x.customer === id);
+    html += `<section class="card glass"><h2>${t("custTitle")} (${fmt(d.customers.length)})</h2>` +
+    (d.customers.length ? `<input class="search" type="search" data-search="customers" placeholder="${t("search")}" value="${esc(query.customers)}">
+      <div class="count" id="count-customers"></div>
+      <div class="scroll"><table class="rtable" id="list-customers"><tr><th>${t("name")}</th><th>${t("account")}</th><th>${t("stripsCol")}</th>
+      <th>${t("lastSeen")}</th><th>${t("joined")}</th><th></th></tr>` +
+      d.customers.map(c => `<tr data-find="${esc([c.name, c.login, c.id, ...owned(c.id).map(x => x.id + " " + (x.name || ""))].join(" ").toLowerCase())}">
+        <td class="head"><b>${esc(c.name)}</b></td><td data-l="${t("account")}"><bdi dir="ltr">${esc(c.login)}</bdi></td>
         <td data-l="${t("stripsCol")}"><span class="status${c.online ? " on" : ""}"><i></i><bdi>${fmt(c.online)} / ${fmt(c.strips)}</bdi></span></td>
-        <td class="muted" data-l="${t("lastSeen")}">${ago(c.last_seen)}</td><td class="muted" data-l="${t("joined")}">${date(c.created)}</td></tr>`).join("") + `</table></div>`
+        <td class="muted" data-l="${t("lastSeen")}">${ago(c.last_seen)}</td><td class="muted" data-l="${t("joined")}">${date(c.created)}</td>
+        <td>${c.strips ? `<button class="btn small" data-show="${esc(c.login || c.name)}">${t("hisStrips")}</button>` : ""}</td></tr>`).join("") + `</table></div>`
       : `<div class="empty">${t("noCustomers")}</div>`) + `</section>`;
+  }
 
-  html += `<section class="card glass"><h2>${t("stripTitle")} (${fmt(d.strips.length)})</h2><p class="note">${t("stripNote")}</p>` +
-    (d.strips.length ? `<div class="scroll"><table class="rtable"><tr><th>${t("strip")}</th><th>${t("owner")}</th><th>${t("state")}</th>
+  if (tab === "strips") {
+    const who = id => d.customers.find(c => c.id === id) || {};
+    html += `<section class="card glass"><h2>${t("stripTitle")} (${fmt(d.strips.length)})</h2><p class="note">${t("stripNote")}</p>` +
+    (d.strips.length ? `<input class="search" type="search" data-search="strips" placeholder="${t("search")}" value="${esc(query.strips)}">
+      <div class="count" id="count-strips"></div>
+      <div class="scroll"><table class="rtable" id="list-strips"><tr><th>${t("strip")}</th><th>${t("owner")}</th><th>${t("state")}</th>
       <th>${t("lastSeen")}</th><th>${t("address")}</th><th>${t("actions")}</th></tr>` +
-      d.strips.map(x => `<tr><td class="head"><b>${esc(x.name || t("strip") + " " + x.id.slice(-6))}</b><div class="muted" style="font-size:11px"><bdi>${esc(x.id)}</bdi></div></td>
+      d.strips.map(x => `<tr data-find="${esc([x.id, x.name, x.address, who(x.customer).name, who(x.customer).login].join(" ").toLowerCase())}">
+        <td class="head"><b>${esc(x.name || t("strip") + " " + x.id.slice(-6))}</b><div class="muted" style="font-size:11px"><bdi>${esc(x.id)}</bdi></div></td>
         <td data-l="${t("owner")}"><select data-assign="${esc(x.id)}" aria-label="${t("owner")}"><option value="">${t("nobody")}</option>
           ${d.customers.map(c => `<option value="${esc(c.id)}"${c.id === x.customer ? " selected" : ""}>${esc(c.name)} · ${esc(c.login)}</option>`).join("")}
           </select></td>
@@ -324,29 +373,34 @@ function render() {
         <td data-l="${t("actions")}"><span class="acts"><button class="btn" data-remove="${esc(x.id)}">${t("remove")}</button>
           <button class="btn danger" data-block="${esc(x.id)}">${t("block")}</button></span></td></tr>`).join("") + `</table></div>`
       : `<div class="empty">${t("noStrips")}</div>`) + `</section>`;
+  }
 
-  html += `<section class="card glass"><h2>📦 ${t("resTitle")}</h2><p class="note">${t("resNote")}</p>` +
+  if (tab === "reserve") {
+    html += `<section class="card glass"><h2>📦 ${t("resTitle")}</h2><p class="note">${t("resNote")}</p>` +
     (d.customers.length ? `<details class="resbox"${resOpen ? " open" : ""}><summary class="btn">${t("resAdd")}</summary>
         <form id="resf" class="resform"><input id="rescode" placeholder="${t("resCode")}" dir="ltr" autocomplete="off" required>
         <select id="rescust" required><option value="">${t("resPick")}</option>
         ${d.customers.map(c => `<option value="${esc(c.id)}">${esc(c.name)} · ${esc(c.login)}</option>`).join("")}</select>
         <button class="btn primary" type="submit">${t("resBtn")}</button></form></details>` : `<div class="empty">${t("resNoCustomers")}</div>`) +
-    (d.reservations.length ? d.reservations.map(r => `<div class="row"><div class="grow"><b><bdi dir="ltr">TONLY_TAP_${esc(r.code)}</bdi></b>
+    (d.reservations.length ? `<input class="search" type="search" data-search="reserve" placeholder="${t("search")}" value="${esc(query.reserve)}">
+      <div class="count" id="count-reserve"></div><div id="list-reserve">` + d.reservations.map(r => `<div class="row" data-find="${esc([r.code, "tonly_tap_" + r.code, r.customer].join(" ").toLowerCase())}"><div class="grow"><b><bdi dir="ltr">TONLY_TAP_${esc(r.code)}</bdi></b>
         <div class="muted" style="font-size:12px">${esc(r.customer)} · ${t("resWaiting")} · ${fmt(r.days_left)} ${t("daysLeft")}</div></div>
-        <button class="btn" data-unreserve="${esc(r.code)}">${t("cancel")}</button></div>`).join("") : "") + `</section>`;
+        <button class="btn" data-unreserve="${esc(r.code)}">${t("cancel")}</button></div>`).join("") + `</div>` : `<div class="empty">${t("resNone")}</div>`) + `</section>`;
+  }
 
-  const base = location.origin;
-  const field = (label, value, id) => `<div class="kv"><span>${label}</span><code dir="ltr" ${id ? `id="${id}"` : ""}>${esc(value)}</code>
+  if (tab === "settings") {
+    const base = location.origin;
+    const field = (label, value, id) => `<div class="kv"><span>${label}</span><code dir="ltr" ${id ? `id="${id}"` : ""}>${esc(value)}</code>
       <button class="btn small" data-copy="${esc(value)}">${t("copy")}</button></div>`;
-  html += `<section class="card glass"><h2>🗣️ ${t("voiceTitle")}</h2><p class="note">${t("voiceNote")}</p>
+    html += `<section class="card glass"><h2>🗣️ ${t("voiceTitle")}</h2><p class="note">${t("voiceNote")}</p>
     ${field(t("authUrl"), base + "/oauth/authorize")}${field(t("tokenUrl"), base + "/oauth/token")}` +
     ["alexa", "google"].map(c => `<div class="row"><div class="grow"><b>${c === "alexa" ? "Alexa" : "Google"}</b>
       <div class="muted" style="font-size:12px">${t("clientId")}: <code dir="ltr">${c}</code> · ${t("clientSecret")}: ${(d.voice || {})[c] ? t("secretReady") : t("secretMissing")}</div>
       ${shownSecret && shownSecret.client === c ? `<div class="secret">${field(t("clientSecret"), shownSecret.secret)}<div class="muted" style="font-size:12px">${t("secretOnce")}</div></div>` : ""}</div>
       <button class="btn" data-secret="${c}">${t("newSecret")}</button></div>`).join("") + `</section>`;
-
-  html += `<section class="card glass"><h2>${t("signupTitle")}</h2><p class="note">${t("signupNote")}</p>
+    html += `<section class="card glass"><h2>${t("signupTitle")}</h2><p class="note">${t("signupNote")}</p>
     <label class="switch"><input type="checkbox" id="signup" ${d.signup ? "checked" : ""}> ${t("signupOn")}</label></section>`;
+  }
 
   document.getElementById("root").innerHTML = html;
   document.getElementById("lang").onclick = () => { lang = lang === "ar" ? "en" : "ar"; save("dsp-lang", lang); render(); };
@@ -362,12 +416,14 @@ function render() {
     } catch (err) { toast(t("fail") + err.message); }
     refresh();
   };
-  document.getElementById("signup").onchange = async e => {
+  const signup = document.getElementById("signup");
+  if (signup) signup.onchange = async e => {
     try { await api("/api/settings", {signup: e.target.checked}); toast(t("done")); } catch (err) { toast(t("fail") + err.message); }
     refresh();
   };
+  Object.keys(query).forEach(filter);
   const box = document.getElementById("chart"), tip = document.getElementById("tip");
-  box.querySelectorAll("g[data-i]").forEach(g => {
+  if (box) box.querySelectorAll("g[data-i]").forEach(g => {
     g.addEventListener("mouseenter", () => {
       const x = d.downloads_by_day[+g.dataset.i], r = g.getBoundingClientRect(), b = box.getBoundingClientRect();
       tip.innerHTML = `<b>${fmt(x.count)}</b>${esc(new Date(x.day + "T12:00").toLocaleDateString(lang === "ar" ? "ar-EG" : "en-GB", {weekday: "short", day: "numeric", month: "short"}))}`;
@@ -375,6 +431,44 @@ function render() {
     });
     g.addEventListener("mouseleave", () => { tip.style.opacity = 0; });
   });
+}
+
+// hide the rows that do not match the search box (no re-render: the box keeps its focus)
+function filter(list) {
+  const words = query[list].toLowerCase().split(/\s+/).filter(Boolean);
+  if (list === "overview") return quickSearch(words);
+  const table = document.getElementById("list-" + list), out = document.getElementById("count-" + list);
+  if (!table) return;
+  const rows = [...table.querySelectorAll("[data-find]")];
+  let shown = 0;
+  rows.forEach(r => { const ok = words.every(w => r.dataset.find.includes(w)); r.style.display = ok ? "" : "none"; if (ok) shown++; });
+  out.textContent = !words.length ? "" : shown ? `${fmt(shown)} / ${fmt(rows.length)} ${t("shown")}` : t("noMatch");
+}
+// overview: customers and strips together, up to 8 of each; a tap opens the right tab already filtered
+function quickSearch(words) {
+  const box = document.getElementById("results-overview");
+  if (!box) return;
+  if (!words.length) { box.innerHTML = ""; return; }
+  const d = data, has = text => words.every(w => text.toLowerCase().includes(w));
+  const who = id => d.customers.find(c => c.id === id) || {};
+  const cs = d.customers.filter(c => has([c.name, c.login, c.id].join(" "))).slice(0, 8);
+  const ss = d.strips.filter(x => has([x.id, x.name, x.address, who(x.customer).name, who(x.customer).login].join(" "))).slice(0, 8);
+  const ws = d.new_strips.filter(n => has([n.id, n.address].join(" "))).slice(0, 8);
+  box.innerHTML = !cs.length && !ss.length && !ws.length ? `<div class="empty">${t("noMatch")}</div>` :
+    cs.map(c => `<div class="row" data-show="${esc(c.login || c.name)}"><div class="grow">👤 <b>${esc(c.name)}</b>
+      <span class="muted"> · <bdi dir="ltr">${esc(c.login)}</bdi> · ${fmt(c.online)} / ${fmt(c.strips)}</span></div><span class="muted">${t("customerW")}</span></div>`).join("") +
+    ss.map(x => `<div class="row" data-show="${esc(x.id)}"><div class="grow">🔌 <b>${esc(x.name || t("strip") + " " + x.id.slice(-6))}</b>
+      <span class="muted"> · <bdi>${esc(x.id)}</bdi>${x.customer ? " · " + esc(who(x.customer).name || "") : ""} · ${x.online ? t("online") : t("offline")}</span></div>
+      <span class="muted">${t("stripW")}</span></div>`).join("") +
+    ws.map(n => `<div class="row" data-go="waiting"><div class="grow">🆕 <b>${t("strip")} <bdi>${esc(n.id.slice(-6))}</bdi></b>
+      <span class="muted"> · ${t("waiting")}</span></div></div>`).join("");
+}
+document.addEventListener("input", ev => {
+  const box = ev.target.closest("[data-search]");
+  if (box) { query[box.dataset.search] = box.value; filter(box.dataset.search); }
+});
+function go(next) {
+  tab = next; save("dsp-admin-tab", tab); render(); window.scrollTo({top: 0});
 }
 
 document.addEventListener("change", async ev => {
@@ -391,6 +485,10 @@ document.addEventListener("change", async ev => {
 });
 
 document.addEventListener("click", async ev => {
+  const tb = ev.target.closest("[data-tab]"), gt = ev.target.closest("[data-go]"), sh = ev.target.closest("[data-show]");
+  if (tb) { go(tb.dataset.tab); return; }
+  if (gt) { go(gt.dataset.go); return; }
+  if (sh) { query.strips = sh.dataset.show; go("strips"); return; }
   const cp = ev.target.closest("[data-copy]");
   if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); toast(t("copied")); } catch (e) {} return; }
   const sc = ev.target.closest("[data-secret]");
