@@ -58,10 +58,10 @@ PIN_MAX_TRIES = 5                        # wrong PINs before a strip refuses PIN
 # (carrier NAT). Home-network and loopback addresses are never limited or blocked.
 HELLO_TIMEOUT = 15                       # seconds a new connection gets to introduce itself as a strip
 MAX_LINE = 4096                          # longest line accepted from a strip
-MAX_CONNECTIONS_PER_IP = 16              # open strip connections at the same time
-MAX_CONNECTS_PER_MINUTE = 30             # new strip connections per minute
-MAX_NEW_STRIPS_PER_DAY = 6               # strips never seen before, per address per day
-MAX_UNKNOWN_STRIPS = 64                  # never-named strips kept in memory before new ones are refused
+# no limit on how many strips a customer or a home has: these only stop floods of connections
+MAX_CONNECTIONS_PER_IP = 1000            # open strip connections from one address at the same time
+MAX_CONNECTS_PER_MINUTE = 1000           # new strip connections per minute (all of them reconnect after a restart)
+MAX_UNKNOWN_STRIPS = 500                 # strips nobody approved or announced, waiting at once, before more are refused
 MAX_STRIKES = 3                          # misbehaving connections (10 minutes) before a block
 BLOCK_SECONDS = 3600
 EXPECT_SECONDS = 1800                    # a strip announced by the app is approved if it connects this soon
@@ -81,7 +81,7 @@ DEFAULT_SETTINGS = {"price_kwh": 1.5, "currency": "EGP", "max_temp_c": 60, "max_
 SIGNUPS_PER_HOUR = 5                     # new customer accounts from one internet address
 SIGNUPS_PER_HOUR_ALL = 100               # new customer accounts per hour from everywhere together
 ACCOUNT_FAILS = 10                       # wrong passwords for one account (15 minutes, from anywhere) before it pauses
-ANNOUNCES_PER_HOUR = 12                  # strips one account may say it is setting up, per hour
+ANNOUNCES_PER_HOUR = 100                 # strips one account may say it is setting up, per hour (floods only)
 MAX_SESSIONS = 10                        # signed-in phones per customer account
 PASSWORD_ROUNDS = 200_000
 SSDP_GROUP = "239.255.255.250"
@@ -362,6 +362,10 @@ class Store:
             log("[strip] TONLY_TAP_%s claimed by two accounts; it will wait for the owner" % code)
         self.expected[code] = entry
         self.save()
+
+    def expects(self, macs: List[str], now: float) -> bool:
+        """Did the app announce (or the owner reserve) this strip?"""
+        return any(e.get("until", 0) > now and code_matches(c, macs) for c, e in self.expected.items())
 
     def claim_expected(self, macs: List[str], now: float) -> Optional[str]:
         """The member id ("" = owner) that announced this strip from the app, or None."""
@@ -959,7 +963,6 @@ class Guard:
         self.open: Dict[str, int] = {}                            # ip -> open strip connections
         self.connects: Dict[str, List[float]] = {}                # ip -> recent connection times
         self.strikes: Dict[str, List[float]] = {}                 # ip -> recent misbehaviour
-        self.new_strips: Dict[str, List[float]] = {}              # ip -> times a new strip was added
         self.login_fails: Dict[str, Dict[str, float]] = {}        # ip -> {wrong password hash: when}
         self.signups: Dict[str, List[float]] = {}                 # ip -> times an account was made
         self.all_signups: List[float] = []                        # every account made, from anywhere
@@ -1029,18 +1032,13 @@ class Guard:
                 del self.open[ip]
 
     def may_add_strip(self, ip: str, unknown_now: int, now: Optional[float] = None) -> bool:
-        """Can [ip] bring in a strip this server has never seen?"""
+        """Can [ip] bring in a strip nobody approved or announced? Only when the waiting list is absurdly
+        long is that one strip refused, never the address: the home's own strips and app keep working."""
         if is_local_address(ip):
             return True
-        now = time.time() if now is None else now
         if unknown_now >= MAX_UNKNOWN_STRIPS:
-            self.strike(ip, "new strip refused: %d unnamed strips already" % unknown_now, now)
+            log("[guard] new strip from %s refused: %d unknown strips waiting already" % (ip, unknown_now))
             return False
-        added = self._recent(self.new_strips.setdefault(ip, []), 24 * 3600, now)
-        if len(added) >= MAX_NEW_STRIPS_PER_DAY:
-            self.block(ip, "more than %d new strips in a day" % MAX_NEW_STRIPS_PER_DAY, now=now)
-            return False
-        added.append(now)
         return True
 
     def login_failed(self, ip: str, offered: List[str], now: Optional[float] = None) -> None:
@@ -1136,9 +1134,13 @@ class Hub:
             self.guard.strike(link.address, "claimed to be %s, which is online from another address" % self.label(strip))
             return None
         if strip is None:
-            unknown = sum(1 for s in self.strips.values() if not self.store.knows(s.mac))
-            if not self.guard.may_add_strip(link.address, unknown):
-                return None
+            # only strips nobody approved or announced count towards the limits (all of a customer's strips
+            # reconnect at once after a restart; one announced from the app is expected)
+            macs = [boot["mac"], boot.get("mac2", "")]
+            if not self.store.knows(boot["mac"]) and not self.store.expects(macs, time.time()):
+                unknown = sum(1 for s in self.strips.values() if not self.store.knows(s.mac))
+                if not self.guard.may_add_strip(link.address, unknown):
+                    return None
             strip = self.strips[boot["mac"]] = Strip(boot["mac"])
         if strip.link is not None and strip.link is not link:
             strip.link.close()                      # the strip re-dialled; the old socket is dead
@@ -3128,8 +3130,7 @@ async def selftest() -> None:
     assert not g.connection_opened("41.65.227.204", t0 + 99)                   # too many open at once
     assert not g.is_blocked("41.65.227.203", t0 + BLOCK_SECONDS + 1)          # blocks run out
     assert all(g.connection_opened("192.168.1.50", t0) for _ in range(100))  # the home network is never limited
-    assert all(g.may_add_strip("196.135.103.190", 0, t0) for _ in range(MAX_NEW_STRIPS_PER_DAY))
-    assert not g.may_add_strip("196.135.103.190", 0, t0) and g.is_blocked("196.135.103.190", t0)
+    assert all(g.may_add_strip("196.135.103.190", 0, t0) for _ in range(100))  # no limit per home
     assert not g.may_add_strip("196.135.103.191", MAX_UNKNOWN_STRIPS, t0)
     for _ in range(MAX_STRIKES):
         g.strike("196.135.103.192", "test", t0)
@@ -3267,6 +3268,18 @@ async def selftest() -> None:
     assert status == 200 and res2.get("approved") and hub.store.is_approved("C0FFEE96BB29")
     assert "C0FFEE96BB29" in [x["id"] for x in (await loop.run_in_executor(None, http, "/api/state", None, ali))[1]["strips"]]
     await hub.remove_strip("C0FFEE96BB29", block=False)
+    # a home with many strips: approved ones reconnecting (after a restart) and announced ones never hit the limit
+    for n in range(40):
+        mac = "C0FFEE77%04d" % n
+        hub.store.approve(mac)
+        assert hub.attach(Remote("102.80.8.8"), {"mac": mac, "mac2": "", "model": "lgutap", "fw": "x"}) is not None
+    for n in range(40):
+        hub.store.expect("F%06d" % n, "", time.time())               # announced from the app
+        assert hub.attach(Remote("102.80.8.8"), {"mac": "C0FFEF%06d" % n, "mac2": "", "model": "lgutap", "fw": "x"}) is not None
+    assert not hub.guard.is_blocked("102.80.8.8")
+    for n in range(40):
+        await hub.remove_strip("C0FFEE77%04d" % n, block=False)
+        await hub.remove_strip("C0FFEF%06d" % n, block=False)
     # two accounts claiming one setup code (a neighbour who saw its Wi-Fi name): it waits for the owner
     status, nres = await loop.run_in_executor(None, post, "/api/signup", {"name": "N", "login": "n@example.com", "password": "secret1"}, None, "102.50.1.1")
     assert status == 200
