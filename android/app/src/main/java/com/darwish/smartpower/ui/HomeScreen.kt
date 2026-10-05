@@ -97,8 +97,9 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit, onSetup: () -> Unit, on
                     stringResource(R.string.open_settings), onSettings)
             }
             // not signed in (or the sign-in ended): customers sign in or create an account right here
+            // not signed in: the app shows the welcome (sign in / new account) screen instead of Home
             problem == Problem.BAD_TOKEN && state.strips.isEmpty() -> item {
-                AccountCard(vm, expired = state.token.isNotEmpty(), onServerPassword = onSettings)
+                Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
             state.strips.isEmpty() && problem != null -> item {
                 MessageCard(stringResource(R.string.problem_title), stringResource(problemText(problem)),

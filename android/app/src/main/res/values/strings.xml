@@ -332,11 +332,11 @@
     <string name="account_name">Your name</string>
     <string name="account_login">Mobile number or e-mail</string>
     <string name="account_password">Password</string>
-    <string name="account_password_hint">At least 6 characters</string>
+    <string name="account_password_hint">At least 8 characters</string>
     <string name="account_have_password">I have an invite code</string>
     <string name="account_err_name">Enter your name.</string>
     <string name="account_err_login">Enter a mobile number or an e-mail address.</string>
-    <string name="account_err_password">The password needs at least 6 characters.</string>
+    <string name="account_err_password">The password needs at least 8 characters.</string>
     <string name="account_err_exists">There is already an account with this number or e-mail. Sign in instead.</string>
     <string name="account_err_wrong">Wrong number/e-mail or password.</string>
     <string name="account_err_closed">New accounts are closed at the moment.</string>
@@ -351,4 +351,19 @@
     <string name="owner_title">Server owner</string>
     <string name="owner_body">Signed in with the server password: you see every strip, customer and family member.</string>
     <string name="owner_sign_out_body">Sign out of the server password on this phone? You can sign in again from Settings, or create a customer account.</string>
+    <string name="welcome_new_title">Welcome ⚡</string>
+    <string name="welcome_new_sub">Create your account and start controlling your strips</string>
+    <string name="welcome_back_title">Welcome back 👋</string>
+    <string name="welcome_back_sub">Sign in to control your strips</string>
+    <string name="welcome_tagline">Control your strips from anywhere, any time</string>
+    <string name="account_confirm">Confirm password</string>
+    <string name="account_mismatch">This does not match the password above.</string>
+    <string name="account_forgot">Forgot your password?</string>
+    <string name="account_forgot_body">Send us the phone number or e-mail you signed up with and we will set a new password for you.</string>
+    <string name="account_contact">Contact us</string>
+    <string name="password_short">Too short: at least 8 characters</string>
+    <string name="password_weak">Weak</string>
+    <string name="password_ok">Good</string>
+    <string name="password_strong">Strong 💪</string>
+    <string name="ok">OK</string>
 </resources>

@@ -171,6 +171,8 @@ const L = {
        unassignAsk: "تشيل المشترك ده من حساب {from}؟ مش هيشوفه تاني.",
        tabOverview: "📊 نظرة عامة", tabWaiting: "🆕 مستنية", tabCustomers: "👥 العملاء", tabStrips: "🔌 المشتركات",
        tabReserve: "📦 الحجز", tabSettings: "⚙️ الإعدادات", search: "🔍 دوّر بالاسم أو الرقم أو الإيميل أو رقم المشترك",
+       newPw: "🔑 باسورد جديد", newPwAsk: "باسورد جديد لـ {name} (8 حروف على الأقل). ممكن تسيب المقترح أو تكتب واحد تاني:",
+       newPwShort: "الباسورد لازم يكون 8 حروف على الأقل.", newPwDone: "اتغيّر. ابعت الباسورد ده لـ {name}:\n\n{pw}\n\n(اتنسخ كمان) وأي موبايل كان داخل بحسابه هيطلب منه يدخل تاني.",
        noMatch: "مفيش نتايج.", searchAll: "🔍 دوّر على عميل أو مشترك…", goStrip: "افتح", customerW: "عميل", stripW: "مشترك", hisStrips: "مشتركاته", shown: "ظاهر",
        actions: "إجراءات", remove: "🗑 حذف", removeAsk: "تحذف المشترك ده؟ هيتشال من حساب العميل وتتمسح أسماؤه ومواعيده. لو العميل جهّزه تاني من التطبيق هيرجعله لوحده.",
        arrived: "وصل", probably: "غالباً تبع", you: "إنت (صاحب السيرفر)", giveTo: "وافق وادّيه لـ", codeWas: "الكود",
@@ -206,6 +208,8 @@ const L = {
        unassignAsk: "Take this strip from {from}'s account? They will no longer see it.",
        tabOverview: "📊 Overview", tabWaiting: "🆕 Waiting", tabCustomers: "👥 Customers", tabStrips: "🔌 Strips",
        tabReserve: "📦 Reserve", tabSettings: "⚙️ Settings", search: "🔍 Search by name, phone, e-mail or strip",
+       newPw: "🔑 New password", newPwAsk: "New password for {name} (at least 8 characters). Keep the suggestion or type another:",
+       newPwShort: "The password needs at least 8 characters.", newPwDone: "Changed. Send this password to {name}:\n\n{pw}\n\n(also copied). Phones signed in to the account must sign in again.",
        noMatch: "No matches.", searchAll: "🔍 Find a customer or strip…", goStrip: "Open", customerW: "customer", stripW: "strip", hisStrips: "Their strips", shown: "shown",
        actions: "Actions", remove: "🗑 Remove", removeAsk: "Remove this strip? It leaves the customer's account and its names and schedules are deleted. If the customer sets it up again in the app, it comes back to them.",
        arrived: "first connected", probably: "Probably", you: "You (the owner)", giveTo: "Approve for", codeWas: "code",
@@ -357,7 +361,8 @@ function render() {
         <td class="head"><b>${esc(c.name)}</b></td><td data-l="${t("account")}"><bdi dir="ltr">${esc(c.login)}</bdi></td>
         <td data-l="${t("stripsCol")}"><span class="status${c.online ? " on" : ""}"><i></i><bdi>${fmt(c.online)} / ${fmt(c.strips)}</bdi></span></td>
         <td class="muted" data-l="${t("lastSeen")}">${ago(c.last_seen)}</td><td class="muted" data-l="${t("joined")}">${date(c.created)}</td>
-        <td>${c.strips ? `<button class="btn small" data-show="${esc(c.login || c.name)}">${t("hisStrips")}</button>` : ""}</td></tr>`).join("") + `</table></div>`
+        <td><span class="acts">${c.strips ? `<button class="btn small" data-show="${esc(c.login || c.name)}">${t("hisStrips")}</button>` : ""}
+          <button class="btn small" data-pw="${esc(c.id)}">${t("newPw")}</button></span></td></tr>`).join("") + `</table></div>`
       : `<div class="empty">${t("noCustomers")}</div>`) + `</section>`;
   }
 
@@ -495,6 +500,23 @@ document.addEventListener("click", async ev => {
   if (tb) { go(tb.dataset.tab); return; }
   if (gt) { go(gt.dataset.go); return; }
   if (sh) { query.strips = sh.dataset.show; go("strips"); return; }
+  const pw = ev.target.closest("[data-pw]");
+  if (pw) {
+    const who = (data.customers.find(c => c.id === pw.dataset.pw) || {}).name || "";
+    // a suggestion that is easy to read out on the phone: no 0/O or 1/l/I
+    const abc = "abcdefghjkmnpqrstuvwxyz23456789", pick = new Uint32Array(10);
+    crypto.getRandomValues(pick);
+    const suggestion = [...pick].map(n => abc[n % abc.length]).join("");
+    const chosen = prompt(t("newPwAsk").split("{name}").join(who), suggestion);
+    if (chosen === null) return;
+    if (chosen.trim().length < 8) { alert(t("newPwShort")); return; }
+    try {
+      await api("/api/customers/password", {customer: pw.dataset.pw, password: chosen.trim()});
+      try { await navigator.clipboard.writeText(chosen.trim()); } catch (e) {}
+      alert(t("newPwDone").split("{name}").join(who).split("{pw}").join(chosen.trim()));
+    } catch (e) { toast(t("fail") + e.message); }
+    refresh(); return;
+  }
   const cp = ev.target.closest("[data-copy]");
   if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); toast(t("copied")); } catch (e) {} return; }
   const sc = ev.target.closest("[data-secret]");

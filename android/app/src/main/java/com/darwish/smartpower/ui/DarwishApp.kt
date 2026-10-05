@@ -125,7 +125,9 @@ fun DarwishApp(locked: Boolean, onUnlocked: () -> Unit, vm: AppViewModel = viewM
             ) { padding ->
                 Box(Modifier.padding(padding)) { SettingsScreen(vm, onSetup = {}, connectOnly = true) }
             }
-            Overlay.NONE -> Scaffold(
+            Overlay.NONE -> if (!signedIn && state.loaded && state.problem == Problem.BAD_TOKEN && state.strips.isEmpty()) {
+                WelcomeScreen(vm, expired = state.token.isNotEmpty(), onServerPassword = { overlay = Overlay.CONNECT })
+            } else Scaffold(
                 containerColor = Color.Transparent,
                 snackbarHost = { SnackbarHost(snackbar) },
                 bottomBar = {

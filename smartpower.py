@@ -80,6 +80,7 @@ DEFAULT_SETTINGS = {"price_kwh": 1.5, "currency": "EGP", "max_temp_c": 60, "max_
                     "signup": True}
 SIGNUPS_PER_HOUR = 5                     # new customer accounts from one internet address
 SIGNUPS_PER_HOUR_ALL = 100               # new customer accounts per hour from everywhere together
+MIN_PASSWORD = 8                         # characters in a new customer password (older accounts keep theirs)
 ACCOUNT_FAILS = 10                       # wrong passwords for one account (15 minutes, from anywhere) before it pauses
 ANNOUNCES_PER_HOUR = 100                 # strips one account may say it is setting up, per hour (floods only)
 MAX_SESSIONS = 10                        # signed-in phones per customer account
@@ -634,7 +635,7 @@ def password_ok(stored: str, password: str) -> bool:
     except (ValueError, AttributeError):
         return False
 OWNER_ONLY = ("/api/users", "/api/settings", "/api/lock", "/api/strips/approve", "/api/strips/remove", "/api/strips/assign",
-              "/api/strips/reserve", "/api/strips/unreserve", "/api/admin", "/api/oauth/secret")
+              "/api/strips/reserve", "/api/strips/unreserve", "/api/admin", "/api/oauth/secret", "/api/customers/")
 
 LINK_PAGE = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Darwish Smart Power</title>
@@ -1482,8 +1483,8 @@ class Hub:
             return 400, {"error": "name required", "field": "name"}
         if login is None:
             return 400, {"error": "enter a phone number or an e-mail address", "field": "login"}
-        if not 6 <= len(password) <= 128:
-            return 400, {"error": "the password needs at least 6 characters", "field": "password"}
+        if not MIN_PASSWORD <= len(password) <= 128:
+            return 400, {"error": "the password needs at least %d characters" % MIN_PASSWORD, "field": "password"}
         if self.store.account_by_login(login):
             return 409, {"error": "an account with this phone or e-mail exists; sign in instead", "field": "login"}
         user = {"id": os.urandom(4).hex(), "name": name, "role": CUSTOMER, "login": login,
@@ -1499,6 +1500,19 @@ class Hub:
             return 401, {"error": "wrong phone/e-mail or password"}
         token = self.store.new_session(user)
         return 200, {"ok": True, "token": token, "me": {"role": CUSTOMER, "name": user["name"]}}
+
+    async def set_customer_password(self, user_id: str, pw_hash: str) -> Tuple[int, Dict[str, Any]]:
+        """The owner gives a customer who forgot theirs a new password; their phones are signed out."""
+        user = next((u for u in self.store.users if u["id"] == user_id and u.get("role") == CUSTOMER), None)
+        if user is None:
+            return 404, {"error": "no such customer"}
+        if not pw_hash:
+            return 400, {"error": "the password needs at least %d characters" % MIN_PASSWORD}
+        user["pw"], user["sessions"] = pw_hash, []
+        self.guard.account_fails.pop(user.get("login", ""), None)   # a paused account can sign in at once
+        self.store.save()
+        log("[account] owner set a new password for customer %s" % user_id)
+        return 200, {"ok": True}
 
     async def delete_account(self, user_id: str) -> Tuple[int, Dict[str, Any]]:
         """A customer closes their account; strips nobody else has are removed with it."""
@@ -2487,7 +2501,7 @@ class WebHandler(BaseHTTPRequestHandler):
                 self.reply_json(429, {"error": "too many new accounts, try again later"})
                 return
             # the slow password hash runs here, not on the loop that talks to the strips
-            req["pw"] = hash_password(str(req.get("password") or "")) if 6 <= len(str(req.get("password") or "")) <= 128 else ""
+            req["pw"] = hash_password(str(req.get("password") or "")) if MIN_PASSWORD <= len(str(req.get("password") or "")) <= 128 else ""
             code, body = self.server.run_on_loop(hub.sign_up(req))
             self.reply_json(code, body)
             return
@@ -2588,6 +2602,10 @@ class WebHandler(BaseHTTPRequestHandler):
                 code, body = self.server.run_on_loop(hub.unreserve_strip(req.get("code")))
             elif path == "/api/strips/assign":
                 code, body = self.server.run_on_loop(hub.assign_strip(strip_id, str(req.get("customer") or "")))
+            elif path == "/api/customers/password":
+                password = str(req.get("password") or "")
+                pw = hash_password(password) if MIN_PASSWORD <= len(password) <= 128 else ""   # slow hash off the loop
+                code, body = self.server.run_on_loop(hub.set_customer_password(str(req.get("customer") or ""), pw))
             elif path == "/api/logout":
                 for token in self.offered_tokens():
                     if token:
@@ -3292,10 +3310,10 @@ async def selftest() -> None:
     assert normalise_login("hello") is None
     status, res = await loop.run_in_executor(None, post, "/api/signup", {"name": "Ali", "login": "01012345678", "password": "123"})
     assert status == 400 and res["field"] == "password"
-    status, res = await loop.run_in_executor(None, post, "/api/signup", {"name": "Ali", "login": "010 1234 5678", "password": "secret1"})
+    status, res = await loop.run_in_executor(None, post, "/api/signup", {"name": "Ali", "login": "010 1234 5678", "password": "secret12"})
     assert status == 200 and res["token"]
     ali = res["token"]
-    assert (await loop.run_in_executor(None, post, "/api/signup", {"name": "X", "login": "01012345678", "password": "secret1"}))[0] == 409
+    assert (await loop.run_in_executor(None, post, "/api/signup", {"name": "X", "login": "01012345678", "password": "secret12"}))[0] == 409
     status, state = await loop.run_in_executor(None, http, "/api/state", None, ali)
     assert status == 200 and state["me"]["role"] == CUSTOMER and state["strips"] == [] and "new_strips" not in state
     assert (await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "AA0001"}, ali))[0] == 200
@@ -3305,7 +3323,7 @@ async def selftest() -> None:
     assert (await loop.run_in_executor(None, post, "/api/switch", {"strip": "A1B2C3D4E5F6", "outlet": 1, "on": True}, ali))[0] == 403
     assert (await loop.run_in_executor(None, post, "/api/users/add", {"name": "Y", "role": "control"}, ali))[0] == 403
     assert (await loop.run_in_executor(None, post, "/api/login", {"login": "01012345678", "password": "nope"}))[0] == 401
-    status, res = await loop.run_in_executor(None, post, "/api/login", {"login": "+01012345678".lstrip("+"), "password": "secret1"})
+    status, res = await loop.run_in_executor(None, post, "/api/login", {"login": "+01012345678".lstrip("+"), "password": "secret12"})
     assert status == 200 and res["token"] != ali
     assert all(u.get("role") != CUSTOMER for u in (await hub.users())["users"])     # not in the family list
     status, report = await loop.run_in_executor(None, http, "/api/admin")
@@ -3362,8 +3380,9 @@ async def selftest() -> None:
         await hub.remove_strip("C0FFEE77%04d" % n, block=False)
         await hub.remove_strip("C0FFEF%06d" % n, block=False)
     # two accounts claiming one setup code (a neighbour who saw its Wi-Fi name): it waits for the owner
-    status, nres = await loop.run_in_executor(None, post, "/api/signup", {"name": "N", "login": "n@example.com", "password": "secret1"}, None, "102.50.1.1")
+    status, nres = await loop.run_in_executor(None, post, "/api/signup", {"name": "N", "login": "n@example.com", "password": "secret12"}, None, "102.50.1.1")
     assert status == 200
+    nres_id = next(u["id"] for u in hub.store.users if u.get("login") == "n@example.com")
     assert (await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "CC0001"}, ali, "102.40.7.7"))[0] == 200
     assert (await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "CC0001"}, nres["token"], "102.50.1.1"))[0] == 200
     assert hub.attach(Remote("102.40.7.7"), {"mac": "C0FFEECC0001", "mac2": "", "model": "lgutap", "fw": "x"}) is not None
@@ -3376,8 +3395,16 @@ async def selftest() -> None:
     # guessing one account's password from many addresses pauses that account, even for the right password
     for n in range(ACCOUNT_FAILS):
         assert (await loop.run_in_executor(None, post, "/api/login", {"login": "n@example.com", "password": "bad%d" % n}, None, "103.0.0.%d" % n))[0] == 401
-    assert (await loop.run_in_executor(None, post, "/api/login", {"login": "n@example.com", "password": "secret1"}, None, "103.1.1.1"))[0] == 429
-    assert (await loop.run_in_executor(None, post, "/api/login", {"login": "01012345678", "password": "secret1"}, None, "103.1.1.1"))[0] == 200
+    assert (await loop.run_in_executor(None, post, "/api/login", {"login": "n@example.com", "password": "secret12"}, None, "103.1.1.1"))[0] == 429
+    assert (await loop.run_in_executor(None, post, "/api/login", {"login": "01012345678", "password": "secret12"}, None, "103.1.1.1"))[0] == 200
+    # the customer forgot the password: the owner sets a new one, which also lets a paused account in again
+    assert (await loop.run_in_executor(None, http, "/api/customers/password", {"customer": nres_id, "password": "short"}))[0] == 400
+    assert (await loop.run_in_executor(None, post, "/api/customers/password", {"customer": nres_id, "password": "new-pass-9"}, ali))[0] == 403
+    assert (await loop.run_in_executor(None, http, "/api/customers/password", {"customer": nres_id, "password": "new-pass-9"}))[0] == 200
+    assert (await loop.run_in_executor(None, http, "/api/state", None, nres["token"]))[0] == 401       # old phones signed out
+    assert (await loop.run_in_executor(None, post, "/api/login", {"login": "n@example.com", "password": "new-pass-9"}, None, "103.1.1.2"))[0] == 200
+    assert (await loop.run_in_executor(None, post, "/api/signup", {"name": "S", "login": "s@example.com", "password": "seven77"}, None, "102.50.1.9"))[0] == 400
+    nres = (await loop.run_in_executor(None, post, "/api/login", {"login": "n@example.com", "password": "new-pass-9"}, None, "103.1.1.2"))[1]
     # every reply carries the browser protections, and customers' strips stay off the owner's local Alexa
     with urllib.request.urlopen(base + "/privacy", timeout=10) as r:
         assert r.headers["X-Frame-Options"] == "DENY" and r.headers["Referrer-Policy"] == "no-referrer"
@@ -3415,7 +3442,7 @@ async def selftest() -> None:
     status, _, _ = await loop.run_in_executor(None, raw, "POST", "/oauth/authorize", fields + "&login=01012345678&password=bad", form)
     assert status == 401
     status, hdrs, _ = await loop.run_in_executor(None, raw, "POST", "/oauth/authorize",
-                                                 fields + "&login=01012345678&password=secret1", form)
+                                                 fields + "&login=01012345678&password=secret12", form)
     assert status == 302 and hdrs["Location"].startswith(redirect + "?code=") and hdrs["Location"].endswith("&state=st8")
     code = parse_qs(urlsplit(hdrs["Location"]).query)["code"][0]
     basic = {"Authorization": "Basic " + base64.b64encode(("alexa:" + secret).encode()).decode(), **form}

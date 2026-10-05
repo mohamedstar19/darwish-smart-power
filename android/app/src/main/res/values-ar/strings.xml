@@ -318,11 +318,11 @@
     <string name="account_name">اسمك</string>
     <string name="account_login">رقم الموبايل أو الإيميل</string>
     <string name="account_password">الباسورد</string>
-    <string name="account_password_hint">6 حروف أو أرقام على الأقل</string>
+    <string name="account_password_hint">8 حروف على الأقل</string>
     <string name="account_have_password">عندي كود دعوة</string>
     <string name="account_err_name">اكتب اسمك.</string>
     <string name="account_err_login">اكتب رقم موبايل أو إيميل.</string>
-    <string name="account_err_password">الباسورد لازم يكون 6 حروف أو أرقام على الأقل.</string>
+    <string name="account_err_password">الباسورد لازم يكون 8 حروف على الأقل.</string>
     <string name="account_err_exists">فيه حساب بالرقم أو الإيميل ده. ادخل بيه بدل ما تعمل حساب جديد.</string>
     <string name="account_err_wrong">الرقم أو الإيميل أو الباسورد غلط.</string>
     <string name="account_err_closed">التسجيل مقفول دلوقتي.</string>
@@ -337,4 +337,19 @@
     <string name="owner_title">صاحب السيرفر</string>
     <string name="owner_body">داخل بباسورد السيرفر: بتشوف كل المشتركات والعملاء والعيلة.</string>
     <string name="owner_sign_out_body">تخرج من باسورد السيرفر على الموبايل ده؟ تقدر تدخل تاني من الإعدادات، أو تعمل حساب عميل.</string>
+    <string name="welcome_new_title">أهلاً بيك ⚡</string>
+    <string name="welcome_new_sub">اعمل حسابك وابدأ تتحكم في مشتركاتك</string>
+    <string name="welcome_back_title">أهلاً بيك تاني 👋</string>
+    <string name="welcome_back_sub">سجّل دخولك عشان تتحكم في مشتركاتك</string>
+    <string name="welcome_tagline">تحكّم في مشتركاتك من أي مكان وفي أي وقت</string>
+    <string name="account_confirm">أكّد الباسورد</string>
+    <string name="account_mismatch">الباسورد مش زي اللي فوق.</string>
+    <string name="account_forgot">نسيت الباسورد؟</string>
+    <string name="account_forgot_body">ابعتلنا رقم الموبايل أو الإيميل اللي سجّلت بيه، وهنعملك باسورد جديد تدخل بيه على طول.</string>
+    <string name="account_contact">كلّمنا</string>
+    <string name="password_short">لسه قصير: 8 حروف على الأقل</string>
+    <string name="password_weak">ضعيف</string>
+    <string name="password_ok">كويس</string>
+    <string name="password_strong">قوي 💪</string>
+    <string name="ok">تمام</string>
 </resources>

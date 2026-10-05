@@ -92,6 +92,69 @@ header .hello{color:var(--soft);font-size:13px}
 .tab{flex:1;border:0;background:transparent;border-radius:999px;padding:7px 6px;font-size:13px;color:var(--soft)}
 .linkish{display:block;margin:12px auto 0;border:0;background:none;color:var(--faint);font-size:12px;text-decoration:underline}
 .tab.on{background:linear-gradient(135deg,#ff7a3d,#ffb347);color:#2a0e00;font-weight:700}
+/* welcome (sign in / new account) */
+.welcome{position:relative;max-width:420px;margin:0 auto;padding:10px 2px 24px;text-align:center}
+.hero{position:fixed;top:0;left:0;right:0;height:340px;z-index:0;overflow:hidden;border-radius:0 0 50% 50% / 0 0 56px 56px;
+  background:linear-gradient(160deg,#5a2410,#3a170b 45%,#1e130d)}
+.hero i{position:absolute;border-radius:50%;background:radial-gradient(circle at 30% 30%,rgba(255,138,76,.55),rgba(255,106,43,.08))}
+.hero .b1{width:230px;height:230px;top:-70px;inset-inline-start:-80px;animation:drift 9s ease-in-out infinite alternate}
+.hero .b2{width:90px;height:90px;top:130px;inset-inline-end:30px;opacity:.6;animation:drift 7s ease-in-out infinite alternate-reverse}
+.hero .b3{width:270px;height:270px;top:190px;inset-inline-end:-120px;opacity:.5;animation:drift 11s ease-in-out infinite alternate}
+@keyframes drift{to{transform:translate(22px,16px)}}
+.welcome>:not(.hero){position:relative;z-index:1}
+.wtop{display:flex;justify-content:flex-end}
+.langpill{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:var(--text);border-radius:999px;padding:7px 14px;font:inherit;font-size:13px}
+.mark{position:relative;width:170px;height:170px;margin:-6px auto 0;display:grid;place-items:center}
+.mark .glow{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle,rgba(255,122,61,.8),transparent 70%);animation:breathe 2.2s ease-in-out infinite alternate}
+.mark img{position:relative;width:108px;height:108px;border-radius:30px;animation:grow 2.2s ease-in-out infinite alternate}
+@keyframes breathe{from{opacity:.35}to{opacity:.8}}
+@keyframes grow{to{transform:scale(1.04)}}
+.titles h1{margin:4px 0 2px;font-size:25px;font-weight:800}
+.titles p{margin:0;color:#e7cdbd;font-size:14px}
+.titles.swap{animation:swap .3s ease}
+@keyframes swap{from{opacity:0;transform:translateY(6px)}}
+.wcard{margin-top:22px;padding:18px;border-radius:26px;text-align:start;background:linear-gradient(135deg,rgba(255,255,255,.14),rgba(255,255,255,.05));
+  border:1px solid var(--stroke);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 20px 50px rgba(0,0,0,.45)}
+.wcard.shake{animation:shake .35s}
+@keyframes shake{20%{transform:translateX(12px)}40%{transform:translateX(-10px)}60%{transform:translateX(7px)}80%{transform:translateX(-4px)}}
+.seg{position:relative;display:flex;background:rgba(0,0,0,.35);border-radius:16px;padding:4px;margin-bottom:16px}
+.seg .pill{position:absolute;top:4px;bottom:4px;inset-inline-start:4px;width:calc(50% - 4px);border-radius:12px;
+  background:linear-gradient(135deg,#ff7a3d,#ffb347);box-shadow:0 6px 18px rgba(255,122,61,.4);transition:transform .3s cubic-bezier(.4,0,.2,1)}
+.welcome[data-mode="new"] .seg .pill{transform:translateX(100%)}
+[dir="rtl"] .welcome[data-mode="new"] .seg .pill{transform:translateX(-100%)}
+.seg button{position:relative;flex:1;border:0;background:none;padding:11px 0;font:inherit;font-weight:700;color:var(--soft);transition:color .3s}
+.welcome[data-mode="in"] .seg [data-mode="in"],.welcome[data-mode="new"] .seg [data-mode="new"]{color:#2a0e00}
+.fld{display:flex;align-items:center;gap:10px;height:54px;border-radius:16px;border:1px solid var(--stroke);background:rgba(0,0,0,.28);
+  padding:0 12px;margin-bottom:10px;transition:border-color .2s}
+.fld:focus-within{border-color:#ff7a3d}
+.fld.bad{border-color:var(--bad,#ff6b6b)}
+[dir="rtl"] .fld input{text-align:right}
+.fld .ic{width:22px;text-align:center;font-size:17px;flex:none}
+.fld input{flex:1;min-width:0;border:0;background:none;color:var(--text);font:inherit;outline:none;padding:0;height:100%;text-align:start}
+.fld .eye{border:0;background:none;font-size:17px;padding:4px;cursor:pointer}
+.fx{overflow:hidden;max-height:0;opacity:0;transition:max-height .35s ease,opacity .25s ease}
+.welcome[data-mode="new"] .only-new{max-height:220px;opacity:1}
+.welcome:not([data-mode="server"]) .not-server{max-height:80px;opacity:1}
+.welcome[data-mode="server"] .seg{display:none}
+.meter{height:5px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin:2px 0 4px}
+.meter i{display:block;height:100%;width:0;border-radius:3px;transition:width .3s,background .3s}
+.wcard .hint{color:var(--faint);font-size:12px;margin-bottom:6px}
+.wcard .err{color:var(--bad,#ff6b6b);font-size:13px;min-height:18px;margin:4px 2px}
+.go{width:100%;height:56px;border:0;border-radius:18px;font:inherit;font-size:17px;font-weight:800;color:#2a0e00;cursor:pointer;
+  background:linear-gradient(135deg,#ff6a2b,#ffb347);box-shadow:0 12px 30px rgba(255,106,43,.45);transition:transform .12s,filter .2s}
+.go:active{transform:scale(.97)}
+.go:disabled{filter:grayscale(.6) brightness(.7);box-shadow:none;cursor:default}
+.go .spin{display:inline-block;width:22px;height:22px;border:2.5px solid #2a0e00;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.wcard hr{border:0;border-top:1px solid var(--stroke);margin:12px 0 4px}
+.wcard .linkish{text-decoration:none;color:var(--soft);font-size:13px}
+.wcard .forgot{color:#ffb347}
+.forgotbox{display:none;margin-top:8px;padding:10px 12px;border-radius:12px;background:rgba(255,179,71,.1);font-size:13px;color:#f3e6dc}
+.forgotbox.open{display:block}
+.forgotbox a{color:#ffb347;font-weight:700}
+.welcome[data-mode="new"] .only-in,.welcome[data-mode="server"] .only-in{display:none}
+.tagline{color:var(--faint);font-size:13px;margin-top:22px}
+@media (prefers-reduced-motion:reduce){.hero i,.mark .glow,.mark img,.go .spin{animation:none}.fx,.seg .pill{transition:none}}
 input{width:100%;font:inherit;color:var(--text);background:rgba(255,255,255,.06);border:1px solid var(--stroke);border-radius:14px;padding:13px 14px;margin:14px 0 10px;outline:none;direction:ltr;text-align:center}
 input:focus{border-color:var(--cyan)}
 .err{color:var(--red);min-height:1.4em;font-size:13px}
@@ -128,10 +191,15 @@ const L = {
        newTitle: "مشتركات جديدة مستنية موافقتك", newBody: "اتصلت بالسيرفر من غير ما حد يضيفها من التطبيق. وافق بس على اللي تعرفه.",
        from: "من", approve: "موافقة", block: "حظر", blockAsk: "تحظر المشترك ده؟ مش هيقدر يتصل بالسيرفر تاني.",
        welcome: "أهلاً بيك", tabNew: "حساب جديد", tabIn: "دخول", tabServer: "صاحب السيرفر", invite: "عندي كود دعوة", inviteCode: "كود الدعوة اللي وصلك", back: "رجوع", name: "اسمك",
-       loginId: "رقم الموبايل أو الإيميل", password: "الباسورد", pwHint: "6 حروف أو أرقام على الأقل",
+       loginId: "رقم الموبايل أو الإيميل", password: "الباسورد", pwHint: "8 حروف على الأقل",
+       wNewT: "أهلاً بيك ⚡", wNewS: "اعمل حسابك وابدأ تتحكم في مشتركاتك", wInT: "أهلاً بيك تاني 👋", wInS: "سجّل دخولك عشان تتحكم في مشتركاتك",
+       wSrvT: "كود الدعوة", wSrvS: "اكتب الكود اللي وصلك من صاحب السيرفر", tagline: "تحكّم في مشتركاتك من أي مكان وفي أي وقت",
+       confirm: "أكّد الباسورد", mismatch: "الباسورد مش زي اللي فوق.", forgot: "نسيت الباسورد؟",
+       forgotBody: "ابعتلنا رقم الموبايل أو الإيميل اللي سجّلت بيه، وهنعملك باسورد جديد تدخل بيه على طول.", contact: "كلّمنا",
+       pwShort: "لسه قصير: 8 حروف على الأقل", pwWeak: "ضعيف", pwOk: "كويس", pwStrong: "قوي 💪", show: "إظهار الباسورد",
        create: "اعمل الحساب", signIn: "دخول", e409: "فيه حساب بالرقم ده. ادخل بيه.", e401: "الرقم أو الباسورد غلط.",
        e403: "التسجيل مقفول دلوقتي.", e429: "محاولات كتير، جرّب بعد شوية.", eName: "اكتب اسمك.", eLogin: "اكتب رقم موبايل أو إيميل.",
-       ePw: "الباسورد لازم 6 حروف أو أرقام على الأقل.", noStripsYet: "لسه مفيش مشترك على حسابك. لو معاك آيفون، تواصل معانا وإحنا نجهّز المشترك ونربطه بحسابك، أو جهّزه مرة واحدة من أي موبايل أندرويد بتطبيقنا.",
+       ePw: "الباسورد لازم يكون 8 حروف على الأقل.", noStripsYet: "لسه مفيش مشترك على حسابك. لو معاك آيفون، تواصل معانا وإحنا نجهّز المشترك ونربطه بحسابك، أو جهّزه مرة واحدة من أي موبايل أندرويد بتطبيقنا.",
        deleteAcc: "امسح حسابي"},
   en: {lang: "العربية", hello_m: "Good morning", hello_e: "Good evening", now: "Using now", today: "Today", month: "This month",
        scenes: "Scenes", strip: "Strip", outlet: "Outlet", online: "online", offline: "offline", allOn: "All on", allOff: "All off",
@@ -144,10 +212,15 @@ const L = {
        newTitle: "New strips waiting for your approval", newBody: "They connected without being added from the app. Approve only strips you know.",
        from: "from", approve: "Approve", block: "Block", blockAsk: "Block this strip? It will not be able to connect again.",
        welcome: "Welcome", tabNew: "New account", tabIn: "Sign in", tabServer: "Server owner", invite: "I have an invite code", inviteCode: "The invite code you received", back: "Back", name: "Your name",
-       loginId: "Mobile number or e-mail", password: "Password", pwHint: "At least 6 characters",
+       loginId: "Mobile number or e-mail", password: "Password", pwHint: "At least 8 characters",
+       wNewT: "Welcome ⚡", wNewS: "Create your account and start controlling your strips", wInT: "Welcome back 👋", wInS: "Sign in to control your strips",
+       wSrvT: "Invite code", wSrvS: "Enter the code the server owner sent you", tagline: "Control your strips from anywhere, any time",
+       confirm: "Confirm password", mismatch: "This does not match the password above.", forgot: "Forgot your password?",
+       forgotBody: "Send us the phone number or e-mail you signed up with and we will set a new password for you.", contact: "Contact us",
+       pwShort: "Too short: at least 8 characters", pwWeak: "Weak", pwOk: "Good", pwStrong: "Strong 💪", show: "Show password",
        create: "Create account", signIn: "Sign in", e409: "An account with this number exists. Sign in.", e401: "Wrong number or password.",
        e403: "New accounts are closed.", e429: "Too many attempts, try later.", eName: "Enter your name.", eLogin: "Enter a mobile number or e-mail.",
-       ePw: "The password needs at least 6 characters.", noStripsYet: "No strip on your account yet. On an iPhone, contact us and we set up the strip and link it to your account, or set it up once from any Android phone with our app.",
+       ePw: "The password needs at least 8 characters.", noStripsYet: "No strip on your account yet. On an iPhone, contact us and we set up the strip and link it to your account, or set it up once from any Android phone with our app.",
        deleteAcc: "Delete my account"}
 };
 const ICON = {plug:"🔌",kettle:"☕",router:"📶",tv:"📺",ac:"❄️",lamp:"💡",heater:"🔥",fan:"🌀",fridge:"🧊",washer:"🧺",charger:"🔋",
@@ -180,43 +253,92 @@ let loginMode = "in";        // new | in | server
 function renderLogin(msg) {
   credit();
   document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
-  const m = loginMode, tab = (k, label) => `<button class="tab${m === k ? " on" : ""}" data-mode="${k}">${label}</button>`;
-  const tabs = m === "server" ? "" : `<div class="tabs">${tab("new", t("tabNew"))}${tab("in", t("tabIn"))}</div>`;
-  document.getElementById("root").innerHTML = `<form class="login glass" id="lf">
-      <img src="/icons/icon-192.png" alt=""><h2 style="margin:4px 0">${t("welcome")}</h2>
-      ${tabs}
-      ${m === "new" ? `<input id="nm" placeholder="${t("name")}" autocomplete="name">` : ""}
-      ${m !== "server" ? `<input id="id" placeholder="${t("loginId")}" autocomplete="username" dir="ltr" inputmode="email">` : ""}
-      <input id="pw" type="password" placeholder="${m === "server" ? t("inviteCode") : t("password")}" autocomplete="${m === "new" ? "new-password" : "current-password"}" dir="ltr">
-      ${m === "new" ? `<div class="hint">${t("pwHint")}</div>` : ""}
-      <div class="err">${esc(msg || "")}</div>
-      <button class="btn primary" style="width:100%" type="submit">${m === "new" ? t("create") : t("signIn")}</button>
-      <button class="linkish" type="button" data-mode="${m === "server" ? "in" : "server"}">${m === "server" ? t("back") : t("invite")}</button>
-      <button class="icon-btn" style="margin-top:10px" type="button" id="lang">${t("lang")}</button></form>`;
-  document.querySelectorAll("[data-mode]").forEach(b => b.onclick = e => { e.preventDefault(); loginMode = b.dataset.mode; renderLogin(); });
-  document.getElementById("lf").onsubmit = async e => {
+  document.getElementById("root").innerHTML = `<div class="welcome" id="wel" data-mode="${loginMode}">
+    <div class="hero" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div>
+    <div class="wtop"><button type="button" class="langpill" id="lang">🌐 ${t("lang")}</button></div>
+    <div class="mark"><span class="glow"></span><img src="/icons/icon.svg" alt=""></div>
+    <div class="titles" id="titles"><h1 id="wt"></h1><p id="ws"></p></div>
+    <form class="wcard" id="lf" novalidate>
+      <div class="seg"><span class="pill"></span><button type="button" data-mode="in">${t("tabIn")}</button><button type="button" data-mode="new">${t("tabNew")}</button></div>
+      <div class="fx only-new"><label class="fld"><span class="ic">👤</span><input id="nm" placeholder="${t("name")}" autocomplete="name" maxlength="30"></label></div>
+      <div class="fx not-server"><label class="fld"><span class="ic">📱</span><input id="id" placeholder="${t("loginId")}" autocomplete="username" dir="ltr" inputmode="email"></label></div>
+      <label class="fld"><span class="ic">🔒</span><input id="pw" type="password" dir="ltr">
+        <button type="button" class="eye" id="eye" aria-label="${t("show")}">👁</button></label>
+      <div class="fx only-new"><label class="fld"><span class="ic">🛡️</span><input id="pw2" type="password" placeholder="${t("confirm")}" autocomplete="new-password" dir="ltr"></label>
+        <div class="meter"><i id="mbar"></i></div><div class="hint" id="mtext">${t("pwHint")}</div></div>
+      <div class="err" id="err" role="alert">${esc(msg || "")}</div>
+      <button class="go" type="submit" id="go"></button>
+      <button type="button" class="linkish forgot only-in" id="forgot">${t("forgot")}</button>
+      <div class="forgotbox" id="forgotbox">${t("forgotBody")} <a href="https://darwish-tech.com" target="_blank" rel="noopener">${t("contact")}</a></div>
+      <hr><button type="button" class="linkish" id="server"></button>
+    </form>
+    <p class="tagline">${t("tagline")}</p></div>`;
+  const $ = id => document.getElementById(id), wel = $("wel"), card = $("lf");
+  const strength = pw => pw.length < 8 ? 0 : 1 + [pw.length >= 12, /\d/.test(pw) && /\D/.test(pw),
+    /[^A-Za-z0-9]/.test(pw) || (/[a-z]/.test(pw) && /[A-Z]/.test(pw))].filter(Boolean).length;
+  const ready = () => {
+    const m = loginMode, pw = $("pw").value;
+    if (m === "server") return pw.trim().length > 0;
+    if (!$("id").value.trim() || !pw) return false;
+    return m === "in" || ($("nm").value.trim() && pw.length >= 8 && $("pw2").value === pw);
+  };
+  const update = () => {
+    const m = loginMode, pw = $("pw").value, mism = m === "new" && $("pw2").value && $("pw2").value !== pw;
+    $("pw2").closest(".fld").classList.toggle("bad", !!mism);
+    if (m === "new") {
+      const sc = strength(pw), col = ["#8a7a6f", "#ff6b6b", "#ffc857", "#3ee6a0", "#3ee6a0"][sc];
+      $("mbar").style.width = pw ? Math.max(8, sc * 25) + "%" : "0"; $("mbar").style.background = col;
+      $("mtext").textContent = mism ? t("mismatch") : !pw ? t("pwHint") : t(["pwShort", "pwWeak", "pwOk", "pwStrong", "pwStrong"][sc]);
+      $("mtext").style.color = mism ? "#ff6b6b" : pw ? col : "";
+    }
+    $("go").disabled = !ready();
+  };
+  const setMode = (m, first) => {
+    loginMode = m; wel.dataset.mode = m;
+    $("wt").textContent = t({new: "wNewT", in: "wInT", server: "wSrvT"}[m]);
+    $("ws").textContent = t({new: "wNewS", in: "wInS", server: "wSrvS"}[m]);
+    if (!first) { const ti = $("titles"); ti.classList.remove("swap"); void ti.offsetWidth; ti.classList.add("swap"); $("err").textContent = ""; }
+    $("pw").placeholder = m === "server" ? t("inviteCode") : t("password");
+    $("pw").autocomplete = m === "new" ? "new-password" : "current-password";
+    $("go").innerHTML = `${m === "new" ? t("create") + " ＋" : t("signIn") + " ➜"}`;
+    $("server").textContent = m === "server" ? t("back") : t("invite");
+    $("forgotbox").classList.remove("open");
+    update();
+  };
+  const fail = text => { $("err").textContent = text; card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake"); };
+  document.querySelectorAll(".seg [data-mode]").forEach(b => b.onclick = () => setMode(b.dataset.mode));
+  $("server").onclick = () => setMode(loginMode === "server" ? "in" : "server");
+  $("forgot").onclick = () => $("forgotbox").classList.toggle("open");
+  $("eye").onclick = () => { const show = $("pw").type === "password"; ["pw", "pw2"].forEach(i => $(i).type = show ? "text" : "password"); $("eye").textContent = show ? "🙈" : "👁"; };
+  card.oninput = () => { $("err").textContent = ""; update(); };
+  card.onsubmit = async e => {
     e.preventDefault();
-    const pw = document.getElementById("pw").value;
+    if (!ready()) return;
+    const m = loginMode, pw = $("pw").value, go = $("go"), label = go.innerHTML;
+    go.disabled = true; go.innerHTML = '<span class="spin"></span>';
+    const done = text => { go.innerHTML = label; update(); fail(text); };
     if (m === "server") {
       token = pw.trim();
       try { await api("/api/health"); save("dsp-token", token); start(); }
-      catch (err) { renderLogin(err.status === 401 ? t("wrong") : t("unreachable")); }
+      catch (err) { done(err.status === 401 ? t("wrong") : t("unreachable")); }
       return;
     }
-    const body = {login: document.getElementById("id").value, password: pw};
-    if (m === "new") body.name = document.getElementById("nm").value;
+    const body = {login: $("id").value, password: pw};
+    if (m === "new") body.name = $("nm").value;
     const r = await fetch(m === "new" ? "/api/signup" : "/api/login",
       {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}).catch(() => null);
-    if (!r) { renderLogin(t("unreachable")); return; }
+    if (!r) { done(t("unreachable")); return; }
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
       const f = {name: "eName", login: "eLogin", password: "ePw"}[j.field];
-      renderLogin(t(f || ({409: "e409", 401: "e401", 403: "e403", 429: "e429"}[r.status]) || "unreachable"));
+      done(t(f || ({409: "e409", 401: "e401", 403: "e403", 429: "e429"}[r.status]) || "unreachable"));
       return;
     }
     token = j.token; save("dsp-token", token); start();
   };
-  document.getElementById("lang").onclick = () => { lang = lang === "ar" ? "en" : "ar"; save("dsp-lang", lang); renderLogin(); };
+  $("lang").onclick = () => { lang = lang === "ar" ? "en" : "ar"; save("dsp-lang", lang); renderLogin(); };
+  setMode(loginMode, true);
+  if (msg) fail(msg);
 }
 
 function spark(hours) {
