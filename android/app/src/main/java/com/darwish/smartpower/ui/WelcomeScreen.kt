@@ -21,6 +21,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -271,14 +277,11 @@ fun WelcomeScreen(vm: AppViewModel, expired: Boolean, onServerPassword: () -> Un
     }
 }
 
-/** The warm header behind the logo, with slowly drifting soft circles. */
+/** The warm header behind the logo: two power pylons with lines between them and sparks running along. */
 @Composable
 private fun WelcomeHero(still: Boolean) {
-    val drift = rememberInfiniteTransition(label = "hero")
-    val moving by drift.animateFloat(
-        0f, 1f, infiniteRepeatable(tween(9000, easing = LinearEasing), RepeatMode.Reverse), label = "drift",
-    )
-    val p = if (still) 0.5f else moving
+    val flow = rememberInfiniteTransition(label = "spark")
+    val t by flow.animateFloat(0f, 1f, infiniteRepeatable(tween(3200, easing = LinearEasing)), label = "t")
     Box(
         Modifier
             .fillMaxWidth()
@@ -286,22 +289,77 @@ private fun WelcomeHero(still: Boolean) {
             .clip(RoundedCornerShape(bottomStart = 56.dp, bottomEnd = 56.dp))
             .background(Brush.linearGradient(listOf(Color(0xFF5A2410), Color(0xFF3A170B), Glass.Deep))),
     ) {
-        Bubble(230.dp, Modifier.align(Alignment.TopStart).offset((-80 + 24 * p).dp, (-70 + 18 * p).dp))
-        Bubble(90.dp, Modifier.align(Alignment.TopEnd).offset((-30 - 16 * p).dp, (130 + 10 * p).dp), 0.6f)
-        Bubble(270.dp, Modifier.align(Alignment.BottomEnd).offset((120 - 20 * p).dp, (110 - 16 * p).dp), 0.5f)
+        // drawn in a 400 x 340 box, 440dp wide, centred: the same scene as the web page
+        Canvas(Modifier.align(Alignment.TopCenter).requiredSize(440.dp, 340.dp)) {
+            val u = size.width / 400f
+            val line = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
+            val thin = Stroke(width = 1.2.dp.toPx(), cap = StrokeCap.Round)
+            fun pylon(x: Float, y: Float, scale: Float) {
+                for (poly in PYLON) {
+                    val path = Path()
+                    for (i in poly.indices step 2) {
+                        val px = (x + poly[i] * scale) * u
+                        val py = (y + poly[i + 1] * scale) * u
+                        if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+                    }
+                    drawPath(path, Color(0x4DFFBE8C), style = line)
+                }
+            }
+            pylon(-25f, 40f, 1.1f)
+            pylon(305f, 60f, 0.9f)
+            for (w in WIRES) {
+                val path = Path().apply { moveTo(w[0] * u, w[1] * u); quadraticTo(w[2] * u, w[3] * u, w[4] * u, w[5] * u) }
+                drawPath(path, Color(0x42FFBE8C), style = thin)
+            }
+            if (!still) {
+                // a spark on each of the two lines in the middle, the second one running the other way
+                for ((wire, at) in listOf(WIRES[0] to t, WIRES[1] to 1f - (t + 0.45f) % 1f)) {
+                    val a = 1 - at
+                    val p = Offset(
+                        (a * a * wire[0] + 2 * a * at * wire[2] + at * at * wire[4]) * u,
+                        (a * a * wire[1] + 2 * a * at * wire[3] + at * at * wire[5]) * u,
+                    )
+                    drawCircle(Brush.radialGradient(listOf(Color(0xCCFFB347), Color.Transparent), p, 9.dp.toPx()), 9.dp.toPx(), p)
+                    drawCircle(Color(0xFFFFD9A0), 2.dp.toPx(), p)
+                }
+            }
+        }
     }
 }
 
-@Composable
-private fun Bubble(size: Dp, modifier: Modifier, alpha: Float = 1f) {
-    Box(
-        modifier
-            .size(size)
-            .graphicsLayer { this.alpha = alpha }
-            .clip(CircleShape)
-            .background(Brush.radialGradient(listOf(Color(0x8CFF8A4C), Color(0x14FF6A2B)))),
-    )
-}
+/** One lattice pylon in 100 x 200 units: legs, cage, two cross-arms with insulators, bracing. */
+private val PYLON = listOf(
+    floatArrayOf(10f, 200f, 38f, 72f, 44f, 24f, 50f, 4f, 56f, 24f, 62f, 72f, 90f, 200f),
+    floatArrayOf(44f, 24f, 56f, 24f),
+    floatArrayOf(40f, 60f, 60f, 60f),
+    floatArrayOf(38f, 72f, 62f, 72f),
+    floatArrayOf(15f, 60f, 85f, 60f),
+    floatArrayOf(5f, 95f, 95f, 95f),
+    floatArrayOf(15f, 60f, 15f, 68f),
+    floatArrayOf(85f, 60f, 85f, 68f),
+    floatArrayOf(5f, 95f, 5f, 103f),
+    floatArrayOf(95f, 95f, 95f, 103f),
+    floatArrayOf(38f, 72f, 60f, 95f),
+    floatArrayOf(62f, 72f, 40f, 95f),
+    floatArrayOf(35f, 95f, 62f, 128f),
+    floatArrayOf(65f, 95f, 38f, 128f),
+    floatArrayOf(31f, 128f, 66f, 165f),
+    floatArrayOf(69f, 128f, 34f, 165f),
+    floatArrayOf(24f, 165f, 76f, 200f),
+    floatArrayOf(76f, 165f, 24f, 200f),
+    floatArrayOf(40f, 60f, 44f, 24f),
+    floatArrayOf(60f, 60f, 56f, 24f),
+)
+
+/** Power lines in the 400 x 340 scene: start, bend, end (a quadratic curve). The first two carry sparks. */
+private val WIRES = listOf(
+    floatArrayOf(68.5f, 114.8f, 195f, 168f, 318.5f, 121.2f),
+    floatArrayOf(79.5f, 153.3f, 195f, 205f, 309.5f, 152.7f),
+    floatArrayOf(-8.5f, 114.8f, -60f, 135f, -110f, 120f),
+    floatArrayOf(-19.5f, 153.3f, -70f, 172f, -110f, 158f),
+    floatArrayOf(381.5f, 121.2f, 440f, 140f, 510f, 125f),
+    floatArrayOf(390.5f, 152.7f, 445f, 175f, 510f, 160f),
+)
 
 /** The app icon with a glow that breathes slowly. */
 @Composable
