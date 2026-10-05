@@ -56,7 +56,7 @@ PIN_MAX_TRIES = 5                        # wrong PINs before a strip refuses PIN
 # Protection for the strip port, which is open to the internet: anything can connect and claim to
 # be a strip. Limits are per internet address and generous, because many homes share one address
 # (carrier NAT). Home-network and loopback addresses are never limited or blocked.
-HELLO_TIMEOUT = 15                       # seconds a new connection gets to introduce itself as a strip
+HELLO_TIMEOUT = 30                       # seconds a new connection gets to introduce itself as a strip
 MAX_LINE = 4096                          # longest line accepted from a strip
 # no limit on how many strips a customer or a home has: these only stop floods of connections
 MAX_CONNECTIONS_PER_IP = 1000            # open strip connections from one address at the same time
@@ -133,16 +133,21 @@ def code_matches(code: str, macs: List[str]) -> bool:
 
 
 def parse_bootinfo(line: str) -> Optional[Dict[str, str]]:
-    """up:bootinfo:<model>;<mac>;<mac>;<firmware>;connect"""
-    prefix = "up:bootinfo:"
-    if not line.startswith(prefix):
+    """up:bootinfo:<model>;<mac>;<mac>;<firmware>;connect
+
+    Other firmware versions may differ a little (letter case, one MAC only, more or fewer fields,
+    something before it), so anything with "bootinfo:" and a MAC counts."""
+    at = line.lower().find("bootinfo:")
+    if at < 0:
         return None
-    parts = line[len(prefix):].split(";")
-    if len(parts) != 5 or parts[4] != "connect" or not is_mac(parts[1]):
+    parts = [p.strip() for p in line[at + len("bootinfo:"):].split(";")]
+    found = [i for i, p in enumerate(parts) if is_mac(p)]
+    if not found:
         return None
     printable = lambda x: re.sub(r"[^\x20-\x7e]", "", x)[:40]
-    return {"model": printable(parts[0]), "mac": parts[1].upper(), "fw": printable(parts[3]),
-            "mac2": parts[2].upper() if is_mac(parts[2]) else ""}
+    rest = [p for p in parts[found[0] + 1:] if p and not is_mac(p) and p.lower() != "connect"]
+    return {"model": printable(parts[0]) if found[0] > 0 else "", "mac": parts[found[0]].upper(),
+            "mac2": parts[found[1]].upper() if len(found) > 1 else "", "fw": printable(rest[0]) if rest else ""}
 
 
 def parse_getinfo(payload: str) -> Dict[int, Dict[str, Any]]:
@@ -804,6 +809,7 @@ class StripLink:
         self.missed = 0
         self.closed = False
         self.before_hello = 0
+        self.heard = ""                         # what came before the hello, to tell an odd strip from a scanner
 
     async def send(self, line: str) -> None:
         self.writer.write(line.encode("utf-8") + b"\r\n")
@@ -862,8 +868,10 @@ class StripLink:
         strip = self.strip
         if strip is None:
             self.before_hello += 1
-            if self.before_hello > 5:
-                self.hub.guard.strike(self.address, "talks but never says it is a strip")
+            if len(self.heard) < 300:
+                self.heard += line[:300 - len(self.heard)] + " | "
+            if self.before_hello > 20:
+                self.hub.guard.strike(self.address, "talks but never says it is a strip (sent %r)" % self.heard[:200])
                 self.close()
             return
         strip.last_seen = time.time()
@@ -900,22 +908,35 @@ class StripLink:
                 asyncio.ensure_future(self.read_state())
 
     async def run(self) -> None:
+        buffer = b""
         try:
             while not self.closed:
                 if self.strip is None:              # a real strip says hello right away
-                    raw = await asyncio.wait_for(self.reader.readline(), HELLO_TIMEOUT)
+                    chunk = await asyncio.wait_for(self.reader.read(4096), HELLO_TIMEOUT)
                 else:
-                    raw = await self.reader.readline()
-                if not raw:
+                    chunk = await self.reader.read(4096)
+                if not chunk:
                     break
-                line = clean_line(raw)
-                if line:
+                # lines end in CR LF, but take a lone CR, LF or NUL as well
+                *lines, buffer = re.split(rb"[\r\n\x00]", buffer + chunk)
+                if len(buffer) > MAX_LINE:
+                    raise ValueError("line too long")
+                for raw in lines:
+                    line = clean_line(raw)
+                    if line:
+                        self.handle(line)
+                # a hello that never gets its line ending still counts once it is complete
+                if self.strip is None and b"connect" in buffer.lower() and parse_bootinfo(clean_line(buffer)):
+                    line, buffer = clean_line(buffer), b""
                     self.handle(line)
         except (ConnectionError, asyncio.IncompleteReadError):
             pass
         except asyncio.TimeoutError:
-            self.hub.guard.strike(self.address, "connected but never said it is a strip")
-        except (ValueError, asyncio.LimitOverrunError) as err:      # absurdly long line
+            # not a strike: an odd strip from a real home must not get that home blocked. Say what it sent,
+            # so a strip that speaks a little differently can be recognised.
+            heard = (self.heard + clean_line(buffer))[:200]
+            self.hub.unknown_talker(self.address, heard)
+        except ValueError as err:                   # absurdly long line
             log("[strip] dropping %s: %s" % (self.address, err))
             self.hub.guard.strike(self.address, "line too long")
         finally:
@@ -968,6 +989,7 @@ class Guard:
         self.all_signups: List[float] = []                        # every account made, from anywhere
         self.account_fails: Dict[str, List[float]] = {}           # login -> wrong passwords, from any address
         self.refused = 0
+        self.refusal_logged: Dict[str, float] = {}                # ip -> when "turned away" was last logged
         self.lock = threading.Lock()                              # the web side runs in other threads
 
     @staticmethod
@@ -1009,6 +1031,11 @@ class Guard:
         now = time.time() if now is None else now
         if self.is_blocked(ip, now):
             self.refused += 1
+            with self.lock:
+                entry = self.blocked.get(ip)
+                if entry and now - self.refusal_logged.get(ip, 0) >= 600:
+                    self.refusal_logged[ip] = now
+                    log("[guard] turned away %s (blocked for %d more min: %s)" % (ip, (entry[0] - now) // 60 + 1, entry[1]))
             return False
         if is_local_address(ip):
             return True
@@ -1113,11 +1140,19 @@ class Hub:
         self.user_ips: Dict[str, Dict[str, float]] = {}     # member id -> internet addresses their app used lately
         self.ips_lock = threading.Lock()                    # written from the web threads
         self.guard = Guard()
+        self.talker_logged: Dict[str, float] = {}
         for mac, entry in store.waiting.items():        # strips waiting for approval stay listed after a restart
             if not store.is_approved(mac) and mac not in store.blocked_strips:
                 strip = self.strips[mac] = Strip(mac)
                 strip.mac2, strip.address = entry.get("mac2", ""), entry.get("address", "")
                 strip.first_seen, strip.last_seen = entry.get("first", 0), entry.get("last", 0)
+
+    def unknown_talker(self, ip: str, heard: str) -> None:
+        """A connection to the strip port that never said it is a strip (logged at most every 10 minutes)."""
+        now = time.time()
+        if now - self.talker_logged.get(ip, 0) >= 600:
+            self.talker_logged[ip] = now
+            log("[strip] %s connected but never said it is a strip; it sent: %s" % (ip, repr(heard) if heard else "nothing"))
 
     @staticmethod
     def label(strip: Strip) -> str:
@@ -3154,6 +3189,23 @@ async def selftest() -> None:
     assert await asyncio.wait_for(silent_r.read(), 5) == b""                  # dropped for saying nothing
     silent_w.close()
     HELLO_TIMEOUT = saved_timeout
+    assert not hub.guard.is_blocked("127.0.0.1")
+    # other firmware may greet a little differently: a lone CR, no line end at all, other case, one MAC
+    assert parse_bootinfo("UP:BOOTINFO:lgutap;88d0393a7b5d;connect")["mac"] == "88D0393A7B5D"
+    assert parse_bootinfo("x up:bootinfo:lgutap;88D0393A7B5D;88D0393A7B5E;0.1.54;connect")["mac2"] == "88D0393A7B5E"
+    assert parse_bootinfo("up:bootinfo:lgutap;nomac;connect") is None and parse_bootinfo("up:getinfo:all") is None
+    for mac, hello in (("C0FFEE0C0001", b"up:bootinfo:lgutap;C0FFEE0C0001;C0FFEE0C0001;1.0;connect\r"),
+                       ("C0FFEE0C0002", b"up:bootinfo:lgutap;C0FFEE0C0002;;1.0;connect")):
+        odd_r, odd_w = await asyncio.open_connection("127.0.0.1", srv.sockets[0].getsockname()[1])
+        odd_w.write(hello)
+        await odd_w.drain()
+        for _ in range(100):
+            if mac in hub.strips and hub.strips[mac].online:
+                break
+            await asyncio.sleep(0.05)
+        assert hub.strips[mac].online, mac
+        odd_w.close()
+        await hub.remove_strip(mac, block=False)
 
     def guess(token: str, ip: str = "156.200.1.77") -> int:
         req = urllib.request.Request(base + "/api/state", headers={"X-Token": token, "CF-Connecting-IP": ip})
