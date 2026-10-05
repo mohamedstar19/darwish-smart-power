@@ -456,10 +456,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         client()?.let { runCatching { it.expectStrip(SetupRules.apCode(apSsid)) } }
         // if the person missed Android's "connect?" prompt, ask once more by itself
         val joined = stripFinder.join(apSsid) ?: stripFinder.join(apSsid) ?: return SetupResult.JoinFailed
-        return try {
+        val result = try {
             setup.provision(serverIp, ssid, password, joined.network)
         } finally {
             joined.release()
+        }
+        if (result is SetupResult.Done) announceAgain(SetupRules.apCode(apSsid))
+        return result
+    }
+
+    /**
+     * Tells the server about the strip once more when the phone is back on its own network: the first
+     * notice may not have got through (no internet just then), and from the strip's home network the
+     * server can hand over a strip that already connected.
+     */
+    private fun announceAgain(code: String) = viewModelScope.launch {
+        repeat(8) {
+            delay(5_000)
+            val sent = client()?.let { c -> runCatching { c.expectStrip(code) }.isSuccess } ?: return@launch
+            if (sent) return@launch
         }
     }
 

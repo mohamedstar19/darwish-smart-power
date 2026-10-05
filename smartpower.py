@@ -369,7 +369,7 @@ class Store:
             if entry.get("until", 0) > now and code_matches(code, macs):
                 del self.expected[code]
                 self.save()
-                return None if entry.get("conflict") else str(entry.get("by", ""))
+                return None if entry.get("conflict") or entry.get("late") else str(entry.get("by", ""))
         return None
 
     def announce(self, code: str, by: str, ip: str, now: float) -> None:
@@ -1621,6 +1621,20 @@ class Hub:
         self.store.expect(code, by, now)
         self.store.announce(code, by, ip, now)
         log("[strip] app is setting up TONLY_TAP_%s (%s, from %s)" % (code, "account " + by if by else "the owner", ip or "?"))
+        # the strip may already be here, waiting (the app could not reach us before the setup, only after).
+        # It is handed over at once only from the strip's own home network, so a neighbour who saw its
+        # Wi-Fi name cannot take it; anyone else's claim waits for the owner.
+        waiting = next((x for x in self.strips.values()
+                        if not self.store.is_approved(x.mac) and code_matches(code, [x.mac, x.mac2])), None)
+        entry = self.store.expected.get(code, {})
+        if waiting is not None and not entry.get("conflict") and (not by or (ip and ip == waiting.address)):
+            self.store.expected.pop(code, None)
+            self.store.approve(waiting.mac, by)
+            log("[strip] %s approved (set up from the app, announced after it connected)" % self.label(waiting))
+            return 200, {"ok": True, "approved": True}
+        if waiting is not None and code in self.store.expected:
+            self.store.expected[code]["late"] = True    # nor when it reconnects later: the owner decides
+            self.store.save()
         return 200, {"ok": True}
 
     def owner_guesses(self, strip: Strip, now: float) -> List[Dict[str, Any]]:
@@ -3242,6 +3256,17 @@ async def selftest() -> None:
     status, _ = await loop.run_in_executor(None, http, "/api/strips/approve", {"strip": "C0FFEE5A5A5A", "customer": cust_id})
     assert status == 200 and "C0FFEE5A5A5A" not in hub.store.waiting
     assert "C0FFEE5A5A5A" in [x["id"] for x in (await loop.run_in_executor(None, http, "/api/state", None, ali))[1]["strips"]]
+    # the app could only announce the strip after it had connected: from the strip's network it is handed over,
+    # from anywhere else it keeps waiting for the owner
+    assert hub.attach(Remote("102.60.6.6"), {"mac": "C0FFEE96BB29", "mac2": "", "model": "lgutap", "fw": "x"}) is not None
+    assert (await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "E96BB29"}, ali, "102.70.7.7"))[0] == 200
+    assert not hub.store.is_approved("C0FFEE96BB29")
+    assert hub.attach(Remote("102.60.6.6"), {"mac": "C0FFEE96BB29", "mac2": "", "model": "lgutap", "fw": "x"}) is not None
+    assert not hub.store.is_approved("C0FFEE96BB29")                     # a reconnect does not hand it over either
+    status, res2 = await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "E96BB29"}, ali, "102.60.6.6")
+    assert status == 200 and res2.get("approved") and hub.store.is_approved("C0FFEE96BB29")
+    assert "C0FFEE96BB29" in [x["id"] for x in (await loop.run_in_executor(None, http, "/api/state", None, ali))[1]["strips"]]
+    await hub.remove_strip("C0FFEE96BB29", block=False)
     # two accounts claiming one setup code (a neighbour who saw its Wi-Fi name): it waits for the owner
     status, nres = await loop.run_in_executor(None, post, "/api/signup", {"name": "N", "login": "n@example.com", "password": "secret1"}, None, "102.50.1.1")
     assert status == 200
