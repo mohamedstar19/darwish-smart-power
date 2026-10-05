@@ -148,6 +148,8 @@ const L = {
        day: "اليوم", count: "التحميلات",
        newTitle: "مشتركات جديدة مستنية موافقتك", from: "من", approve: "موافقة", block: "حظر",
        blockAsk: "تحظر المشترك ده؟ مش هيقدر يتصل بالسيرفر تاني.", noneWaiting: "مفيش مشتركات مستنية.",
+       assignAsk: "تدّي المشترك ده لـ {to}؟", moveAsk: "تنقل المشترك ده من {from} لـ {to}؟ {from} مش هيشوفه تاني.",
+       unassignAsk: "تشيل المشترك ده من حساب {from}؟ مش هيشوفه تاني.",
        actions: "إجراءات", remove: "🗑 حذف", removeAsk: "تحذف المشترك ده؟ هيتشال من حساب العميل وتتمسح أسماؤه ومواعيده. لو العميل جهّزه تاني من التطبيق هيرجعله لوحده.",
        arrived: "وصل", probably: "غالباً تبع", you: "إنت (صاحب السيرفر)", giveTo: "وافق وادّيه لـ", codeWas: "الكود",
        whyCode: "الكود اللي جهّزه بيه مطابق", whyApp: "جهّز مشترك من التطبيق قبلها بـ {m} دقيقة",
@@ -178,6 +180,8 @@ const L = {
        day: "Day", count: "Downloads",
        newTitle: "New strips waiting for your approval", from: "from", approve: "Approve", block: "Block",
        blockAsk: "Block this strip? It will not be able to connect again.", noneWaiting: "No strips waiting.",
+       assignAsk: "Give this strip to {to}?", moveAsk: "Move this strip from {from} to {to}? {from} will no longer see it.",
+       unassignAsk: "Take this strip from {from}'s account? They will no longer see it.",
        actions: "Actions", remove: "🗑 Remove", removeAsk: "Remove this strip? It leaves the customer's account and its names and schedules are deleted. If the customer sets it up again in the app, it comes back to them.",
        arrived: "first connected", probably: "Probably", you: "You (the owner)", giveTo: "Approve for", codeWas: "code",
        whyCode: "its setup code matches", whyApp: "set up a strip in the app {m} min before",
@@ -376,6 +380,11 @@ function render() {
 document.addEventListener("change", async ev => {
   const sel = ev.target.closest("[data-assign]");
   if (!sel) return;
+  // an accidental change (a scroll wheel over the list, a stray tap) must not take a customer's strip away
+  const name = id => { const c = data.customers.find(c => c.id === id); return c ? c.name : ""; };
+  const was = (data.strips.find(x => x.id === sel.dataset.assign) || {}).customer || "";
+  const ask = !sel.value ? t("unassignAsk") : was ? t("moveAsk") : t("assignAsk");
+  if (!confirm(ask.split("{from}").join(name(was)).split("{to}").join(name(sel.value)))) { sel.value = was; return; }
   try { await api("/api/strips/assign", {strip: sel.dataset.assign, customer: sel.value}); toast(t("done")); }
   catch (e) { toast(t("fail") + e.message); }
   refresh();
