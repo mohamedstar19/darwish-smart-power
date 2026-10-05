@@ -116,7 +116,8 @@ fun StripSheet(vm: AppViewModel, strip: Strip, rooms: List<String>, onClose: () 
     var timer by remember { mutableStateOf(false) }
     var lock by remember { mutableStateOf(false) }
     var removing by remember { mutableStateOf(false) }
-    val isOwner = vm.state.value.me.isOwner
+    val me = vm.state.value.me
+    val isOwner = me.isOwner
     var room by rememberSaveable { mutableStateOf(strip.room.orEmpty()) }
     ModalBottomSheet(onDismissRequest = onClose, containerColor = Glass.Deep) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
@@ -149,8 +150,11 @@ fun StripSheet(vm: AppViewModel, strip: Strip, rooms: List<String>, onClose: () 
                 )
                 TextButton(onClick = { vm.setRoom(strip.id, room) }) { Text(stringResource(R.string.save)) }
             }
-            if (isOwner) {
-                Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(10.dp))
+            if (me.canControl) {
+                SheetRow("📶", stringResource(R.string.reconnect_wifi)) { onClose(); vm.startReconnect(strip.id) }
+            }
+            if (isOwner || me.isCustomer) {
                 SheetRow("🗑", stringResource(R.string.remove_strip)) { removing = true }
             }
         }
@@ -159,7 +163,9 @@ fun StripSheet(vm: AppViewModel, strip: Strip, rooms: List<String>, onClose: () 
         AlertDialog(
             onDismissRequest = { removing = false },
             title = { Text(stringResource(R.string.remove_strip)) },
-            text = { Text(stringResource(R.string.remove_strip_body, stripName(strip))) },
+            text = {
+                Text(stringResource(if (isOwner) R.string.remove_strip_body else R.string.remove_strip_body_customer, stripName(strip)))
+            },
             confirmButton = {
                 TextButton(onClick = { removing = false; onClose(); vm.removeStrip(strip.id, block = false) }) {
                     Text(stringResource(R.string.remove))
@@ -167,7 +173,7 @@ fun StripSheet(vm: AppViewModel, strip: Strip, rooms: List<String>, onClose: () 
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { removing = false; onClose(); vm.removeStrip(strip.id, block = true) }) {
+                    if (isOwner) TextButton(onClick = { removing = false; onClose(); vm.removeStrip(strip.id, block = true) }) {
                         Text(stringResource(R.string.remove_and_block), color = Glass.Red)
                     }
                     TextButton(onClick = { removing = false }) { Text(stringResource(R.string.cancel)) }

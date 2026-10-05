@@ -82,6 +82,7 @@ fun DarwishApp(locked: Boolean, onUnlocked: () -> Unit, vm: AppViewModel = viewM
     val lifecycleOwner = LocalLifecycleOwner.current
     val pin by vm.pinRequest.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
+    val reconnect by vm.reconnect.collectAsStateWithLifecycle()
     // nothing but the sign-in shows until this phone is signed in: no tabs, no settings, no strip setup
     val signedIn = state.token.isNotEmpty() && state.problem != Problem.BAD_TOKEN && state.problem != Problem.NOT_CONFIGURED
     LaunchedEffect(signedIn) {
@@ -95,6 +96,9 @@ fun DarwishApp(locked: Boolean, onUnlocked: () -> Unit, vm: AppViewModel = viewM
 
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it.format(context)) } }
     LaunchedEffect(lifecycleOwner) { lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { vm.pollForever() } }
+
+    LaunchedEffect(reconnect) { if (reconnect != null && signedIn) overlay = Overlay.SETUP }
+    LaunchedEffect(overlay) { if (overlay != Overlay.SETUP) vm.endReconnect() }
 
     BackHandler(enabled = overlay != Overlay.NONE || tab != Tab.HOME) {
         if (overlay != Overlay.NONE) overlay = Overlay.NONE else tab = Tab.HOME

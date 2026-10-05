@@ -315,6 +315,10 @@
     <string name="strip_removed">Strip %1$s removed.</string>
     <string name="strip_blocked">Strip %1$s removed and blocked.</string>
     <string name="remove_strip">Remove strip</string>
+    <string name="remove_strip_body_customer">Remove %1$s from your account? Its names and schedules are deleted. To bring it back, use \"Set up a strip\" again and it returns to your account.</string>
+    <string name="reconnect_wifi">Connect to Wi-Fi again</string>
+    <string name="reconnect_hint">After a new router or Wi-Fi password, or if the strip stays offline: hold the strip\'s button for about 10 seconds until the light blinks fast, then tap Ready. The strip stays in your account with its names and schedules.</string>
+    <string name="reconnect_not_found">This strip is not in setup mode. Hold its button for about 10 seconds until the light blinks fast, then search again.</string>
     <string name="remove_strip_body">Remove %1$s from your server? Its names, schedules and scenes are deleted. If it connects again it waits for your approval.</string>
     <string name="remove">Remove</string>
     <string name="remove_and_block">Remove and block</string>

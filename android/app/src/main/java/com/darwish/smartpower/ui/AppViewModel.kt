@@ -447,6 +447,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val stripFinder = StripFinder(app)
 
+    /** The strip being put on Wi-Fi again (its id); null when a new strip is being set up. */
+    private val _reconnect = MutableStateFlow<String?>(null)
+    val reconnect: StateFlow<String?> = _reconnect.asStateFlow()
+
+    fun startReconnect(stripId: String) { _reconnect.value = stripId }
+
+    fun endReconnect() { _reconnect.value = null }
+
     suspend fun scanForStrips(): ScanOutcome = stripFinder.scan()
 
     /** Joins the strip's own Wi-Fi by itself, sends the setup, then gives the phone back its Wi-Fi. */

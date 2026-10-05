@@ -301,6 +301,10 @@
     <string name="strip_removed">اتشال مشترك %1$s.</string>
     <string name="strip_blocked">اتشال مشترك %1$s واتحظر.</string>
     <string name="remove_strip">شيل المشترك</string>
+    <string name="remove_strip_body_customer">تشيل %1$s من حسابك؟ هتتمسح أسماؤه ومواعيده. لو حبيت ترجّعه، اعمله \"إعداد مشترك\" من جديد وهيرجع لحسابك.</string>
+    <string name="reconnect_wifi">اربطه بالواي فاي من جديد</string>
+    <string name="reconnect_hint">لو غيّرت الراوتر أو باسورد الواي فاي، أو المشترك فاضل أوفلاين: دوس مطوّل على زرار المشترك حوالي 10 ثواني لحد ما النور يرمش بسرعة، وبعدين دوس جاهز. المشترك هيفضل في حسابك بنفس أسمائه ومواعيده.</string>
+    <string name="reconnect_not_found">مالقيناش المشترك ده في وضع الإعداد. دوس مطوّل على زرار المشترك حوالي 10 ثواني لحد ما النور يرمش بسرعة، وبعدين دوّر تاني.</string>
     <string name="remove_strip_body">تشيل %1$s من السيرفر؟ هتتمسح أسماؤه ومواعيده ومشاهده، ولو اتصل تاني هيستنى موافقتك.</string>
     <string name="remove">شيل</string>
     <string name="remove_and_block">شيل واحظر</string>

@@ -80,6 +80,10 @@ private enum class Phase { READY, SEARCHING, PICK, CONNECTING, DONE }
 fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val state by vm.state.collectAsStateWithLifecycle()
+    // putting a strip the account already has on Wi-Fi again: its setup Wi-Fi ends with the end of its MAC
+    val target by vm.reconnect.collectAsStateWithLifecycle()
+    val targetStrip = state.strips.firstOrNull { it.id == target }
+    val targetCode = target?.takeLast(7)
     var serverIp by rememberSaveable { mutableStateOf(vm.suggestedServerIp()) }
     var serverIpEdited by rememberSaveable { mutableStateOf(false) }
     // the server reports its address once connected; follow it until the user types their own
@@ -100,7 +104,10 @@ fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Uni
         phase = Phase.SEARCHING
         result = null
         scope.launch {
-            val found = vm.scanForStrips()
+            val all = vm.scanForStrips()
+            val found = if (targetCode != null && all is ScanOutcome.Found) {
+                all.copy(strips = all.strips.filter { SetupRules.apCode(it.ssid).equals(targetCode, ignoreCase = true) })
+            } else all
             scan = found
             if (found is ScanOutcome.Found && found.strips.none { it.ssid == chosen }) {
                 chosen = found.strips.firstOrNull()?.ssid
@@ -137,7 +144,7 @@ fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Uni
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                title = { Text(stringResource(R.string.setup_title)) },
+                title = { Text(stringResource(if (target != null) R.string.reconnect_wifi else R.string.setup_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
@@ -155,6 +162,13 @@ fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Uni
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (target != null && phase != Phase.DONE) {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("📶 " + (targetStrip?.let { stripName(it) } ?: target.orEmpty()), style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(6.dp))
+                    Text(stringResource(R.string.reconnect_hint), color = Glass.TextSoft, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
             when (phase) {
                 Phase.READY -> ReadyCard(onReady = ::ready)
                 Phase.SEARCHING -> BusyCard("📶", stringResource(R.string.setup_searching), emptyList())
@@ -179,7 +193,7 @@ fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Uni
                         Button(onClick = ::search) { Text(stringResource(R.string.setup_search_again)) }
                     }
                     is ScanOutcome.Found -> if (found.strips.isEmpty()) {
-                        NoticeCard(stringResource(R.string.setup_found_none)) {
+                        NoticeCard(stringResource(if (target != null) R.string.reconnect_not_found else R.string.setup_found_none)) {
                             Button(onClick = ::search) { Text(stringResource(R.string.setup_search_again)) }
                         }
                     } else {

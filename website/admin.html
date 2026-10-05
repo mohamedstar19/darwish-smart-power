@@ -72,6 +72,8 @@ tr:last-child td{border-bottom:0}
 .row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
 .row .grow{flex:1;min-width:0}
+.acts{display:inline-flex;gap:6px;flex-wrap:wrap}
+.acts .btn{padding:6px 10px;font-size:13px}
 .wstrip{border-top:1px solid var(--line);padding:6px 0}
 .wstrip:first-of-type{border-top:0}
 .wstrip .row{border-top:0}
@@ -146,6 +148,7 @@ const L = {
        day: "اليوم", count: "التحميلات",
        newTitle: "مشتركات جديدة مستنية موافقتك", from: "من", approve: "موافقة", block: "حظر",
        blockAsk: "تحظر المشترك ده؟ مش هيقدر يتصل بالسيرفر تاني.", noneWaiting: "مفيش مشتركات مستنية.",
+       actions: "إجراءات", remove: "🗑 حذف", removeAsk: "تحذف المشترك ده؟ هيتشال من حساب العميل وتتمسح أسماؤه ومواعيده. لو العميل جهّزه تاني من التطبيق هيرجعله لوحده.",
        arrived: "وصل", probably: "غالباً تبع", you: "إنت (صاحب السيرفر)", giveTo: "وافق وادّيه لـ", codeWas: "الكود",
        whyCode: "الكود اللي جهّزه بيه مطابق", whyApp: "جهّز مشترك من التطبيق قبلها بـ {m} دقيقة",
        whyNetwork: "بيستخدم التطبيق من نفس شبكة المشترك",
@@ -175,6 +178,7 @@ const L = {
        day: "Day", count: "Downloads",
        newTitle: "New strips waiting for your approval", from: "from", approve: "Approve", block: "Block",
        blockAsk: "Block this strip? It will not be able to connect again.", noneWaiting: "No strips waiting.",
+       actions: "Actions", remove: "🗑 Remove", removeAsk: "Remove this strip? It leaves the customer's account and its names and schedules are deleted. If the customer sets it up again in the app, it comes back to them.",
        arrived: "first connected", probably: "Probably", you: "You (the owner)", giveTo: "Approve for", codeWas: "code",
        whyCode: "its setup code matches", whyApp: "set up a strip in the app {m} min before",
        whyNetwork: "uses the app from the strip's network",
@@ -305,14 +309,16 @@ function render() {
 
   html += `<section class="card glass"><h2>${t("stripTitle")} (${fmt(d.strips.length)})</h2><p class="note">${t("stripNote")}</p>` +
     (d.strips.length ? `<div class="scroll"><table class="rtable"><tr><th>${t("strip")}</th><th>${t("owner")}</th><th>${t("state")}</th>
-      <th>${t("lastSeen")}</th><th>${t("address")}</th></tr>` +
+      <th>${t("lastSeen")}</th><th>${t("address")}</th><th>${t("actions")}</th></tr>` +
       d.strips.map(x => `<tr><td class="head"><b>${esc(x.name || t("strip") + " " + x.id.slice(-6))}</b><div class="muted" style="font-size:11px"><bdi>${esc(x.id)}</bdi></div></td>
         <td data-l="${t("owner")}"><select data-assign="${esc(x.id)}" aria-label="${t("owner")}"><option value="">${t("nobody")}</option>
           ${d.customers.map(c => `<option value="${esc(c.id)}"${c.id === x.customer ? " selected" : ""}>${esc(c.name)} · ${esc(c.login)}</option>`).join("")}
           </select></td>
         <td data-l="${t("state")}"><span class="status${x.online ? " on" : ""}"><i></i>${x.online ? t("online") : t("offline")}</span></td>
         <td class="muted" data-l="${t("lastSeen")}">${x.online ? t("now") : ago(x.last_seen)}</td>
-        <td class="muted" data-l="${t("address")}"><bdi>${esc(x.address || t("nobody"))}</bdi></td></tr>`).join("") + `</table></div>`
+        <td class="muted" data-l="${t("address")}"><bdi>${esc(x.address || t("nobody"))}</bdi></td>
+        <td data-l="${t("actions")}"><span class="acts"><button class="btn" data-remove="${esc(x.id)}">${t("remove")}</button>
+          <button class="btn danger" data-block="${esc(x.id)}">${t("block")}</button></span></td></tr>`).join("") + `</table></div>`
       : `<div class="empty">${t("noStrips")}</div>`) + `</section>`;
 
   html += `<section class="card glass"><h2>📦 ${t("resTitle")}</h2><p class="note">${t("resNote")}</p>` +
@@ -388,6 +394,12 @@ document.addEventListener("click", async ev => {
   const un = ev.target.closest("[data-unreserve]");
   if (un) {
     try { await api("/api/strips/unreserve", {code: un.dataset.unreserve}); toast(t("done")); } catch (e) { toast(t("fail") + e.message); }
+    refresh(); return;
+  }
+  const rm = ev.target.closest("[data-remove]");
+  if (rm) {
+    if (!confirm(t("removeAsk"))) return;
+    try { await api("/api/strips/remove", {strip: rm.dataset.remove, block: false}); toast(t("done")); } catch (e) { toast(t("fail") + e.message); }
     refresh(); return;
   }
   const ap = ev.target.closest("[data-approve]"), bl = ev.target.closest("[data-block]");
