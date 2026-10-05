@@ -108,6 +108,22 @@ STATIC = {
 ICON_TYPES = {".png": "image/png", ".svg": "image/svg+xml"}
 
 
+def admin_manifest(owner_path: str) -> Dict[str, Any]:
+    """Web app manifest for the owner page: installed apart from the customers' panel, with a shield badge."""
+    return {
+        "name": "لوحة الإدارة · Darwish Power", "short_name": "إدارة Darwish",
+        "description": "لوحة إدارة سيرفر Darwish Smart Power", "id": owner_path, "start_url": owner_path,
+        "scope": owner_path, "display": "standalone", "background_color": "#0d0907", "theme_color": "#1e130d",
+        "lang": "ar", "dir": "rtl",
+        "icons": [
+            {"src": "/icons/icon-admin-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/icons/icon-admin-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/icons/maskable-admin-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            {"src": "/icons/icon-admin.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
+        ],
+    }
+
+
 def find_apk() -> Optional[Path]:
     return next((p for p in APK_CANDIDATES if p.is_file()), None)
 
@@ -2244,6 +2260,11 @@ class WebHandler(BaseHTTPRequestHandler):
             target = WEBSITE / name
         elif path == self.server.hub.store.owner_path():
             target, ctype = WEBSITE / "admin.html", "text/html; charset=utf-8"
+        elif path == self.server.hub.store.owner_path() + ".webmanifest":
+            # the owner page installs as its own app (with its own icon), opening straight on the secret address
+            self.reply(200, json.dumps(admin_manifest(path[:-len(".webmanifest")]), ensure_ascii=False).encode("utf-8"),
+                       "application/manifest+json", {"Cache-Control": "no-cache"})
+            return True
         elif re.fullmatch(r"/icons/[a-z0-9-]+\.(png|svg)", path):
             target = WEBSITE / path.lstrip("/")
             ctype = ICON_TYPES[target.suffix]
@@ -2255,7 +2276,10 @@ class WebHandler(BaseHTTPRequestHandler):
         extra = {"Cache-Control": "no-cache"}
         if path == "/sw.js":
             extra["Service-Worker-Allowed"] = "/"
-        self.reply(200, target.read_bytes(), ctype, extra)
+        body = target.read_bytes()
+        if target.name == "admin.html":                 # its app file lives next to the secret address
+            body = body.replace(b"__OWNER_PATH__", path.encode("utf-8"))
+        self.reply(200, body, ctype, extra)
         return True
 
     # ---- routes
@@ -3149,6 +3173,11 @@ async def selftest() -> None:
     owner_page = hub.store.owner_path()
     assert owner_page.startswith("/owner-") and "<title>Admin" in await loop.run_in_executor(None, page, owner_page)
     assert hub.store.owner_path() == owner_page                               # stays the same
+    admin_html = await loop.run_in_executor(None, page, owner_page)
+    assert ('href="%s.webmanifest"' % owner_page) in admin_html and "__OWNER_PATH__" not in admin_html
+    app = json.loads(await loop.run_in_executor(None, page, owner_page + ".webmanifest"))   # installs as its own app
+    assert app["start_url"] == app["scope"] == owner_page and any(i["purpose"] == "maskable" for i in app["icons"])
+    assert all((WEBSITE / i["src"].lstrip("/")).is_file() for i in app["icons"])
     try:
         await loop.run_in_executor(None, page, "/admin")
         raise AssertionError("/admin must not exist")

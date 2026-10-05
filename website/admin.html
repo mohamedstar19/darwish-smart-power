@@ -6,8 +6,14 @@
 <title>Admin · Darwish Smart Power</title>
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#1e130d">
-<link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
-<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="إدارة Darwish">
+<link rel="manifest" href="__OWNER_PATH__.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/icons/icon-admin.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-admin-32.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon-admin.png">
 <style>
 :root{--night:#0d0907;--deep:#1e130d;--fill:rgba(255,255,255,.07);--fill2:rgba(255,255,255,.12);--stroke:rgba(255,255,255,.14);
   --line:rgba(255,255,255,.08);--text:#fff4ec;--soft:#c9b8ac;--faint:#8a7a6f;--brand:#ff8a4c;--bar:#e8622a;
@@ -533,6 +539,7 @@ function start() {
   timer = setInterval(() => { if (!document.hidden && !(document.activeElement && ["SELECT", "INPUT"].includes(document.activeElement.tagName))) refresh(); }, 15000);
 }
 token ? start() : renderLogin();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 </script>
 </body>
 </html>
