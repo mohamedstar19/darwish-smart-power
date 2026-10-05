@@ -57,6 +57,7 @@ PIN_MAX_TRIES = 5                        # wrong PINs before a strip refuses PIN
 # be a strip. Limits are per internet address and generous, because many homes share one address
 # (carrier NAT). Home-network and loopback addresses are never limited or blocked.
 HELLO_TIMEOUT = 30                       # seconds a new connection gets to introduce itself as a strip
+PROBE_AFTER = 5                          # seconds of silence before the server speaks first
 MAX_LINE = 4096                          # longest line accepted from a strip
 # no limit on how many strips a customer or a home has: these only stop floods of connections
 MAX_CONNECTIONS_PER_IP = 1000            # open strip connections from one address at the same time
@@ -827,6 +828,7 @@ class StripLink:
         self.closed = False
         self.before_hello = 0
         self.heard = ""                         # what came before the hello, to tell an odd strip from a scanner
+        self.probed = False                     # asked "who are you?" after a silent start
 
     async def send(self, line: str) -> None:
         self.writer.write(line.encode("utf-8") + b"\r\n")
@@ -924,12 +926,26 @@ class StripLink:
                         o.on = on
                 asyncio.ensure_future(self.read_state())
 
+    async def read_hello(self) -> bytes:
+        """Bytes before the hello. A connection still silent after a few seconds gets asked who it is, in
+        case some firmware waits for the server to speak first; what it answers is logged if it is no hello."""
+        if self.probed:
+            return await asyncio.wait_for(self.reader.read(4096), HELLO_TIMEOUT)
+        first = min(PROBE_AFTER, HELLO_TIMEOUT)
+        try:
+            return await asyncio.wait_for(self.reader.read(4096), first)
+        except asyncio.TimeoutError:
+            self.probed = True
+            for line in ("up:bootinfo", "up:query:wifirssi", "up:getinfo:all"):
+                await self.send(line)
+            return await asyncio.wait_for(self.reader.read(4096), max(HELLO_TIMEOUT - first, 0.1))
+
     async def run(self) -> None:
         buffer = b""
         try:
             while not self.closed:
                 if self.strip is None:              # a real strip says hello right away
-                    chunk = await asyncio.wait_for(self.reader.read(4096), HELLO_TIMEOUT)
+                    chunk = await self.read_hello()
                 else:
                     chunk = await self.reader.read(4096)
                 if not chunk:
@@ -1169,7 +1185,8 @@ class Hub:
         now = time.time()
         if now - self.talker_logged.get(ip, 0) >= 600:
             self.talker_logged[ip] = now
-            log("[strip] %s connected but never said it is a strip; it sent: %s" % (ip, repr(heard) if heard else "nothing"))
+            log("[strip] %s connected but never said it is a strip, even when asked; it sent: %s"
+                % (ip, repr(heard) if heard else "nothing"))
 
     @staticmethod
     def label(strip: Strip) -> str:
@@ -3233,10 +3250,25 @@ async def selftest() -> None:
     global HELLO_TIMEOUT
     saved_timeout, HELLO_TIMEOUT = HELLO_TIMEOUT, 0.5
     silent_r, silent_w = await asyncio.open_connection("127.0.0.1", srv.sockets[0].getsockname()[1])
-    assert await asyncio.wait_for(silent_r.read(), 5) == b""                  # dropped for saying nothing
+    assert (await asyncio.wait_for(silent_r.read(), 5)).startswith(b"up:bootinfo")  # asked, then dropped for saying nothing
     silent_w.close()
     HELLO_TIMEOUT = saved_timeout
     assert not hub.guard.is_blocked("127.0.0.1")
+    # firmware that waits for the server to speak first is asked, then says hello
+    saved_probe = PROBE_AFTER
+    globals()["PROBE_AFTER"] = 0.2
+    shy_r, shy_w = await asyncio.open_connection("127.0.0.1", srv.sockets[0].getsockname()[1])
+    assert (await asyncio.wait_for(shy_r.readline(), 5)).strip() == b"up:bootinfo"
+    shy_w.write(b"up:bootinfo:lgutap;C0FFEE0C0003;C0FFEE0C0003;1.0;connect\r\n")
+    await shy_w.drain()
+    for _ in range(100):
+        if "C0FFEE0C0003" in hub.strips and hub.strips["C0FFEE0C0003"].online:
+            break
+        await asyncio.sleep(0.05)
+    assert hub.strips["C0FFEE0C0003"].online
+    shy_w.close()
+    await hub.remove_strip("C0FFEE0C0003", block=False)
+    globals()["PROBE_AFTER"] = saved_probe
     # other firmware may greet a little differently: a lone CR, no line end at all, other case, one MAC
     assert parse_bootinfo("UP:BOOTINFO:lgutap;88d0393a7b5d;connect")["mac"] == "88D0393A7B5D"
     assert parse_bootinfo("x up:bootinfo:lgutap;88D0393A7B5D;88D0393A7B5E;0.1.54;connect")["mac2"] == "88D0393A7B5E"
