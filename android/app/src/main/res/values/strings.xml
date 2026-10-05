@@ -360,7 +360,8 @@
     <string name="account_mismatch">This does not match the password above.</string>
     <string name="account_forgot">Forgot your password?</string>
     <string name="account_forgot_body">Send us the phone number or e-mail you signed up with and we will set a new password for you.</string>
-    <string name="account_contact">Contact us</string>
+    <string name="account_contact">Contact us on WhatsApp</string>
+    <string name="account_forgot_message">Hello, I forgot my Darwish Power password. The phone or e-mail I signed up with: %1$s</string>
     <string name="password_short">Too short: at least 8 characters</string>
     <string name="password_weak">Weak</string>
     <string name="password_ok">Good</string>

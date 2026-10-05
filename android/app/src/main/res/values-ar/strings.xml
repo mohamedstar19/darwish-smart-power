@@ -346,7 +346,8 @@
     <string name="account_mismatch">الباسورد مش زي اللي فوق.</string>
     <string name="account_forgot">نسيت الباسورد؟</string>
     <string name="account_forgot_body">ابعتلنا رقم الموبايل أو الإيميل اللي سجّلت بيه، وهنعملك باسورد جديد تدخل بيه على طول.</string>
-    <string name="account_contact">كلّمنا</string>
+    <string name="account_contact">كلّمنا على واتساب</string>
+    <string name="account_forgot_message">أهلاً، نسيت الباسورد بتاع Darwish Power. الرقم أو الإيميل اللي سجّلت بيه: %1$s</string>
     <string name="password_short">لسه قصير: 8 حروف على الأقل</string>
     <string name="password_weak">ضعيف</string>
     <string name="password_ok">كويس</string>

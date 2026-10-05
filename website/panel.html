@@ -195,7 +195,7 @@ const L = {
        wNewT: "أهلاً بيك ⚡", wNewS: "اعمل حسابك وابدأ تتحكم في مشتركاتك", wInT: "أهلاً بيك تاني 👋", wInS: "سجّل دخولك عشان تتحكم في مشتركاتك",
        wSrvT: "كود الدعوة", wSrvS: "اكتب الكود اللي وصلك من صاحب السيرفر", tagline: "تحكّم في مشتركاتك من أي مكان وفي أي وقت",
        confirm: "أكّد الباسورد", mismatch: "الباسورد مش زي اللي فوق.", forgot: "نسيت الباسورد؟",
-       forgotBody: "ابعتلنا رقم الموبايل أو الإيميل اللي سجّلت بيه، وهنعملك باسورد جديد تدخل بيه على طول.", contact: "كلّمنا",
+       forgotBody: "ابعتلنا رقم الموبايل أو الإيميل اللي سجّلت بيه، وهنعملك باسورد جديد تدخل بيه على طول.", contact: "كلّمنا على واتساب", forgotMsg: "أهلاً، نسيت الباسورد بتاع Darwish Power. الرقم أو الإيميل اللي سجّلت بيه: ",
        pwShort: "لسه قصير: 8 حروف على الأقل", pwWeak: "ضعيف", pwOk: "كويس", pwStrong: "قوي 💪", show: "إظهار الباسورد",
        create: "اعمل الحساب", signIn: "دخول", e409: "فيه حساب بالرقم ده. ادخل بيه.", e401: "الرقم أو الباسورد غلط.",
        e403: "التسجيل مقفول دلوقتي.", e429: "محاولات كتير، جرّب بعد شوية.", eName: "اكتب اسمك.", eLogin: "اكتب رقم موبايل أو إيميل.",
@@ -216,7 +216,7 @@ const L = {
        wNewT: "Welcome ⚡", wNewS: "Create your account and start controlling your strips", wInT: "Welcome back 👋", wInS: "Sign in to control your strips",
        wSrvT: "Invite code", wSrvS: "Enter the code the server owner sent you", tagline: "Control your strips from anywhere, any time",
        confirm: "Confirm password", mismatch: "This does not match the password above.", forgot: "Forgot your password?",
-       forgotBody: "Send us the phone number or e-mail you signed up with and we will set a new password for you.", contact: "Contact us",
+       forgotBody: "Send us the phone number or e-mail you signed up with and we will set a new password for you.", contact: "Contact us on WhatsApp", forgotMsg: "Hello, I forgot my Darwish Power password. The phone or e-mail I signed up with: ",
        pwShort: "Too short: at least 8 characters", pwWeak: "Weak", pwOk: "Good", pwStrong: "Strong 💪", show: "Show password",
        create: "Create account", signIn: "Sign in", e409: "An account with this number exists. Sign in.", e401: "Wrong number or password.",
        e403: "New accounts are closed.", e429: "Too many attempts, try later.", eName: "Enter your name.", eLogin: "Enter a mobile number or e-mail.",
@@ -269,7 +269,7 @@ function renderLogin(msg) {
       <div class="err" id="err" role="alert">${esc(msg || "")}</div>
       <button class="go" type="submit" id="go"></button>
       <button type="button" class="linkish forgot only-in" id="forgot">${t("forgot")}</button>
-      <div class="forgotbox" id="forgotbox">${t("forgotBody")} <a href="https://darwish-tech.com" target="_blank" rel="noopener">${t("contact")}</a></div>
+      <div class="forgotbox" id="forgotbox">${t("forgotBody")} <a id="wa" href="https://wa.me/201200414873" target="_blank" rel="noopener">${t("contact")}</a></div>
       <hr><button type="button" class="linkish" id="server"></button>
     </form>
     <p class="tagline">${t("tagline")}</p></div>`;
@@ -309,6 +309,8 @@ function renderLogin(msg) {
   document.querySelectorAll(".seg [data-mode]").forEach(b => b.onclick = () => setMode(b.dataset.mode));
   $("server").onclick = () => setMode(loginMode === "server" ? "in" : "server");
   $("forgot").onclick = () => $("forgotbox").classList.toggle("open");
+  // WhatsApp support, with the message and the login they typed already written
+  $("wa").onclick = () => { $("wa").href = "https://wa.me/201200414873?text=" + encodeURIComponent(t("forgotMsg") + $("id").value.trim()); };
   $("eye").onclick = () => { const show = $("pw").type === "password"; ["pw", "pw2"].forEach(i => $(i).type = show ? "text" : "password"); $("eye").textContent = show ? "🙈" : "👁"; };
   card.oninput = () => { $("err").textContent = ""; update(); };
   card.onsubmit = async e => {

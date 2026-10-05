@@ -1,5 +1,6 @@
 package com.darwish.smartpower.ui
 
+import android.net.Uri
 import android.provider.Settings
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.animation.AnimatedContent
@@ -97,6 +98,9 @@ import kotlinx.coroutines.launch
 
 /** Characters in a new account's password (the server asks the same). */
 const val MIN_PASSWORD = 8
+
+/** Support on WhatsApp (01200414873), for a customer who forgot the password. */
+const val SUPPORT_WHATSAPP = "https://wa.me/201200414873"
 
 /**
  * The first screen until this phone is signed in: sign in or create a customer account.
@@ -257,7 +261,10 @@ fun WelcomeScreen(vm: AppViewModel, expired: Boolean, onServerPassword: () -> Un
             title = { Text(stringResource(R.string.account_forgot)) },
             text = { Text(stringResource(R.string.account_forgot_body)) },
             confirmButton = {
-                TextButton(onClick = { forgot = false; uri.openUri(OFFICIAL_SITE) }) { Text(stringResource(R.string.account_contact)) }
+                val message = stringResource(R.string.account_forgot_message, login.trim())
+                TextButton(onClick = { forgot = false; uri.openUri(SUPPORT_WHATSAPP + "?text=" + Uri.encode(message)) }) {
+                    Text(stringResource(R.string.account_contact))
+                }
             },
             dismissButton = { TextButton(onClick = { forgot = false }) { Text(stringResource(R.string.ok)) } },
         )
