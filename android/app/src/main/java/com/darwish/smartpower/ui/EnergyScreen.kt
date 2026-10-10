@@ -1,5 +1,7 @@
 package com.darwish.smartpower.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -54,6 +57,10 @@ fun EnergyScreen(vm: AppViewModel) {
     LaunchedEffect(range) { vm.loadReport(range) }
     val report = state.report?.takeIf { it.range == range }
     val currency = currencyLabel(state.server?.settings?.currency ?: "EGP")
+    // "Download Excel": Android asks where to keep the file, then the app writes the server's workbook there
+    val saveXlsx = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(XLSX)) { uri ->
+        if (uri != null) vm.exportHistory(range, uri)
+    }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -82,6 +89,10 @@ fun EnergyScreen(vm: AppViewModel) {
                         Text(stringResource(label), fontWeight = FontWeight.SemiBold, color = if (selected) Glass.Night else Glass.TextSoft)
                     }
                 }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = { saveXlsx.launch("darwish-power-$range.xlsx") }, modifier = Modifier.fillMaxWidth()) {
+                Text("📥  " + stringResource(R.string.export_excel), color = Glass.Text)
             }
         }
         if (report == null) {
@@ -207,3 +218,5 @@ private fun BarLabels(report: EnergyReport) {
     }
     }
 }
+
+private const val XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

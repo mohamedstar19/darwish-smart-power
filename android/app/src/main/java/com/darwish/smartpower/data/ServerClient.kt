@@ -182,6 +182,28 @@ class ServerClient(private val address: ServerAddress, private val token: String
         call("POST", "api/strips/remove", JSONObject().put("strip", id).put("block", block))
     }
 
+    /** The energy log as an Excel workbook; [range] is day, week, month or year, [lang] ar or en. */
+    suspend fun historyXlsx(range: String, lang: String): ByteArray = bytes("api/history.xlsx?range=$range&lang=$lang")
+
+    /** A file from the server, as raw bytes. */
+    private suspend fun bytes(path: String): ByteArray = withContext(Dispatchers.IO) {
+        val conn = URL(address.url(path)).openConnection() as HttpURLConnection
+        try {
+            conn.connectTimeout = 5_000
+            conn.readTimeout = 30_000
+            if (token.isNotEmpty()) conn.setRequestProperty("X-Token", token)
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                val text = conn.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                val error = runCatching { JSONObject(text).optString("error") }.getOrNull()
+                throw ServerException(code, error?.takeIf { it.isNotBlank() } ?: "HTTP $code")
+            }
+            conn.inputStream.use { it.readBytes() }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private suspend fun call(method: String, path: String, body: JSONObject? = null): String =
         withContext(Dispatchers.IO) {
             val conn = URL(address.url(path)).openConnection() as HttpURLConnection

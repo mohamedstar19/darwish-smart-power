@@ -395,4 +395,6 @@
     <string name="notif_rule_title">Monitoring rule</string>
     <string name="notif_rule_off">%1$s on %2$s was switched off by a monitoring rule (%3$s).</string>
     <string name="notif_rule">%1$s on %2$s reached %3$s.</string>
+    <string name="export_excel">Download the energy log (Excel file)</string>
+    <string name="export_done">Energy file saved ✅</string>
 </resources>

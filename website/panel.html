@@ -92,17 +92,20 @@ header .hello{color:var(--soft);font-size:13px}
 .tab{flex:1;border:0;background:transparent;border-radius:999px;padding:7px 6px;font-size:13px;color:var(--soft)}
 .linkish{display:block;margin:12px auto 0;border:0;background:none;color:var(--faint);font-size:12px;text-decoration:underline}
 .tab.on{background:linear-gradient(135deg,#ff7a3d,#ffb347);color:#2a0e00;font-weight:700}
+.xlsx{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.xlsx select{flex:1 1 140px;background:rgba(0,0,0,.3);border:1px solid var(--stroke);border-radius:12px;padding:9px 10px;color:var(--text);font:inherit}
+.xlsx .btn{flex:2 1 200px}
 /* welcome (sign in / new account) */
 .welcome{position:relative;max-width:420px;margin:0 auto;padding:10px 2px 24px;text-align:center}
-.hero{position:fixed;top:0;left:0;right:0;height:340px;z-index:0;overflow:hidden;border-radius:0 0 50% 50% / 0 0 56px 56px;
+.whero{position:fixed;top:0;left:0;right:0;height:340px;z-index:0;overflow:hidden;border-radius:0 0 50% 50% / 0 0 56px 56px;
   background:linear-gradient(160deg,#5a2410,#3a170b 45%,#1e130d)}
 /* power pylons and lines across the header, with sparks running along the wires */
-.hero .lines{position:absolute;top:0;left:50%;width:440px;height:340px;transform:translateX(-50%)}
-.hero .lines path{fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round}
-.hero .tower{stroke:rgba(255,190,140,.30);stroke-width:1.6}
-.hero .wire path{stroke:rgba(255,190,140,.26);stroke-width:1.2}
-.hero .pulse circle{fill:#ffb347;filter:url(#spark)}
-.welcome>:not(.hero){position:relative;z-index:1}
+.whero .lines{position:absolute;top:0;left:50%;width:440px;height:340px;transform:translateX(-50%)}
+.whero .lines path{fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round}
+.whero .tower{stroke:rgba(255,190,140,.30);stroke-width:1.6}
+.whero .wire path{stroke:rgba(255,190,140,.26);stroke-width:1.2}
+.whero .pulse circle{fill:#ffb347;filter:url(#spark)}
+.welcome>:not(.whero){position:relative;z-index:1}
 .wtop{display:flex;justify-content:flex-end}
 .langpill{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:var(--text);border-radius:999px;padding:7px 14px;font:inherit;font-size:13px}
 .mark{position:relative;width:170px;height:170px;margin:-6px auto 0;display:grid;place-items:center}
@@ -155,7 +158,7 @@ header .hello{color:var(--soft);font-size:13px}
 .forgotbox a{color:#ffb347;font-weight:700}
 .welcome[data-mode="new"] .only-in,.welcome[data-mode="server"] .only-in{display:none}
 .tagline{color:var(--faint);font-size:13px;margin-top:22px}
-@media (prefers-reduced-motion:reduce){.hero .pulse{display:none}.mark .glow,.mark img,.go .spin{animation:none}.fx,.seg .pill{transition:none}}
+@media (prefers-reduced-motion:reduce){.whero .pulse{display:none}.mark .glow,.mark img,.go .spin{animation:none}.fx,.seg .pill{transition:none}}
 input{width:100%;font:inherit;color:var(--text);background:rgba(255,255,255,.06);border:1px solid var(--stroke);border-radius:14px;padding:13px 14px;margin:14px 0 10px;outline:none;direction:ltr;text-align:center}
 input:focus{border-color:var(--cyan)}
 .err{color:var(--red);min-height:1.4em;font-size:13px}
@@ -201,7 +204,8 @@ const L = {
        create: "اعمل الحساب", signIn: "دخول", e409: "فيه حساب بالرقم ده. ادخل بيه.", e401: "الرقم أو الباسورد غلط.",
        e403: "التسجيل مقفول دلوقتي.", e429: "محاولات كتير، جرّب بعد شوية.", eName: "اكتب اسمك.", eLogin: "اكتب رقم موبايل أو إيميل.",
        ePw: "الباسورد لازم يكون 8 حروف على الأقل.", noStripsYet: "لسه مفيش مشترك على حسابك. لو معاك آيفون، تواصل معانا وإحنا نجهّز المشترك ونربطه بحسابك، أو جهّزه مرة واحدة من أي موبايل أندرويد بتطبيقنا.",
-       deleteAcc: "امسح حسابي"},
+       deleteAcc: "امسح حسابي", xlsx: "📥 تنزيل سجل الاستهلاك (Excel)", rDay: "النهارده", rWeek: "آخر 7 أيام",
+       rMonth: "آخر 30 يوم", rYear: "آخر سنة", xlsxFail: "معرفناش ننزّل الملف، جرّب تاني."},
   en: {lang: "العربية", hello_m: "Good morning", hello_e: "Good evening", now: "Using now", today: "Today", month: "This month",
        scenes: "Scenes", strip: "Strip", outlet: "Outlet", online: "online", offline: "offline", allOn: "All on", allOff: "All off",
        timer: "Timer", rename: "New name (empty = default):", timerAsk: "Switch after how many minutes? (0 = cancel)", turnsOn: "on at", turnsOff: "off at",
@@ -222,7 +226,8 @@ const L = {
        create: "Create account", signIn: "Sign in", e409: "An account with this number exists. Sign in.", e401: "Wrong number or password.",
        e403: "New accounts are closed.", e429: "Too many attempts, try later.", eName: "Enter your name.", eLogin: "Enter a mobile number or e-mail.",
        ePw: "The password needs at least 8 characters.", noStripsYet: "No strip on your account yet. On an iPhone, contact us and we set up the strip and link it to your account, or set it up once from any Android phone with our app.",
-       deleteAcc: "Delete my account"}
+       deleteAcc: "Delete my account", xlsx: "📥 Download the energy log (Excel)", rDay: "Today", rWeek: "Last 7 days",
+       rMonth: "Last 30 days", rYear: "Last year", xlsxFail: "Could not download the file, try again."}
 };
 const ICON = {plug:"🔌",kettle:"☕",router:"📶",tv:"📺",ac:"❄️",lamp:"💡",heater:"🔥",fan:"🌀",fridge:"🧊",washer:"🧺",charger:"🔋",
               computer:"💻",speaker:"🔊",camera:"📷",microwave:"🍲",iron:"👔"};
@@ -255,7 +260,7 @@ function renderLogin(msg) {
   credit();
   document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
   document.getElementById("root").innerHTML = `<div class="welcome" id="wel" data-mode="${loginMode}">
-    <div class="hero" aria-hidden="true"><svg class="lines" viewBox="0 0 400 340" preserveAspectRatio="xMidYMin meet" overflow="visible">
+    <div class="whero" aria-hidden="true"><svg class="lines" viewBox="0 0 400 340" preserveAspectRatio="xMidYMin meet" overflow="visible">
       <defs><symbol id="pylon" viewBox="0 0 100 200" overflow="visible"><path d="M10 200 L38 72 L44 24 L50 4 L56 24 L62 72 L90 200 M44 24 H56 M40 60 H60 M38 72 H62 M15 60 H85 M5 95 H95 M15 60 V68 M85 60 V68 M5 95 V103 M95 95 V103 M38 72 L60 95 M62 72 L40 95 M35 95 L62 128 M65 95 L38 128 M31 128 L66 165 M69 128 L34 165 M24 165 L76 200 M76 165 L24 200 M40 60 L44 24 M60 60 L56 24"/></symbol>
         <filter id="spark" x="-2" y="-2" width="5" height="5"><feGaussianBlur stdDeviation="2.2"/></filter></defs>
       <g class="tower"><use href="#pylon" x="-25" y="40" width="110" height="220"/><use href="#pylon" x="305" y="60" width="90" height="180"/></g>
@@ -382,6 +387,9 @@ function render() {
       <div class="kpis"><div class="kpi"><b><bdi>${num(s.today.kwh, 2)} kWh</bdi></b><span>${t("today")}</span></div>
         <div class="kpi"><b><bdi>${num(s.today.cost, 2)}</bdi> ${esc(cur)}</b><span>${t("today")}</span></div>
         <div class="kpi"><b><bdi>${num(s.month.cost, 2)}</bdi> ${esc(cur)}</b><span>${t("month")}</span></div></div></section>`;
+  if (s.strips.length) html += `<div class="xlsx"><select id="xr" aria-label="${t("xlsx")}">
+      ${["day", "week", "month", "year"].map(r => `<option value="${r}"${r === xlsxRange ? " selected" : ""}>${t("r" + r[0].toUpperCase() + r.slice(1))}</option>`).join("")}
+      </select><button class="btn" id="xlsx">${t("xlsx")}</button></div>`;
   if (s.new_strips && s.new_strips.length) {
     html += `<section class="glass newstrips"><h2>🆕 ${t("newTitle")}</h2><p>${t("newBody")}</p>` +
       s.new_strips.map(n => `<div class="newrow"><div><b>${t("strip")} <bdi>${esc(n.id.slice(-6))}</bdi></b>
@@ -447,7 +455,25 @@ async function withPin(stripId, fn) {
   }
 }
 
+let xlsxRange = "month";
+// the energy log as an Excel file: fetched with the sign-in, then handed to the browser as a download
+async function downloadXlsx() {
+  const btn = document.getElementById("xlsx");
+  xlsxRange = document.getElementById("xr").value;
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/history.xlsx?range=${xlsxRange}&lang=${lang}`, {headers: {"X-Token": token}});
+    if (!r.ok) throw new Error(r.status);
+    const url = URL.createObjectURL(await r.blob());
+    const a = Object.assign(document.createElement("a"), {href: url, download: `darwish-power-${xlsxRange}.xlsx`});
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (e) { alert(t("xlsxFail")); }
+  btn.disabled = false;
+}
+
 document.addEventListener("click", async ev => {
+  if (ev.target.closest("#xlsx")) { downloadXlsx(); return; }
   if (readOnly() && ev.target.closest("[data-sw],[data-timer],[data-more],[data-scene]")) { toast("👁 " + t("viewOnly")); return; }
   const ap = ev.target.closest("[data-approve]"), bl = ev.target.closest("[data-block]");
   if (ap || bl) {

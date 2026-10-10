@@ -26,7 +26,9 @@ import com.darwish.smartpower.data.StripSetup
 import com.darwish.smartpower.data.SwitchOutcome
 import com.darwish.smartpower.notify.AlertNotifier
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -380,6 +382,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         act { client ->
             val report = client.history(range)
             _state.update { if (it.reportRange == range) it.copy(report = report) else it }
+        }
+    }
+
+    /** Saves the energy log of [range] as an Excel file where the person chose to keep it ([uri]). */
+    fun exportHistory(range: String, uri: android.net.Uri) = viewModelScope.launch {
+        val client = client() ?: return@launch
+        val app = getApplication<Application>()
+        val lang = if (app.resources.configuration.locales[0].language == "ar") "ar" else "en"
+        try {
+            val data = client.historyXlsx(range, lang)
+            withContext(Dispatchers.IO) { app.contentResolver.openOutputStream(uri)?.use { it.write(data) } }
+            notes.send(Note(R.string.export_done))
+        } catch (e: Exception) {
+            notes.send(noteOf(e))
         }
     }
 

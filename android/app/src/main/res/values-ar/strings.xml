@@ -381,4 +381,6 @@
     <string name="notif_rule_title">قاعدة مراقبة</string>
     <string name="notif_rule_off">%1$s في %2$s اتطفى بقاعدة المراقبة (%3$s).</string>
     <string name="notif_rule">%1$s في %2$s وصل %3$s.</string>
+    <string name="export_excel">تنزيل سجل الاستهلاك (ملف Excel)</string>
+    <string name="export_done">اتحفظ ملف الاستهلاك ✅</string>
 </resources>

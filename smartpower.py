@@ -31,6 +31,8 @@ import sys
 import tempfile
 import threading
 import time
+import io
+import zipfile
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -745,6 +747,89 @@ class History:
         return self.db.execute("SELECT COALESCE(MAX(id), 0) FROM events").fetchone()[0]
 
 
+def xlsx_bytes(sheets: List[Tuple[str, List[List[Any]], List[int]]], rtl: bool = False) -> bytes:
+    """A small Excel workbook (.xlsx) with no library: each sheet is (name, rows, column widths); the first
+    row is a bold header that stays in view. Numbers stay numbers, everything else is text."""
+    def cell_ref(col: int, row: int) -> str:
+        letters = ""
+        col += 1
+        while col:
+            col, rem = divmod(col - 1, 26)
+            letters = chr(65 + rem) + letters
+        return "%s%d" % (letters, row)
+
+    def text(v: Any) -> str:
+        return html_escape(re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", str(v)), quote=False)
+
+    def sheet_xml(rows: List[List[Any]], widths: List[int]) -> str:
+        out = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+               '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+               '<sheetViews><sheetView workbookViewId="0"%s><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" '
+               'state="frozen"/></sheetView></sheetViews><cols>' % (' rightToLeft="1"' if rtl else "")]
+        out += ['<col min="%d" max="%d" width="%d" customWidth="1"/>' % (i + 1, i + 1, w) for i, w in enumerate(widths)]
+        out.append("</cols><sheetData>")
+        for r, row in enumerate(rows, 1):
+            out.append('<row r="%d">' % r)
+            for c, v in enumerate(row):
+                style = ' s="1"' if r == 1 else (' s="2"' if isinstance(v, float) else "")
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    out.append('<c r="%s"%s><v>%s</v></c>' % (cell_ref(c, r), style, repr(v)))
+                else:
+                    out.append('<c r="%s"%s t="inlineStr"><is><t xml:space="preserve">%s</t></is></c>'
+                               % (cell_ref(c, r), style, text(v)))
+            out.append("</row>")
+        out.append("</sheetData></worksheet>")
+        return "".join(out)
+
+    names = [re.sub(r"[\[\]:*?/\\]", "", n)[:31] or "Sheet" for n, _, _ in sheets]
+    files = {
+        "[Content_Types].xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+            + "".join('<Override PartName="/xl/worksheets/sheet%d.xml" ContentType="application/vnd.openxmlformats-'
+                      'officedocument.spreadsheetml.worksheet+xml"/>' % (i + 1) for i in range(len(sheets)))
+            + "</Types>",
+        "_rels/.rels": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+            'Target="xl/workbook.xml"/></Relationships>',
+        "xl/workbook.xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
+            + "".join('<sheet name="%s" sheetId="%d" r:id="rId%d"/>' % (text(n), i + 1, i + 1) for i, n in enumerate(names))
+            + "</sheets></workbook>",
+        "xl/_rels/workbook.xml.rels": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            + "".join('<Relationship Id="rId%d" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+                      'worksheet" Target="worksheets/sheet%d.xml"/>' % (i + 1, i + 1) for i in range(len(sheets)))
+            + '<Relationship Id="rId%d" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" '
+              'Target="styles.xml"/></Relationships>' % (len(sheets) + 1),
+        "xl/styles.xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.000"/></numFmts>'
+            '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>'
+            '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFFFD9C2"/><bgColor indexed="64"/></patternFill></fill></fills>'
+            '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+            '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+            '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+            '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>'
+            '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+            '</styleSheet>',
+    }
+    for i, (_, rows, widths) in enumerate(sheets):
+        files["xl/worksheets/sheet%d.xml" % (i + 1)] = sheet_xml(rows, widths)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name in ["[Content_Types].xml", "_rels/.rels"] + [n for n in files if n.startswith("xl/")]:
+            z.writestr(name, files[name])
+    return buf.getvalue()
+
+
 def local_midnight(now: float, days_back: int = 0) -> float:
     day = datetime.date.fromtimestamp(now) - datetime.timedelta(days=days_back)
     return time.mktime(day.timetuple())
@@ -1386,6 +1471,64 @@ class Hub:
 
     async def events(self, after: int) -> Dict[str, Any]:
         return {"events": self.history.events_after(after), "last_id": self.history.last_event_id()}
+
+    EXPORT_DAYS = {"day": 1, "week": 7, "month": 30, "year": 365}
+
+    async def history_xlsx(self, rng: str, strip_id: Optional[str] = None, lang: str = "ar",
+                           allowed: Optional[set] = None, now: Optional[float] = None) -> Tuple[int, Any]:
+        """The energy log as an Excel file: a summary, one row per day and outlet, and (up to a month)
+        one row per hour and outlet. Labels in Arabic or English."""
+        now = time.time() if now is None else now
+        if rng not in self.EXPORT_DAYS:
+            return 400, {"error": "range must be day, week, month or year"}
+        mac = None
+        if strip_id:
+            strip = self.find(strip_id)
+            if strip is None:
+                return 404, {"error": "unknown strip"}
+            mac = strip.mac
+        ar = lang != "en"
+        L = (lambda a, e: a if ar else e)
+        start = local_midnight(now, self.EXPORT_DAYS[rng] - 1)
+        rows = [r for r in self.history.rows_since(start, mac) if allowed is None or r[0] in allowed]
+        rows.sort(key=lambda r: (r[2], r[0], r[1]))
+        price = float(self.store.settings.get("price_kwh", 0) or 0)
+        currency = self.store.settings.get("currency", "EGP")
+        strip_name = lambda m: self.store.name(m, 0) or L("مشترك %s", "Strip %s") % m[-6:]
+        outlet_name = lambda m, o: self.store.name(m, o) or L("مخرج %d", "Outlet %d") % o
+        cost = L("التكلفة (%s)", "Cost (%s)") % currency
+
+        daily: Dict[Tuple[str, str, int], float] = {}
+        for m, o, hour, wh in rows:
+            key = (time.strftime("%Y-%m-%d", time.localtime(hour)), m, o)
+            daily[key] = daily.get(key, 0.0) + wh / 1000.0
+        day_rows = [[L("اليوم", "Day"), L("المشترك", "Strip"), L("المخرج", "Outlet"), L("كيلووات ساعة", "kWh"), cost]]
+        day_rows += [[d, strip_name(m), outlet_name(m, o), round(k, 3), round(k * price, 2)]
+                     for (d, m, o), k in sorted(daily.items())]
+        total = sum(daily.values())
+        per_outlet: Dict[Tuple[str, int], float] = {}
+        for (_, m, o), k in daily.items():
+            per_outlet[(m, o)] = per_outlet.get((m, o), 0.0) + k
+        summary = [[L("البند", "Item"), L("القيمة", "Value")],
+                   [L("الفترة", "Period"), L({"day": "النهارده", "week": "آخر 7 أيام", "month": "آخر 30 يوم",
+                                               "year": "آخر سنة"}[rng], {"day": "Today", "week": "Last 7 days",
+                                               "month": "Last 30 days", "year": "Last year"}[rng])],
+                   [L("من", "From"), time.strftime("%Y-%m-%d", time.localtime(start))],
+                   [L("لحد", "To"), time.strftime("%Y-%m-%d %H:%M", time.localtime(now))],
+                   [L("إجمالي الاستهلاك (كيلووات ساعة)", "Total energy (kWh)"), round(total, 3)],
+                   [L("سعر الكيلووات", "Price per kWh"), price],
+                   [cost, round(total * price, 2)], ["", ""],
+                   [L("المخرج", "Outlet"), L("كيلووات ساعة", "kWh")]]
+        summary += [["%s · %s" % (strip_name(m), outlet_name(m, o)), round(k, 3)]
+                    for (m, o), k in sorted(per_outlet.items(), key=lambda kv: -kv[1])]
+        sheets = [(L("ملخص", "Summary"), summary, [34, 22]), (L("يومي", "Daily"), day_rows, [14, 22, 18, 14, 14])]
+        if rng != "year":
+            hour_rows = [[L("اليوم", "Day"), L("الساعة", "Hour"), L("المشترك", "Strip"), L("المخرج", "Outlet"),
+                          L("كيلووات ساعة", "kWh")]]
+            hour_rows += [[time.strftime("%Y-%m-%d", time.localtime(h)), time.strftime("%H:00", time.localtime(h)),
+                           strip_name(m), outlet_name(m, o), round(wh / 1000.0, 3)] for m, o, h, wh in rows]
+            sheets.append((L("بالساعة", "Hourly"), hour_rows, [14, 9, 22, 18, 14]))
+        return 200, xlsx_bytes(sheets, rtl=ar)
 
     # ---- family members
 
@@ -2438,6 +2581,21 @@ class WebHandler(BaseHTTPRequestHandler):
             code, body = self.server.run_on_loop(hub.history_report(
                 query.get("range", ["day"])[0], strip, allowed=who["strips"]))
             self.reply_json(code, body)
+        elif path == "/api/history.xlsx":
+            query = parse_qs(urlsplit(self.path).query)
+            strip = query.get("strip", [None])[0]
+            if strip and not may_see(who, strip):
+                self.reply_json(403, {"error": "this strip is not shared with you"})
+                return
+            rng = query.get("range", ["month"])[0]
+            code, body = self.server.run_on_loop(hub.history_xlsx(
+                rng, strip, query.get("lang", ["ar"])[0], allowed=who["strips"]))
+            if code != 200:
+                self.reply_json(code, body)
+                return
+            name = "darwish-power-%s-%s.xlsx" % (rng, time.strftime("%Y-%m-%d"))
+            self.reply(200, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                       {"Content-Disposition": 'attachment; filename="%s"' % name})
         elif path == "/api/events":
             try:
                 after = int(parse_qs(urlsplit(self.path).query).get("after", ["0"])[0])
@@ -3289,6 +3447,18 @@ async def selftest() -> None:
     hub.strips["A1B2C3D4E5F6"].outlets[1].trip = 0
     trips = [e for e in (await hub.events(0))["events"] if e["kind"] == "trip"]
     assert [(e["outlet"], e["value"]) for e in trips] == [(1, TRIP_OVERLOAD)]
+
+    # the energy log as an Excel file
+    hub.history.record("C0FFEE0E0E0E", {2: 1000.0}, now=now - 3600)
+    hub.history.record("C0FFEE0E0E0E", {2: 1250.0}, now=now)
+    code, book = await hub.history_xlsx("week", now=now, allowed={"C0FFEE0E0E0E"})
+    assert code == 200 and (await hub.history_xlsx("decade"))[0] == 400
+    with zipfile.ZipFile(io.BytesIO(book)) as z:
+        assert z.testzip() is None and "xl/worksheets/sheet3.xml" in z.namelist()
+        daily = z.read("xl/worksheets/sheet2.xml").decode()
+        assert "rightToLeft" in daily and "<v>0.25</v>" in daily and "المخرج" in daily
+    assert "Daily" in zipfile.ZipFile(io.BytesIO((await hub.history_xlsx("year", lang="en", now=now))[1])).read(
+        "xl/workbook.xml").decode()
 
     # web layer, called from a worker thread like a real request
     web = WebServer(("127.0.0.1", 0), hub, asyncio.get_running_loop(), "s3cret", "127.0.0.1")
