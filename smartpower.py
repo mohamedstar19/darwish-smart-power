@@ -49,7 +49,8 @@ MAX_MISSED_POLLS = 3                     # unanswered reads before the connectio
 TIMER_GRACE = 600                        # drop a timer that could not run this long after it was due
 MAX_BODY = 16 * 1024
 OFFLINE_ALERT_AFTER = 90                 # seconds offline before an "offline" alert
-ALERT_REPEAT = {"temp": 3600, "power": 1800}
+ALERT_REPEAT = {"temp": 3600, "power": 1800, "trip": 1800}
+TRIP_OVERLOAD, TRIP_OVERHEAT = 1, 2      # the strip's own protection cut an outlet off
 MAX_EVENTS = 500
 QUEUE_TTL = 24 * 3600                    # commands for an offline strip are kept this long
 PIN_MAX_TRIES = 5                        # wrong PINs before a strip refuses PINs for a minute
@@ -172,8 +173,10 @@ def parse_getinfo(payload: str) -> Dict[int, Dict[str, Any]]:
     """'1:<fields>:2:<fields>:...' -> {outlet: reading}.
 
     Each <fields> block is 12 values separated by ';':
-    runtime, relay on/off, state, overload, overheat, power (mW), energy (hex Wh),
-    previous energy, config, status, event, temperature (C).
+    countdown, relay on/off, standby threshold, overload ok, overheat ok, power (mW), energy (hex Wh),
+    daily energy, energy budget, standby cutoff, event code (hex), temperature (C).
+    The protection flags read "on" while healthy and "off" once tripped (MTTL protocol guide); event
+    code 01 is an overload, 02 overheating.
     Channel 5 is the strip total and is skipped; totals are computed from the outlets.
     """
     tokens = payload.split(":")
@@ -188,6 +191,8 @@ def parse_getinfo(payload: str) -> Dict[int, Dict[str, Any]]:
                 "watts": round(int(fields[5]) / 1000.0, 2),
                 "kwh": round(int(fields[6], 16) / 1000.0, 3),
                 "temp_c": int(fields[11]),
+                "trip": TRIP_OVERLOAD if fields[3].strip().lower() == "off" or fields[10].strip() == "01" else
+                        TRIP_OVERHEAT if fields[4].strip().lower() == "off" or fields[10].strip() == "02" else 0,
             }
         except ValueError:
             continue
@@ -752,6 +757,7 @@ class Outlet:
         self.watts = 0.0
         self.kwh = 0.0
         self.temp_c: Optional[int] = None
+        self.trip = 0                           # TRIP_OVERLOAD / TRIP_OVERHEAT while the strip's protection holds it off
 
 
 class Strip:
@@ -900,7 +906,7 @@ class StripLink:
             if len(readings) == len(OUTLETS):
                 for n, r in readings.items():
                     o = strip.outlets[n]
-                    o.on, o.watts, o.kwh, o.temp_c = r["on"], r["watts"], r["kwh"], r["temp_c"]
+                    o.on, o.watts, o.kwh, o.temp_c, o.trip = r["on"], r["watts"], r["kwh"], r["temp_c"], r["trip"]
                 self.hub.record_energy(strip)
                 for w in self.state_waiters:
                     if not w.done():
@@ -2053,6 +2059,8 @@ class Hub:
             for o in strip.outlets.values():
                 if o.temp_c is not None and o.temp_c >= float(settings.get("max_temp_c", 60)):
                     self.alert_once("temp", mac, o.index, o.temp_c, now)
+                if o.trip:
+                    self.alert_once("trip", mac, o.index, o.trip, now)
             watts = sum(o.watts for o in strip.outlets.values())
             if watts >= float(settings.get("max_watts", 3000)):
                 self.alert_once("power", mac, 0, watts, now)
@@ -3185,6 +3193,16 @@ async def selftest() -> None:
     events = (await hub.events(0))["events"]
     assert [(e["kind"], e["outlet"]) for e in events] == [("temp", 4)]
     assert hub.cost(1.5) == 3.0
+    # the strip's own protection cut an outlet off: its flags read "off" once tripped, event 01/02
+    tripped = parse_getinfo("1:0;off;3;off;on;0;00000000;00000000;00000000;off;01;30:2:0;off;3;on;off;0;00000000;"
+                            "00000000;00000000;off;02;95:3:0;on;3;on;on;895;00000003;00000000;00000000;off;00;30:"
+                            "4:0;off;3;on;on;0;00000000;00000000;00000000;off;00;30")
+    assert [tripped[n]["trip"] for n in OUTLETS] == [TRIP_OVERLOAD, TRIP_OVERHEAT, 0, 0]
+    hub.strips["A1B2C3D4E5F6"].outlets[1].trip = TRIP_OVERLOAD
+    hub.check_alerts(now + 120)
+    hub.strips["A1B2C3D4E5F6"].outlets[1].trip = 0
+    trips = [e for e in (await hub.events(0))["events"] if e["kind"] == "trip"]
+    assert [(e["outlet"], e["value"]) for e in trips] == [(1, TRIP_OVERLOAD)]
 
     # web layer, called from a worker thread like a real request
     web = WebServer(("127.0.0.1", 0), hub, asyncio.get_running_loop(), "s3cret", "127.0.0.1")

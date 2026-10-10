@@ -77,6 +77,9 @@ fun AlertsScreen(vm: AppViewModel, onBack: () -> Unit) {
                     "online" -> "✅" to stringResource(R.string.notif_online, stripLabel)
                     "temp" -> "🌡️" to stringResource(R.string.notif_temp, outletLabel, stripLabel, value)
                     "power" -> "⚡" to stringResource(R.string.notif_power, stripLabel, value)
+                    "trip" -> "🛑" to stringResource(
+                        if (e.value.toInt() == 2) R.string.notif_trip_heat else R.string.notif_trip_load, outletLabel, stripLabel,
+                    )
                     else -> "ℹ️" to e.kind
                 }
                 GlassCard(Modifier.fillMaxWidth(), padding = 14.dp) {

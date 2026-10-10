@@ -89,6 +89,9 @@ object AlertNotifier {
             "online" -> context.getString(R.string.notif_online_title) to context.getString(R.string.notif_online, stripName)
             "temp" -> context.getString(R.string.notif_temp_title) to context.getString(R.string.notif_temp, outletName, stripName, value)
             "power" -> context.getString(R.string.notif_power_title) to context.getString(R.string.notif_power, stripName, value)
+            "trip" -> context.getString(R.string.notif_trip_title) to context.getString(
+                if (e.value.toInt() == 2) R.string.notif_trip_heat else R.string.notif_trip_load, outletName, stripName,
+            )
             else -> return
         }
         val open = PendingIntent.getActivity(

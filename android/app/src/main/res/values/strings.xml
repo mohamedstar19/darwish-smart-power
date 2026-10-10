@@ -274,6 +274,9 @@
     <string name="notif_temp">%1$s on %2$s is at %3$s°C.</string>
     <string name="notif_power_title">High power</string>
     <string name="notif_power">%1$s is drawing %2$s W.</string>
+    <string name="notif_trip_title">Outlet cut off</string>
+    <string name="notif_trip_load">%1$s on %2$s was cut off by the strip\'s overload protection. Unplug something and switch it on again.</string>
+    <string name="notif_trip_heat">%1$s on %2$s was cut off by the strip\'s overheat protection. Let it cool down.</string>
     <string name="section_alexa">Alexa</string>
     <string name="alexa_enable">Control with Alexa</string>
     <string name="alexa_hint">Outlets show up as smart plugs on Echo devices in this home. Locked strips are left out.</string>

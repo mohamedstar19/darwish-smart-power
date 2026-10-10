@@ -260,6 +260,9 @@
     <string name="notif_temp">%1$s في %2$s حرارته %3$s°C.</string>
     <string name="notif_power_title">استهلاك عالي</string>
     <string name="notif_power">%1$s بيسحب %2$s وات.</string>
+    <string name="notif_trip_title">المخرج فصل لوحده</string>
+    <string name="notif_trip_load">%1$s في %2$s فصل بسبب حِمل زيادة (الحماية اللي في المشترك). شيل جهاز وشغّله تاني.</string>
+    <string name="notif_trip_heat">%1$s في %2$s فصل بسبب سخونة زيادة (الحماية اللي في المشترك). سيبه يبرد شوية.</string>
     <string name="section_alexa">أليكسا</string>
     <string name="alexa_enable">التحكم بأليكسا</string>
     <string name="alexa_hint">المخارج بتظهر كفيش ذكية لسماعات Echo اللي في البيت. المشتركات المقفولة مش بتظهر.</string>
