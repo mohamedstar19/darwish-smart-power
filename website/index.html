@@ -95,6 +95,8 @@ h2{font-size:clamp(26px,3.6vw,38px);line-height:1.3;margin:6px 0 14px;font-weigh
 .ico svg{width:24px;height:24px}
 .feature h3{margin:0 0 6px;font-size:18px}
 .feature p{margin:0;color:var(--soft);font-size:15px}
+.feature.new{position:relative;border-color:rgba(255,122,61,.45)}
+.badge{position:absolute;top:18px;inset-inline-end:18px;background:var(--brand);color:#fff;font-size:12px;font-weight:800;border-radius:999px;padding:2px 10px}
 
 .flow{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:26px;margin-bottom:28px;direction:ltr}
 .node{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:10px 16px;text-align:center;font-weight:700;font-size:15px}
@@ -142,6 +144,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
   </a>
   <div class="navlinks">
     <a href="#features" data-i="nav_features">المميزات</a>
+    <a href="#new" data-i="nav_new">الجديد</a>
     <a href="#how" data-i="nav_how">إزاي بيشتغل</a>
     <a href="#iphone" data-i="nav_ios">آيفون</a>
     <a href="#download" data-i="nav_download">تحميل</a>
@@ -195,6 +198,26 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
       <h3 data-i="f5h">إعداد من الموبايل</h3><p data-i="f5p">وصّل المشترك بالواي فاي بتاعك من التطبيق نفسه، من غير كمبيوتر.</p></div>
     <div class="feature"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
       <h3 data-i="f6h">خصوصيتك عندك</h3><p data-i="f6p">اتصال مشفّر بالكامل، وبياناتك على سيرفر خاص مش عند أي شركة. وتقدر تقفل كل مشترك بـ PIN أو بالبصمة.</p></div>
+  </div>
+</div></section>
+
+<section id="new"><div class="wrap">
+  <div class="kicker" data-i="nw_k">الجديد</div>
+  <h2 data-i="nw_h">آخر التحديثات والمميزات</h2>
+  <p class="sub" data-i="nw_s" data-html>مميزات نزلت جديد في التطبيق ولوحة التحكم. لو عندك التطبيق، <a href="#download">نزّل آخر نسخة</a> علشان تاخدها، ولوحة التحكم على الآيفون بتتحدث لوحدها.</p>
+  <div class="grid">
+    <div class="feature new"><span class="badge" data-i="nw_b">جديد</span><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></svg></div>
+      <h3 data-i="n1h">مراقبة ذكية بتطفي لوحدها</h3><p data-i="n1p">الشاحن خلّص شحن؟ جهاز بيسحب أكتر من اللازم أو سخن؟ المخرج يطفي لوحده وتجيلك رسالة. اختار القاعدة وسيبها شغالة.</p></div>
+    <div class="feature new"><span class="badge" data-i="nw_b">جديد</span><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+      <h3 data-i="n2h">تنبيه لما الحماية تفصل</h3><p data-i="n2p">لو حماية المشترك فصلت مخرج من الحمل الزيادة أو الحرارة، بيوصلك تنبيه على طول وتعرف السبب.</p></div>
+    <div class="feature new"><span class="badge" data-i="nw_b">جديد</span><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 16h8M7 11h12M7 6h5"/></svg></div>
+      <h3 data-i="n3h">تقارير ومقارنة المخارج</h3><p data-i="n3p">رسمة لاستهلاك اليوم والأسبوع والشهر بالتكلفة، ومقارنة بين المخارج تعرف منها مين اللي بيسحب كهربا أكتر، دلوقتي أو على مدار الفترة.</p></div>
+    <div class="feature new"><span class="badge" data-i="nw_b">جديد</span><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></svg></div>
+      <h3 data-i="n4h">سجل الاستهلاك في ملف Excel</h3><p data-i="n4p">نزّل استهلاك كل مخرج بالساعة وباليوم في ملف إكسل، ليوم أو أسبوع أو شهر أو سنة.</p></div>
+    <div class="feature new"><span class="badge" data-i="nw_b">جديد</span><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/></svg></div>
+      <h3 data-i="n5h">إعادة ربط أو حذف المشترك</h3><p data-i="n5p">غيّرت الراوتر أو باسورد الواي فاي؟ أعد ربط المشترك من التطبيق في خطوة، أو احذفه وضيفه من جديد.</p></div>
+    <div class="feature new"><span class="badge" data-i="nw_b">جديد</span><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.6A8.4 8.4 0 1 1 21 11.5Z"/></svg></div>
+      <h3 data-i="n6h">حساب خاص بيك ودعم على واتساب</h3><p data-i="n6p">شاشة دخول جديدة وحسابك محمي، ولو نسيت الباسورد دوس "نسيت الباسورد؟" وكلّمنا على واتساب ونرجّعهولك.</p></div>
   </div>
 </div></section>
 
@@ -286,7 +309,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 const APK_URL = "/app.apk";
 
 const EN = {
-  nav_features:"Features", nav_how:"How it works", nav_ios:"iPhone", nav_download:"Download",
+  nav_features:"Features", nav_new:"What's new", nav_how:"How it works", nav_ios:"iPhone", nav_download:"Download",
   tag:"For the MTTL-W01 smart power strip",
   h1:'Control your power<br><span>from your phone, from anywhere</span>',
   lead:"Switch every outlet, watch consumption live, and set schedules and timers, all from your phone, from anywhere. No subscription.",
@@ -299,6 +322,14 @@ const EN = {
   f4h:"Outlet names", f4p:"Name each outlet after what is plugged in: kettle, heater, router.",
   f5h:"Setup from the phone", f5p:"Connect the strip to your Wi-Fi from the app itself, no computer needed.",
   f6h:"Your data stays yours", f6p:"Fully encrypted connection, and your data stays on a private server, not with any company. Lock each strip with a PIN or your fingerprint.",
+  nw_k:"WHAT'S NEW", nw_h:"Latest updates and features", nw_b:"New",
+  nw_s:'New in the app and the control panel. If you have the app, <a href="#download">download the latest version</a> to get them; the iPhone control panel updates by itself.',
+  n1h:"Smart rules that switch off", n1p:"Charger done? A device drawing too much or getting hot? The outlet switches itself off and you get a message. Pick a rule and let it run.",
+  n2h:"Alerts when protection trips", n2p:"If the strip's own protection cuts an outlet for overload or heat, you get an alert right away with the reason.",
+  n3h:"Reports and outlet comparison", n3p:"Charts of today, this week and this month with the cost, and the outlets side by side so you see which one draws the most, now or over time.",
+  n4h:"Energy log as an Excel file", n4p:"Download every outlet's usage by hour and by day as an Excel file, for a day, a week, a month or a year.",
+  n5h:"Reconnect or remove a strip", n5p:"New router or Wi-Fi password? Put the strip back on Wi-Fi from the app in one step, or remove it and add it again.",
+  n6h:"Your own account, WhatsApp help", n6p:"A new sign-in screen and a protected account. Forgot your password? Tap “Forgot your password?” and message us on WhatsApp to get it back.",
   h_k:"HOW IT WORKS", h_h:"Four steps to start", h_s:"The app is already connected to the Darwish Smart Power server: install the app and nothing else, and nothing changes on your router.",
   n_phone:"Phone", n_phone_s:"app or browser", n_server_s:"private, encrypted server", n_strip:"Power strip",
   s1h:"Get the app", s1p:"Download the app with the button above and open it; it connects to the server by itself.",
