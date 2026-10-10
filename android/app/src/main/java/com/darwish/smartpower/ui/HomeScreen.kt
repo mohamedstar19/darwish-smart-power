@@ -149,6 +149,7 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit, onSetup: () -> Unit, on
                             onSwitch = vm::switch,
                             onOutletMenu = { outletSheet = strip.id to it },
                             onStripMenu = { stripSheet = strip.id },
+                            onRestore = { vm.restoreAfterPower(strip.id) },
                         )
                     }
                 }
@@ -321,6 +322,24 @@ private fun FavoriteChip(strip: Strip, outlet: Outlet, busy: Boolean, onToggle: 
     }
 }
 
+/** After a power cut: the outlets that were on are waiting for the user's OK (or for their own wait). */
+@Composable
+private fun PowerBackBanner(strip: Strip, back: com.darwish.smartpower.data.PowerBack, onRestore: () -> Unit) {
+    val waiting = strip.outlets.filter { it.index in back.outlets }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Glass.Amber.copy(alpha = 0.12f)).padding(12.dp),
+    ) {
+        Text(stringResource(R.string.power_back_banner, clock(back.atEpochSeconds)), fontWeight = FontWeight.SemiBold)
+        Text(waiting.map { outletName(it) }.joinToString("، "), color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall)
+        waiting.filter { it.restoreAtEpochSeconds != null }.forEach {
+            Text(stringResource(R.string.power_back_soon, outletName(it), clock(it.restoreAtEpochSeconds ?: 0)),
+                color = Glass.TextSoft, style = MaterialTheme.typography.labelSmall)
+        }
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = onRestore) { Text(stringResource(R.string.power_back_restore)) }
+    }
+}
+
 @Composable
 private fun PowerDot(on: Boolean) {
     Box(Modifier.size(10.dp).clip(CircleShape).background(if (on) Glass.Green else Glass.TextFaint))
@@ -333,6 +352,7 @@ private fun StripCard(
     onSwitch: (String, Int, Boolean) -> Unit,
     onOutletMenu: (Int) -> Unit,
     onStripMenu: () -> Unit,
+    onRestore: () -> Unit,
 ) {
     val allBusy = AppViewModel.key(strip.id, 0) in pending
     GlassCard(Modifier.fillMaxWidth().alpha(if (strip.online) 1f else 0.7f)) {
@@ -367,6 +387,7 @@ private fun StripCard(
             if (strip.pending.isNotEmpty()) GlassPill("⏳ " + stringResource(R.string.waiting_for_strip), color = Glass.Amber)
         }
         strip.timer?.let { Spacer(Modifier.height(8.dp)); TimerLine(it) }
+        strip.powerBack?.let { Spacer(Modifier.height(10.dp)); PowerBackBanner(strip, it, onRestore) }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { onSwitch(strip.id, 0, true) }, enabled = !allBusy, modifier = Modifier.weight(1f)) {

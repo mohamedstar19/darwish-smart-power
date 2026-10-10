@@ -94,6 +94,19 @@ class ServerClient(private val address: ServerAddress, private val token: String
         return StateJson.parseStrip(JSONObject(call("POST", "api/meta", body)).getJSONObject("strip"))
     }
 
+    /** What an outlet does after a power cut: back on after [minutes] (if it was on), or stays off (null). */
+    suspend fun setAfterPower(stripId: String, outlet: Int, minutes: Int?): Strip {
+        val body = JSONObject().put("strip", stripId).put("outlet", outlet).put("after_power", minutes ?: JSONObject.NULL)
+        return StateJson.parseStrip(JSONObject(call("POST", "api/meta", body)).getJSONObject("strip"))
+    }
+
+    /** After a power cut: turns back on the outlets that were on before it. */
+    suspend fun restoreAfterPower(stripId: String, pin: String? = null): Strip {
+        val body = JSONObject().put("strip", stripId)
+        pin?.let { body.put("pin", it) }
+        return StateJson.parseStrip(JSONObject(call("POST", "api/strips/restore", body)).getJSONObject("strip"))
+    }
+
     /** Creates a schedule or cycle, or replaces the one with the same id. Returns all schedules. */
     suspend fun saveSchedule(s: Schedule, pin: String? = null): List<Schedule> {
         val body = JSONObject().put("strip", s.stripId).put("outlets", JSONArray(s.outlets))

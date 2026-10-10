@@ -252,8 +252,8 @@
     <string name="privacy_policy">سياسة الخصوصية</string>
 
     <string name="notif_channel">تنبيهات المشتركات</string>
-    <string name="notif_offline_title">مشترك فصل</string>
-    <string name="notif_offline">%1$s فقد الاتصال.</string>
+    <string name="notif_offline_title">⚡ المشترك فصل</string>
+    <string name="notif_offline">%1$s فصل: يا إما الكهرباء قطعت يا إما النت فاصل.</string>
     <string name="notif_online_title">مشترك رجع</string>
     <string name="notif_online">%1$s اتصل تاني.</string>
     <string name="notif_temp_title">حرارة عالية</string>
@@ -395,4 +395,19 @@
     <string name="bill_own">السعر والحدود دي خاصة بحسابك إنت بس.</string>
     <string name="bill_default">ده السعر العام. لو غيّرته هيتطبق على حسابك إنت بس.</string>
     <string name="bill_reset">رجّع السعر العام</string>
+    <string name="notif_power_back_title">💡 الكهرباء رجعت</string>
+    <string name="notif_power_back">الكهرباء رجعت عند %1$s (قطعت %2$s). كل المخارج مقفولة ومستنية إذنك.</string>
+    <string name="notif_power_restore_title">🔌 مخرج اشتغل تاني</string>
+    <string name="notif_power_restore">%1$s في %2$s اشتغل تاني بعد رجوع الكهرباء.</string>
+    <string name="under_a_minute">أقل من دقيقة</string>
+    <string name="minutes_value">حوالي %1$d دقيقة</string>
+    <string name="after_power_title">⚡ بعد رجوع الكهرباء</string>
+    <string name="after_power_hint">لو المخرج كان شغال والكهرباء قطعت ورجعت، يعمل إيه؟</string>
+    <string name="after_power_off">يفضل مقفول</string>
+    <string name="after_power_now">يرجع على طول</string>
+    <string name="after_power_minutes">بعد %1$d دقايق</string>
+    <string name="after_power_fridge">للتلاجة والتكييف: أحسن تستنى 3 لـ 5 دقايق علشان الكهرباء تستقر وما تبوّظش الكمبروسر.</string>
+    <string name="power_back_banner">💡 الكهرباء رجعت الساعة %1$s. المخارج دي كانت شغالة ولسه مقفولة:</string>
+    <string name="power_back_soon">%1$s هيشتغل لوحده الساعة %2$s</string>
+    <string name="power_back_restore">شغّل اللي كان شغال</string>
 </resources>

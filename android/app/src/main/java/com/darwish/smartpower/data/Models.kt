@@ -17,7 +17,14 @@ data class Outlet(
     val icon: String = "plug",
     val favorite: Boolean = false,
     val todayKwh: Double = 0.0,
+    /** After a power cut: minutes before it goes back on (if it was on); null = it stays off. */
+    val afterPower: Int? = null,
+    /** When it is due to go back on after a power cut. */
+    val restoreAtEpochSeconds: Long? = null,
 )
+
+/** The power came back after a cut ([atEpochSeconds]); [outlets] were on before and are still off. */
+data class PowerBack(val atEpochSeconds: Long, val outlets: List<Int>)
 
 data class Strip(
     val id: String,
@@ -39,6 +46,7 @@ data class Strip(
     val locked: Boolean = false,
     /** Commands waiting until the strip is back online: outlet (0 = all) to on/off. */
     val pending: Map<Int, Boolean> = emptyMap(),
+    val powerBack: PowerBack? = null,
 ) {
     val anyOn: Boolean get() = outlets.any { it.on }
 }
@@ -225,6 +233,9 @@ object StateJson {
         pending = o.optJSONObject("pending")?.let { p ->
             p.keys().asSequence().mapNotNull { k -> k.toIntOrNull()?.let { it to p.optBoolean(k) } }.toMap()
         } ?: emptyMap(),
+        powerBack = o.optJSONObject("power_back")?.let { b ->
+            PowerBack(b.optLong("at"), b.optJSONArray("on")?.let { a -> (0 until a.length()).map { a.getInt(it) } } ?: emptyList())
+        }?.takeIf { it.outlets.isNotEmpty() },
     )
 
     private fun parseOutlet(o: JSONObject) = Outlet(
@@ -238,6 +249,8 @@ object StateJson {
         icon = o.stringOrNull("icon") ?: "plug",
         favorite = o.optBoolean("favorite", false),
         todayKwh = o.optDouble("today_kwh", 0.0),
+        afterPower = o.doubleOrNull("after_power")?.toInt(),
+        restoreAtEpochSeconds = o.doubleOrNull("restore_at")?.toLong(),
     )
 
     fun parseSchedules(a: JSONArray?): List<Schedule> = a.objects().map { s ->

@@ -112,6 +112,20 @@ header .hello{color:var(--soft);font-size:13px}
 [dir="rtl"] .ct i{background:linear-gradient(270deg,#ff7a3d,#ffb347)}
 .ct i.rest{background:var(--faint)}
 .cmp .none{color:var(--soft);font-size:13px}
+.pback{margin-top:12px;padding:12px;border-radius:16px;background:rgba(255,200,87,.12);font-size:13px}
+.pback b{display:block;margin-bottom:2px}
+.pback span{display:block;color:var(--soft);font-size:12px}
+.pback .btn{margin-top:8px;width:100%}
+.osheet{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
+.osheet .box{width:min(480px,100%);background:#1e130d;border:1px solid var(--stroke);border-radius:24px 24px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+.osheet h3{margin:0 0 12px;font-size:17px}
+.osheet h4{margin:14px 0 4px;font-size:14px}
+.osheet p{margin:0 0 8px;color:var(--soft);font-size:12px}
+.osheet .chips{display:flex;flex-wrap:wrap;gap:6px}
+.osheet .chips button{border:1px solid var(--stroke);background:var(--fill);border-radius:999px;padding:7px 12px;font:inherit;font-size:13px;color:var(--text)}
+.osheet .chips button.on{background:linear-gradient(135deg,#ff7a3d,#ffb347);color:#2a0e00;border-color:transparent;font-weight:700}
+.osheet .warn{color:var(--amber);font-size:12px;margin-top:6px}
+.osheet .row{display:flex;gap:8px;margin-top:16px}
 .acct{margin-top:14px;padding:16px}
 .acct h2{margin:0 0 6px;font-size:16px}
 .acct .hint{color:var(--soft);font-size:12px;margin:0 0 10px}
@@ -242,7 +256,11 @@ const L = {
        homeEmpty: "محدش تاني ليه صلاحية لسه.", homeAdd: "＋ إضافة حد من البيت", askName: "اسمه إيه؟",
        askControl: "يقدر يشغّل ويطفي؟\nموافق = تحكم · إلغاء = مشاهدة بس", rControl: "🎛 تحكم", rView: "👁 مشاهدة بس",
        mkView: "مشاهدة بس", mkControl: "اسمح بالتحكم", newCode: "كود جديد", removeP: "شيل", removeAsk: "تشيل صلاحية {n}؟",
-       codeShow: "ده كود {n} (بيظهر المرة دي بس) — انسخه وابعتهوله:", homeOf: "من بيت"},
+       codeShow: "ده كود {n} (بيظهر المرة دي بس) — انسخه وابعتهوله:", homeOf: "من بيت",
+       pBack: "💡 الكهرباء رجعت الساعة {t}. المخارج دي كانت شغالة ولسه مقفولة:", pSoon: "{o} هيشتغل لوحده الساعة {t}",
+       pRestore: "شغّل اللي كان شغال", afterT: "⚡ بعد رجوع الكهرباء", afterH: "لو المخرج كان شغال والكهرباء قطعت ورجعت، يعمل إيه؟",
+       aOff: "يفضل مقفول", aNow: "يرجع على طول", aMin: "بعد {m} دقايق", aFridge: "للتلاجة والتكييف: أحسن تستنى 3 لـ 5 دقايق علشان الكهرباء تستقر.",
+       renameBtn: "✏️ تغيير الاسم", close: "إغلاق", backAt: "هيرجع"},
   en: {lang: "العربية", hello_m: "Good morning", hello_e: "Good evening", now: "Using now", today: "Today", month: "This month",
        scenes: "Scenes", strip: "Strip", outlet: "Outlet", online: "online", offline: "offline", allOn: "All on", allOff: "All off",
        timer: "Timer", rename: "New name (empty = default):", timerAsk: "Switch after how many minutes? (0 = cancel)", turnsOn: "on at", turnsOff: "off at",
@@ -275,7 +293,11 @@ const L = {
        homeEmpty: "Nobody else has access yet.", homeAdd: "＋ Add someone from home", askName: "Their name?",
        askControl: "May they switch outlets?\nOK = control · Cancel = view only", rControl: "🎛 Control", rView: "👁 View only",
        mkView: "View only", mkControl: "Allow control", newCode: "New code", removeP: "Remove", removeAsk: "Remove {n}'s access?",
-       codeShow: "{n}'s code (shown only this once). Copy it and send it to them:", homeOf: "In the home of"}
+       codeShow: "{n}'s code (shown only this once). Copy it and send it to them:", homeOf: "In the home of",
+       pBack: "💡 Power came back at {t}. These outlets were on and are still off:", pSoon: "{o} turns on by itself at {t}",
+       pRestore: "Turn back on what was on", afterT: "⚡ After a power cut", afterH: "If this outlet was on when the power went out, what should it do when it comes back?",
+       aOff: "Stay off", aNow: "Back on at once", aMin: "After {m} min", aFridge: "For a fridge or AC, wait 3 to 5 minutes so the power settles.",
+       renameBtn: "✏️ Rename", close: "Close", backAt: "back on"}
 };
 const ICON = {plug:"🔌",kettle:"☕",router:"📶",tv:"📺",ac:"❄️",lamp:"💡",heater:"🔥",fan:"🌀",fridge:"🧊",washer:"🧺",charger:"🔋",
               computer:"💻",speaker:"🔊",camera:"📷",microwave:"🍲",iron:"👔"};
@@ -478,12 +500,13 @@ function stripHtml(x) {
     <div class="strip-head"><div class="n"><h3>${esc(name)} <span class="dot${x.online ? " on" : ""}"></span>
       ${x.locked ? '<span class="lock">🔒</span>' : ""}</h3><div style="color:var(--soft);font-size:12px">${x.online ? t("online") : t("offline")}</div></div>
       <div class="w"><bdi dir="ltr">${num(x.watts)} <small>W</small></bdi></div></div>
-    <div class="pills">${pills}</div>
+    <div class="pills">${pills}</div>${powerBackHtml(x)}
     <div class="actions"><button class="btn primary" data-sw="${x.id}" data-o="0" data-on="1">${t("allOn")}</button>
       <button class="btn" data-sw="${x.id}" data-o="0" data-on="0">${t("allOff")}</button>
       <button class="btn small" data-timer="${x.id}" data-o="0" data-on="${x.outlets.some(o => o.on) ? 0 : 1}">⏱</button></div>
     <div class="tiles">${x.outlets.map(o => {
-      const key = x.id + "/" + o.index, tm = o.timer ? `${o.timer.on ? t("turnsOn") : t("turnsOff")} ${clock(o.timer.at)}` : "";
+      const key = x.id + "/" + o.index, tm = o.timer ? `${o.timer.on ? t("turnsOn") : t("turnsOff")} ${clock(o.timer.at)}`
+        : o.restore_at ? `⚡ ${t("backAt")} ${clock(o.restore_at)}` : "";
       return `<div class="tile${o.on ? " on" : ""}${busy.has(key) ? " busy" : ""}" data-sw="${x.id}" data-o="${o.index}" data-on="${o.on ? 0 : 1}" role="button" tabindex="0">
         <div class="e">${ICON[o.icon] || "🔌"}</div><div class="sw"></div>
         <div class="nm">${esc(o.name || t("outlet") + " " + o.index)}</div>
@@ -491,6 +514,55 @@ function stripHtml(x) {
         <div class="tm">${esc(tm)}</div>
         <button class="more" data-more="${x.id}" data-o="${o.index}" data-on="${o.on ? 0 : 1}" aria-label="more">⋯</button></div>`;
     }).join("")}</div></section>`;
+}
+
+const outletLabel = o => o.name || `${t("outlet")} ${o.index}`;
+function powerBackHtml(x) {
+  const b = x.power_back;
+  if (!b || !b.on || !b.on.length) return "";
+  const outs = x.outlets.filter(o => b.on.includes(o.index));
+  return `<div class="pback"><b>${esc(t("pBack").replace("{t}", clock(b.at)))}</b><span>${outs.map(o => esc(outletLabel(o))).join("، ")}</span>` +
+    outs.filter(o => o.restore_at).map(o => `<span>${esc(t("pSoon").replace("{o}", outletLabel(o)).replace("{t}", clock(o.restore_at)))}</span>`).join("") +
+    `<button class="btn primary" data-restore="${esc(x.id)}">${t("pRestore")}</button></div>`;
+}
+
+// the ⋯ of an outlet: rename, and what it does after a power cut (kept outside #root, which redraws every refresh)
+const AFTER_POWER = [null, 0, 3, 5, 10, 30];
+function outletSheet(id, index) {
+  const x = state.strips.find(s => s.id === id), o = x && x.outlets.find(q => q.index === index);
+  if (!o) return;
+  document.querySelector(".osheet")?.remove();
+  const el = document.createElement("div");
+  el.className = "osheet";
+  el.innerHTML = `<div class="box" role="dialog"><h3>${ICON[o.icon] || "🔌"} ${esc(outletLabel(o))}</h3>
+    <button class="btn" data-act="rename" style="width:100%">${t("renameBtn")}</button>
+    <h4>${t("afterT")}</h4><p>${t("afterH")}</p><div class="chips">` +
+    AFTER_POWER.map(m => `<button data-after="${m === null ? "" : m}" class="${o.after_power === m ? "on" : ""}">${
+      m === null ? t("aOff") : m === 0 ? t("aNow") : t("aMin").replace("{m}", m)}</button>`).join("") +
+    `</div>${o.icon === "fridge" || o.icon === "ac" ? `<div class="warn">${t("aFridge")}</div>` : ""}
+    <div class="row"><button class="btn" data-act="close">${t("close")}</button></div></div>`;
+  el.addEventListener("click", async ev => {
+    ev.stopPropagation();
+    if (ev.target === el || ev.target.closest("[data-act=close]")) { el.remove(); return; }
+    if (ev.target.closest("[data-act=rename]")) {
+      el.remove();
+      const n = prompt(t("rename"), o.name || ""); if (n === null) return;
+      await api("/api/rename", {strip: id, outlet: index, name: n}).catch(e => toast(t("fail") + e.message));
+      refresh(); return;
+    }
+    const a = ev.target.closest("[data-after]");
+    if (a) {
+      if (readOnly()) { toast("👁 " + t("viewOnly")); return; }
+      const v = a.dataset.after === "" ? null : +a.dataset.after;
+      try {
+        await api("/api/meta", {strip: id, outlet: index, after_power: v}); o.after_power = v;
+        el.querySelectorAll("[data-after]").forEach(b => b.classList.toggle("on", b === a));
+        toast(t("done"));
+      } catch (e) { toast(t("fail") + e.message); }
+      refresh();
+    }
+  });
+  document.body.appendChild(el);
 }
 
 function readOnly() { return !!(state && state.me && state.me.role === "view"); }
@@ -638,7 +710,13 @@ document.addEventListener("click", async ev => {
   if (acc) { accountClick(acc); return; }
   const cmp = ev.target.closest("[data-cmp]");
   if (cmp) { cmpRange = cmp.dataset.cmp; save("dsp-cmp", cmpRange); render(); loadCompare(true); return; }
-  if (readOnly() && ev.target.closest("[data-sw],[data-timer],[data-more],[data-scene]")) { toast("👁 " + t("viewOnly")); return; }
+  if (readOnly() && ev.target.closest("[data-sw],[data-timer],[data-scene],[data-restore]")) { toast("👁 " + t("viewOnly")); return; }
+  const rs = ev.target.closest("[data-restore]");
+  if (rs) {
+    try { await withPin(rs.dataset.restore, pin => api("/api/strips/restore", {strip: rs.dataset.restore, pin})); toast(t("done")); }
+    catch (e) { toast(t("fail") + e.message); }
+    refresh(); return;
+  }
   const ap = ev.target.closest("[data-approve]"), bl = ev.target.closest("[data-block]");
   if (ap || bl) {
     if (bl && !confirm(t("blockAsk"))) return;
@@ -651,8 +729,7 @@ document.addEventListener("click", async ev => {
   const more = ev.target.closest("[data-more]");
   if (more) {
     ev.stopPropagation();
-    const id = more.dataset.more, o = +more.dataset.o;
-    const n = prompt(t("rename")); if (n !== null) { await api("/api/rename", {strip: id, outlet: o, name: n}).catch(e => toast(t("fail") + e.message)); refresh(); }
+    outletSheet(more.dataset.more, +more.dataset.o);
     return;
   }
   const sc = ev.target.closest("[data-scene]");

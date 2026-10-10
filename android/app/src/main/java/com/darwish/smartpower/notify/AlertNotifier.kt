@@ -87,6 +87,13 @@ object AlertNotifier {
         val (title, text) = when (e.kind) {
             "offline" -> context.getString(R.string.notif_offline_title) to context.getString(R.string.notif_offline, stripName)
             "online" -> context.getString(R.string.notif_online_title) to context.getString(R.string.notif_online, stripName)
+            "power_back" -> context.getString(R.string.notif_power_back_title) to context.getString(
+                R.string.notif_power_back, stripName,
+                if (e.value < 1) context.getString(R.string.under_a_minute)
+                else context.getString(R.string.minutes_value, e.value.toInt()),
+            )
+            "power_restore" -> context.getString(R.string.notif_power_restore_title) to
+                context.getString(R.string.notif_power_restore, outletName, stripName)
             "temp" -> context.getString(R.string.notif_temp_title) to context.getString(R.string.notif_temp, outletName, stripName, value)
             "power" -> context.getString(R.string.notif_power_title) to context.getString(R.string.notif_power, stripName, value)
             "rule_power_off", "rule_temp_off", "rule_power", "rule_temp" -> context.getString(R.string.notif_rule_title) to

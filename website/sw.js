@@ -1,6 +1,6 @@
 // Darwish Smart Power service worker: the page shell works offline and opens instantly;
 // live data (/api/...) and the APK always come from the network.
-const CACHE = "dsp-v19";
+const CACHE = "dsp-v20";
 const SHELL = ["/", "/panel", "/manifest.webmanifest", "/icons/icon.svg", "/icons/icon-192.png",
                "/icons/icon-512.png", "/icons/maskable-512.png", "/icons/apple-touch-icon.png", "/icons/favicon-32.png",
                "/icons/icon-admin-192.png", "/icons/icon-admin-512.png", "/icons/apple-touch-icon-admin.png"];

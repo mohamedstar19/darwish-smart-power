@@ -51,6 +51,8 @@ MAX_MISSED_POLLS = 3                     # unanswered reads before the connectio
 TIMER_GRACE = 600                        # drop a timer that could not run this long after it was due
 MAX_BODY = 16 * 1024
 OFFLINE_ALERT_AFTER = 90                 # seconds offline before an "offline" alert
+POWER_BACK_KEEP = 12 * 3600              # how long "turn back on what was on" stays offered after a power cut
+MAX_AFTER_POWER = 120                    # minutes an outlet may wait before turning back on after a power cut
 ALERT_REPEAT = {"temp": 3600, "power": 1800, "trip": 1800}
 TRIP_OVERLOAD, TRIP_OVERHEAT = 1, 2      # the strip's own protection cut an outlet off
 MAX_EVENTS = 500
@@ -239,6 +241,10 @@ class Store:
         # hide them: {MAC: {"first", "last", "address", "mac2"}}
         self.announced: List[Dict[str, Any]] = []
         self.waiting: Dict[str, Dict[str, Any]] = {}
+        # power cuts: {MAC: {"since", "on": [outlets on when it went], "back"?: when it came back}} and outlets
+        # waiting to turn back on after one: {"MAC/outlet": when}
+        self.outages: Dict[str, Dict[str, Any]] = {}
+        self.restores: Dict[str, float] = {}
         # app downloads: total, per day, and today's (hashed) addresses so a retry is not counted twice
         self.stats: Dict[str, Any] = {}
         # the owner's admin page lives at a random, unguessable address instead of /admin
@@ -260,6 +266,8 @@ class Store:
             self.expected = dict(data.get("expected", {}))
             self.announced = list(data.get("announced", []))
             self.waiting = dict(data.get("waiting", {}))
+            self.outages = dict(data.get("outages", {}))
+            self.restores = dict(data.get("restores", {}))
             for mac, at in data.get("first_seen", {}).items():     # kept by one earlier version
                 self.waiting.setdefault(mac, {"first": at, "last": at, "address": "", "mac2": ""})
             self.stats = dict(data.get("stats", {}))
@@ -281,6 +289,7 @@ class Store:
                            "settings": self.settings, "approved": self.approved,
                            "blocked_strips": self.blocked_strips, "expected": self.expected,
                            "announced": self.announced, "waiting": self.waiting,
+                           "outages": self.outages, "restores": self.restores,
                            "stats": self.stats, "admin_path": self.admin_path, "oauth": self.oauth},
                           ensure_ascii=False, indent=1)
         fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), prefix=".smartpower-")
@@ -482,20 +491,29 @@ class Store:
     def outlet_meta(self, mac: str, outlet: int) -> Dict[str, Any]:
         return self.meta.get(mac, {}).get("outlets", {}).get(str(outlet), {})
 
+    def after_power(self, mac: str, outlet: int) -> Optional[int]:
+        """Minutes after a power cut before this outlet goes back on (if it was on); None = stays off."""
+        value = self.outlet_meta(mac, outlet).get("after_power")
+        return int(value) if isinstance(value, (int, float)) and value >= 0 else None
+
     def set_meta(self, mac: str, outlet: int, room: Optional[str] = None,
-                 icon: Optional[str] = None, favorite: Optional[bool] = None) -> None:
+                 icon: Optional[str] = None, favorite: Optional[bool] = None, after_power: Any = "keep") -> None:
         entry = self.meta.setdefault(mac, {})
         if room is not None:
             if room:
                 entry["room"] = room
             else:
                 entry.pop("room", None)
-        if outlet and (icon is not None or favorite is not None):
+        if outlet and (icon is not None or favorite is not None or after_power != "keep"):
             o = entry.setdefault("outlets", {}).setdefault(str(outlet), {})
             if icon is not None:
                 o["icon"] = icon
             if favorite is not None:
                 o["fav"] = favorite
+            if after_power is None:
+                o.pop("after_power", None)
+            elif after_power != "keep":
+                o["after_power"] = int(after_power)
         self.save()
 
     # schedules, kind "time": {"id", "strip", "outlets", "on", "time": "HH:MM", "days": [0..6 = Mon..Sun], "enabled"}
@@ -871,6 +889,15 @@ class Strip:
     def online(self) -> bool:
         return self.link is not None and not self.link.closed
 
+    def power_back(self, store: Store) -> Optional[Dict[str, Any]]:
+        """After a power cut, while some outlet that was on is still off: when the power came back and
+        which outlets were on, so the app can offer to turn them back on."""
+        out = store.outages.get(self.mac)
+        if not out or not out.get("back") or time.time() - out["back"] > POWER_BACK_KEEP or not self.online:
+            return None
+        off = [n for n in out.get("on", []) if n in self.outlets and not self.outlets[n].on]
+        return {"at": int(out["back"]), "since": int(out.get("since", 0)), "on": off} if off else None
+
     def to_json(self, store: Store, today: Optional[Dict[Tuple[str, int], float]] = None) -> Dict[str, Any]:
         watts = round(sum(o.watts for o in self.outlets.values()), 2)
         all_timer = store.timer(self.mac, 0)
@@ -893,6 +920,7 @@ class Strip:
             "amps": round(watts / self.volts, 2) if self.volts else None,
             "rssi": self.rssi,
             "timer": all_timer,
+            "power_back": self.power_back(store),
             "outlets": [
                 {
                     "index": o.index,
@@ -904,6 +932,8 @@ class Strip:
                     "timer": store.timer(self.mac, o.index),
                     "icon": store.outlet_meta(self.mac, o.index).get("icon", "plug"),
                     "favorite": bool(store.outlet_meta(self.mac, o.index).get("fav", False)),
+                    "after_power": store.after_power(self.mac, o.index),
+                    "restore_at": int(store.restores.get("%s/%d" % (self.mac, o.index), 0)) or None,
                     "today_kwh": round(today.get((self.mac, o.index), 0.0) / 1000.0, 3),
                 }
                 for o in self.outlets.values()
@@ -1335,6 +1365,12 @@ class Hub:
         if strip is not None and strip.link is link:
             strip.link = None
             log("[strip] %s offline" % self.label(strip))
+            out = self.store.outages.get(strip.mac)
+            if self.store.is_approved(strip.mac) and (out is None or out.get("back")):
+                # remember what was on; if the power was cut, the strip comes back with every outlet off
+                self.store.outages[strip.mac] = {"since": int(time.time()),
+                                                 "on": [n for n, o in strip.outlets.items() if o.on]}
+                self.store.save()
             entry = self.store.waiting.get(strip.mac)
             if entry is not None and not self.store.is_approved(strip.mac):
                 entry["last"] = strip.last_seen
@@ -1353,11 +1389,12 @@ class Hub:
 
     async def came_online(self, link: "StripLink") -> None:
         """Read the state, then run whatever was asked while the strip was offline."""
-        await link.read_state()
+        state_read = await link.read_state()
         strip = link.strip
         if strip is None:
             return
         queued = self.store.take_pending(strip.mac, time.time())
+        self.after_outage(strip, time.time(), list(queued), known=state_read)
         for on in (True, False):
             outlets = [n for n, want in queued.items() if want == on]
             if outlets and not link.closed:
@@ -1365,6 +1402,73 @@ class Hub:
                 ok = await link.switch(targets, on)
                 log("[queue] %s outlets %s -> %s (%s)" % (self.label(strip), targets, "on" if on else "off",
                                                           "done" if ok else "not confirmed"))
+
+    def after_outage(self, strip: Strip, now: float, queued: Optional[List[int]] = None, known: bool = True) -> None:
+        """Back after going offline. Outlets that were on and are now all off mean the power was cut (the strip
+        starts with every outlet off): say the power is back, and line up the outlets set to turn back on."""
+        out = self.store.outages.get(strip.mac)
+        if not out or out.get("back"):
+            return
+        out["back"] = int(now)
+        was_on = [n for n in out.get("on", []) if n in strip.outlets]
+        if not known or not was_on or any(o.on for o in strip.outlets.values()):
+            self.store.save()                       # only the network dropped: nothing to do
+            return
+        self.alerted_offline.pop(strip.mac, None)   # this message says it is back, not a separate "online"
+        minutes_off = max(0.0, (now - out.get("since", now)) / 60.0)
+        self.history.add_event("power_back", strip.mac, 0, round(minutes_off, 1), now=now)
+        log("[power] %s: power back after %.0f min; outlets %s were on" % (self.label(strip), minutes_off, was_on))
+        for n in was_on:
+            delay = self.store.after_power(strip.mac, n)
+            if delay is not None and not (queued and (n in queued or 0 in queued)):
+                self.store.restores["%s/%d" % (strip.mac, n)] = now + delay * 60
+        self.store.save()
+
+    async def run_restores(self, now: Optional[float] = None) -> None:
+        """Turns back on the outlets whose wait after a power cut is over."""
+        now = time.time() if now is None else now
+        for key, at in list(self.store.restores.items()):
+            if at > now:
+                continue
+            mac, _, n = key.partition("/")
+            strip = self.find(mac)
+            if strip is None:
+                self.store.restores.pop(key, None)
+                self.store.save()
+                continue
+            if not strip.online:
+                if now - at > POWER_BACK_KEEP:          # gone again for long: forget it
+                    self.store.restores.pop(key, None)
+                    self.store.save()
+                continue
+            self.store.restores.pop(key, None)
+            self.store.save()
+            try:
+                code, body = await self.switch(mac, int(n), True, internal=True)
+            except (ConnectionError, OSError) as err:
+                body = {"error": str(err)}
+            delay = self.store.after_power(mac, int(n)) or 0
+            self.history.add_event("power_restore", mac, int(n), delay, now=now)
+            log("[power] %s outlet %s back on (%s)" % (self.label(strip), n, body.get("error", "sent")))
+
+    def cancel_restores(self, mac: str, outlets: List[int]) -> None:
+        """Someone switched these outlets by hand: their own wait after a power cut no longer applies."""
+        keys = [k for k in self.store.restores if k.partition("/")[0] == mac
+                and (0 in outlets or int(k.partition("/")[2]) in outlets)]
+        for k in keys:
+            self.store.restores.pop(k, None)
+        if keys:
+            self.store.save()
+
+    async def restore_after_power(self, strip_id: Any, pin: Any = None) -> Tuple[int, Dict[str, Any]]:
+        """"Turn back on what was on": the outlets that were on before the power cut."""
+        strip = self.find(strip_id)
+        if strip is None:
+            return 404, {"error": "unknown strip"}
+        back = strip.power_back(self.store)
+        if not back:
+            return 409, {"error": "nothing to turn back on"}
+        return await self.switch(strip.mac, 0, True, outlets=back["on"], pin=pin)
 
     def check_pin(self, strip: Strip, pin: Any) -> Optional[Tuple[int, Dict[str, Any]]]:
         """None when the strip is not locked or the PIN is right, else the error reply."""
@@ -2139,6 +2243,8 @@ class Hub:
                 return denied
         wanted = outlets if outlets is not None else [outlet]
         targets = list(OUTLETS) if 0 in wanted else wanted
+        if not internal:
+            self.cancel_restores(strip.mac, targets)
         if not strip.online or strip.link is None:
             self.store.queue(strip.mac, [0] if 0 in wanted else targets, on, time.time())
             return 202, {"ok": True, "queued": True, "confirmed": False, "strip": self.strip_json(strip)}
@@ -2195,8 +2301,18 @@ class Hub:
         if room is not None:
             room = str(room).strip()[:30]
         favorite = req.get("favorite")
+        after_power: Any = "keep"
+        if "after_power" in req:
+            after_power = req["after_power"]
+            if after_power is not None and (isinstance(after_power, bool) or not isinstance(after_power, (int, float))
+                                            or not 0 <= after_power <= MAX_AFTER_POWER):
+                return 400, {"error": "after_power must be null (stay off) or 0-%d minutes" % MAX_AFTER_POWER}
+            if not outlet:
+                return 400, {"error": "after_power is set per outlet"}
+            if after_power is None:
+                self.cancel_restores(strip.mac, [outlet])
         self.store.set_meta(strip.mac, outlet, room=room, icon=icon,
-                            favorite=None if favorite is None else bool(favorite))
+                            favorite=None if favorite is None else bool(favorite), after_power=after_power)
         return 200, {"ok": True, "strip": self.strip_json(strip)}
 
     async def save_schedule(self, req: Dict[str, Any], now: Optional[float] = None) -> Tuple[int, Dict[str, Any]]:
@@ -2373,7 +2489,10 @@ class Hub:
                     self.alerted_offline[mac] = True
                     self.history.add_event("offline", mac, now=now)
                 continue
-            if self.alerted_offline.pop(mac, False):
+            out = self.store.outages.get(mac)
+            if out and not out.get("back"):
+                pass                                # just reconnected: came_online tells a power cut from a dropout
+            elif self.alerted_offline.pop(mac, False):
                 self.history.add_event("online", mac, now=now)
             for o in strip.outlets.values():
                 if o.temp_c is not None and o.temp_c >= float(settings.get("max_temp_c", 60)):
@@ -2449,6 +2568,7 @@ class Hub:
             try:
                 self.check_alerts()
                 await self.run_watches()
+                await self.run_restores()
             except sqlite3.Error as err:
                 log("[alerts] %s" % err)
             await asyncio.sleep(POLL_EVERY)
@@ -3042,6 +3162,8 @@ class WebHandler(BaseHTTPRequestHandler):
                 code, body = self.server.run_on_loop(hub.delete_scene(str(req.get("id", ""))))
             elif path == "/api/scenes/run":
                 code, body = self.server.run_on_loop(hub.run_scene(str(req.get("id", "")), pin))
+            elif path == "/api/strips/restore":
+                code, body = self.server.run_on_loop(hub.restore_after_power(strip_id, pin))
             elif path == "/api/lock":
                 code, body = self.server.run_on_loop(hub.set_lock(strip_id, req))
             elif path == "/api/settings":
@@ -4160,11 +4282,58 @@ async def selftest() -> None:
         if relays[2]:
             break
     assert relays[2] and not hub.store.pending
+
+    # a power cut: the strip comes back with every outlet off. The app hears the power is back, outlets set to
+    # come back on do (now or after their wait), and "turn back on what was on" handles the rest
+    assert (await hub.set_meta(S, 3, {"after_power": 0}))[0] == 200
+    assert (await hub.set_meta(S, 1, {"after_power": 5}))[0] == 200
+    assert (await hub.set_meta(S, 4, {"after_power": 999}))[0] == 400
+    assert (await hub.set_meta(S, 0, {"after_power": 5}))[0] == 400
+    assert (await hub.switch(S, 0, True, outlets=[1, 3, 4]))[0] == 200 and all(relays[n] for n in OUTLETS)
+
+    async def reconnect(power_cut: bool) -> Any:
+        strip_task.cancel()
+        writer.close()
+        for _ in range(30):
+            await asyncio.sleep(0.1)
+            if not strip.online:
+                break
+        if power_cut:
+            for n in OUTLETS:
+                relays[n] = False
+        r, w = await asyncio.open_connection("127.0.0.1", port)
+        task = asyncio.ensure_future(fake_strip(r, w))
+        w.write(b"up:bootinfo:LGU+-TAP-HW002;a1b2c3d4e5f6;a1b2c3d4e5f7;0.1.54-1.0.66;connect\r\n")
+        await w.drain()
+        for _ in range(40):
+            await asyncio.sleep(0.1)
+            if hub.store.outages.get(S, {}).get("back"):
+                break
+        return task, w
+    assert hub.store.outages.get(S, {}).get("back")                 # the earlier reconnect was a network dropout
+    events_before = (await hub.events(0))["last_id"]
+    strip_task, writer = await reconnect(power_cut=False)          # the network drops, the power stays on
+    assert (await hub.events(events_before))["events"] == [] and not hub.store.restores
+    strip_task, writer = await reconnect(power_cut=True)
+    events = (await hub.events(events_before))["events"]
+    assert [e["kind"] for e in events] == ["power_back"] and not any(relays[n] for n in OUTLETS)
+    assert set(hub.store.restores) == {S + "/1", S + "/3"}           # 2 and 4 wait for the user's OK
+    shown = next(x for x in (await hub.snapshot())["strips"] if x["id"] == S)
+    assert shown["power_back"]["on"] == [1, 2, 3, 4] and shown["outlets"][0]["after_power"] == 5
+    assert shown["outlets"][0]["restore_at"] and shown["outlets"][3]["after_power"] is None
+    await hub.run_restores()
+    assert relays[3] and not relays[1]
+    await hub.run_restores(time.time() + 301)
+    assert relays[1] and not relays[2] and not relays[4] and not hub.store.restores
+    assert [e["kind"] for e in (await hub.events(events_before))["events"]][:2] == ["power_restore", "power_restore"]
+    status, res = await hub.restore_after_power(S)
+    assert status == 200 and relays[2] and relays[4] and res["strip"]["power_back"] is None
+    assert (await hub.restore_after_power(S))[0] == 409
     strip_task.cancel()
     writer.close()
     srv.close()
     print("selftest OK: protocol, switching, button events, names, timers, energy history, rooms/icons, "
-          "schedules, cycles, scenes, PIN locks, offline queue, alerts, settings, Alexa, family sharing, protection, strip approval, customer accounts, admin, Alexa skill, web API + token")
+          "schedules, cycles, scenes, PIN locks, offline queue, power cuts, alerts, settings, Alexa, family sharing, protection, strip approval, customer accounts, admin, Alexa skill, web API + token")
 
 
 # --------------------------------------------------------------------------- main

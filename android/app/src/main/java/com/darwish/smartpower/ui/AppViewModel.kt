@@ -230,6 +230,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         replaceStrip(client.setMeta(stripId, outlet, icon = icon, favorite = favorite))
     }
 
+    fun setAfterPower(stripId: String, outlet: Int, minutes: Int?) = guarded(stripId) { client, _ ->
+        replaceStrip(client.setAfterPower(stripId, outlet, minutes))
+    }
+
+    /** "Turn back on what was on" after a power cut. */
+    fun restoreAfterPower(stripId: String) {
+        if (viewOnly()) return
+        guarded(stripId) { client, pin ->
+            replaceStrip(client.restoreAfterPower(stripId, pin))
+            refresh()
+        }
+    }
+
     /** Sets or changes the PIN ([oldPin] when it is already locked); an empty [pin] removes it. */
     fun setLock(stripId: String, pin: String, oldPin: String?, useFingerprint: Boolean) {
         val client = client() ?: return

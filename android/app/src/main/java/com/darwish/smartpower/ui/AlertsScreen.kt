@@ -75,6 +75,8 @@ fun AlertsScreen(vm: AppViewModel, onBack: () -> Unit) {
                 val (emoji, text) = when (e.kind) {
                     "offline" -> "📴" to stringResource(R.string.notif_offline, stripLabel)
                     "online" -> "✅" to stringResource(R.string.notif_online, stripLabel)
+                    "power_back" -> "💡" to stringResource(R.string.notif_power_back, stripLabel, minutesText(e.value))
+                    "power_restore" -> "🔌" to stringResource(R.string.notif_power_restore, outletLabel, stripLabel)
                     "temp" -> "🌡️" to stringResource(R.string.notif_temp, outletLabel, stripLabel, value)
                     "power" -> "⚡" to stringResource(R.string.notif_power, stripLabel, value)
                     "rule_power_off", "rule_temp_off", "rule_power", "rule_temp" -> "🛡️" to stringResource(
@@ -101,3 +103,8 @@ fun AlertsScreen(vm: AppViewModel, onBack: () -> Unit) {
         }
     }
 }
+
+/** How long the power was off, for the "power is back" line. */
+@Composable
+private fun minutesText(minutes: Double): String =
+    if (minutes < 1) stringResource(R.string.under_a_minute) else stringResource(R.string.minutes_value, minutes.toInt())

@@ -47,7 +47,10 @@ import com.darwish.smartpower.R
 import com.darwish.smartpower.data.Outlet
 import com.darwish.smartpower.data.Strip
 
-/** Long-press on an outlet: name, icon, favourite, timer. */
+/** After a power cut: stays off, back on at once, or after a few minutes (a fridge's compressor wants a pause). */
+private val AFTER_POWER_CHOICES = listOf(null, 0, 3, 5, 10, 30)
+
+/** Long-press on an outlet: name, icon, favourite, timer, what to do after a power cut. */
 @Composable
 fun OutletSheet(vm: AppViewModel, strip: Strip, outlet: Outlet, onClose: () -> Unit) {
     var renaming by remember { mutableStateOf(false) }
@@ -71,6 +74,28 @@ fun OutletSheet(vm: AppViewModel, strip: Strip, outlet: Outlet, onClose: () -> U
                 Spacer(Modifier.width(14.dp))
                 Text(stringResource(R.string.favorite), Modifier.weight(1f))
                 Switch(checked = outlet.favorite, onCheckedChange = { vm.setOutletLook(strip.id, outlet.index, favorite = it) })
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(stringResource(R.string.after_power_title), style = SectionTitleStyle)
+            Text(stringResource(R.string.after_power_hint), color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                AFTER_POWER_CHOICES.forEach { minutes ->
+                    FilterChip(
+                        selected = outlet.afterPower == minutes,
+                        onClick = { vm.setAfterPower(strip.id, outlet.index, minutes) },
+                        label = {
+                            Text(when (minutes) {
+                                null -> stringResource(R.string.after_power_off)
+                                0 -> stringResource(R.string.after_power_now)
+                                else -> stringResource(R.string.after_power_minutes, minutes)
+                            })
+                        },
+                    )
+                }
+            }
+            if (outlet.icon == "fridge" || outlet.icon == "ac") {
+                Text(stringResource(R.string.after_power_fridge), color = Glass.Amber, style = MaterialTheme.typography.labelSmall)
             }
             Spacer(Modifier.height(12.dp))
             Text(stringResource(R.string.icon), style = SectionTitleStyle)

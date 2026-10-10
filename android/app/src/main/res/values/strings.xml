@@ -266,8 +266,8 @@
 
     <!-- notifications -->
     <string name="notif_channel">Strip alerts</string>
-    <string name="notif_offline_title">Strip offline</string>
-    <string name="notif_offline">%1$s lost its connection.</string>
+    <string name="notif_offline_title">⚡ Strip offline</string>
+    <string name="notif_offline">%1$s went offline: either the power is cut or the internet is down.</string>
     <string name="notif_online_title">Strip back online</string>
     <string name="notif_online">%1$s is connected again.</string>
     <string name="notif_temp_title">Outlet too hot</string>
@@ -409,4 +409,19 @@
     <string name="bill_own">This price and these limits are for your account only.</string>
     <string name="bill_default">This is the default price. If you change it, it applies to your account only.</string>
     <string name="bill_reset">Use the default price</string>
+    <string name="notif_power_back_title">💡 Power is back</string>
+    <string name="notif_power_back">Power is back at %1$s (it was off %2$s). Every outlet is off and waits for your OK.</string>
+    <string name="notif_power_restore_title">🔌 Outlet back on</string>
+    <string name="notif_power_restore">%1$s on %2$s is back on after the power cut.</string>
+    <string name="under_a_minute">under a minute</string>
+    <string name="minutes_value">about %1$d min</string>
+    <string name="after_power_title">⚡ After a power cut</string>
+    <string name="after_power_hint">If this outlet was on when the power went out, what should it do when it comes back?</string>
+    <string name="after_power_off">Stay off</string>
+    <string name="after_power_now">Back on at once</string>
+    <string name="after_power_minutes">After %1$d min</string>
+    <string name="after_power_fridge">For a fridge or AC, wait 3 to 5 minutes so the power settles and the compressor is safe.</string>
+    <string name="power_back_banner">💡 Power came back at %1$s. These outlets were on and are still off:</string>
+    <string name="power_back_soon">%1$s turns on by itself at %2$s</string>
+    <string name="power_back_restore">Turn back on what was on</string>
 </resources>
