@@ -283,28 +283,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- family sharing (owner only)
 
+    /** A customer manages the people of their own home; the owner manages the server's family. */
+    private val home: Boolean get() = _state.value.me.isCustomer
+
     fun loadMembers() = act { client ->
-        val list = client.members()
+        val list = client.members(home)
         _state.update { it.copy(members = list) }
     }
 
     fun addMember(name: String, role: String, strips: List<String>) = act { client ->
-        val (list, token) = client.addMember(name.trim(), role, strips)
+        val (list, token) = client.addMember(name.trim(), role, strips, home)
         _state.update { it.copy(members = list, invite = Invite(name.trim(), token)) }
     }
 
     fun changeMemberRole(member: Member, role: String) = act { client ->
-        val (list, _) = client.updateMember(member.id, role = role)
+        val (list, _) = client.updateMember(member.id, role = role, home = home)
         _state.update { it.copy(members = list) }
     }
 
     fun renewMemberToken(member: Member) = act { client ->
-        val (list, token) = client.updateMember(member.id, newToken = true)
+        val (list, token) = client.updateMember(member.id, newToken = true, home = home)
         _state.update { it.copy(members = list, invite = token?.let { t -> Invite(member.name, t) }) }
     }
 
     fun removeMember(member: Member) = act { client ->
-        val list = client.deleteMember(member.id)
+        val list = client.deleteMember(member.id, home)
         _state.update { it.copy(members = list) }
         notes.send(Note(R.string.member_removed, member.name))
     }
@@ -406,6 +409,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveServerSettings(settings: ServerSettings) = act { client ->
         val saved = client.updateSettings(settings)
+        _state.update { s -> s.copy(server = s.server?.copy(settings = saved)) }
+        notes.send(Note(R.string.note_saved))
+    }
+
+    /** A customer's own price and alert limits; null goes back to the owner's. */
+    fun saveMySettings(settings: ServerSettings?) = act { client ->
+        val saved = client.updateMySettings(settings, reset = settings == null)
         _state.update { s -> s.copy(server = s.server?.copy(settings = saved)) }
         notes.send(Note(R.string.note_saved))
     }

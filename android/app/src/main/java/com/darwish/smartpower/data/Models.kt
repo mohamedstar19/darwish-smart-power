@@ -96,12 +96,16 @@ data class ServerSettings(
     val maxWatts: Double = 3000.0,
     /** Offer the outlets to Amazon Echo devices on the home network. */
     val alexa: Boolean = true,
+    /** A customer set their own price and limits (instead of the owner's). */
+    val own: Boolean = false,
 )
 
 data class Usage(val kwh: Double, val cost: Double)
 
 /** Who this app is signed in as: "owner" (the server password) or a family member ("control" / "view"). */
-data class Me(val role: String = ROLE_OWNER, val name: String? = null, val login: String? = null) {
+data class Me(val role: String = ROLE_OWNER, val name: String? = null, val login: String? = null,
+              /** Invited by a customer: whose home this is. */
+              val home: String? = null) {
     val isOwner: Boolean get() = role == ROLE_OWNER
     val isCustomer: Boolean get() = role == ROLE_CUSTOMER
     val canControl: Boolean get() = role != ROLE_VIEW
@@ -179,7 +183,9 @@ object StateJson {
             todayHours = today?.optJSONArray("hours").doubles(),
             month = parseUsage(root.optJSONObject("month")),
             lastEventId = root.optLong("last_event", 0L),
-            me = root.optJSONObject("me")?.let { Me(it.optString("role", Me.ROLE_OWNER), it.stringOrNull("name"), it.stringOrNull("login")) }
+            me = root.optJSONObject("me")?.let {
+                Me(it.optString("role", Me.ROLE_OWNER), it.stringOrNull("name"), it.stringOrNull("login"), it.stringOrNull("home"))
+            }
                 ?: Me(),
             newStrips = root.optJSONArray("new_strips").objects().map {
                 NewStrip(it.getString("id"), it.optString("address"), it.optBoolean("online"))
@@ -276,6 +282,7 @@ object StateJson {
             maxTempC = o.optDouble("max_temp_c", d.maxTempC),
             maxWatts = o.optDouble("max_watts", d.maxWatts),
             alexa = o.optBoolean("alexa", d.alexa),
+            own = o.optBoolean("own", false),
         )
     }
 

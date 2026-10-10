@@ -388,4 +388,11 @@
     <string name="compare_now">دلوقتي</string>
     <string name="compare_rest">باقي المخارج (%1$d)</string>
     <string name="compare_idle">مفيش مخرج بيسحب كهربا دلوقتي.</string>
+    <string name="home_title">أهل البيت</string>
+    <string name="home_hint">ادّي كل حد في البيت كود دعوة خاص بيه، يدخل بيه من "عندي كود دعوة". هيشوف مشتركاتك إنت بس، وإنت بتختار يتحكم ولا يشوف بس.</string>
+    <string name="home_sees_all">هيشوف كل مشتركاتك، ومش هيقدر يغيّر الإعدادات ولا يضيف حد.</string>
+    <string name="home_of">من بيت %1$s</string>
+    <string name="bill_own">السعر والحدود دي خاصة بحسابك إنت بس.</string>
+    <string name="bill_default">ده السعر العام. لو غيّرته هيتطبق على حسابك إنت بس.</string>
+    <string name="bill_reset">رجّع السعر العام</string>
 </resources>

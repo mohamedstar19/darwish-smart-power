@@ -123,27 +123,43 @@ class ServerClient(private val address: ServerAddress, private val token: String
         return StateJson.parseSettings(JSONObject(call("POST", "api/settings", body)).optJSONObject("settings"))
     }
 
-    suspend fun members(): List<Member> = StateJson.parseMembers(JSONObject(call("GET", "api/users")).optJSONArray("users"))
+    /** A customer's own price per kWh and alert limits ([reset]: back to the owner's). */
+    suspend fun updateMySettings(s: ServerSettings?, reset: Boolean = false): ServerSettings {
+        val body = if (reset || s == null) JSONObject().put("reset", true)
+        else JSONObject().put("price_kwh", s.pricePerKwh).put("max_temp_c", s.maxTempC).put("max_watts", s.maxWatts)
+        return StateJson.parseSettings(JSONObject(call("POST", "api/my/settings", body)).optJSONObject("settings"))
+    }
+
+    // Family: the owner's (api/users, may be limited to some strips) or, with [home], the people a customer
+    // invited into their home (api/household, who always see just that customer's strips).
+    private fun familyPath(home: Boolean) = if (home) "api/household" else "api/users"
+    private fun familyKey(home: Boolean) = if (home) "members" else "users"
+
+    suspend fun members(home: Boolean = false): List<Member> =
+        StateJson.parseMembers(JSONObject(call("GET", familyPath(home))).optJSONArray(familyKey(home)))
 
     /** Adds a family member; returns everyone and the new member's token (shown only this once). */
-    suspend fun addMember(name: String, role: String, strips: List<String>): Pair<List<Member>, String> {
-        val body = JSONObject().put("name", name).put("role", role).put("strips", JSONArray(strips))
-        val reply = JSONObject(call("POST", "api/users/add", body))
-        return StateJson.parseMembers(reply.optJSONArray("users")) to reply.getString("token")
+    suspend fun addMember(name: String, role: String, strips: List<String>, home: Boolean = false): Pair<List<Member>, String> {
+        val body = JSONObject().put("name", name).put("role", role)
+        if (!home) body.put("strips", JSONArray(strips))
+        val reply = JSONObject(call("POST", familyPath(home) + "/add", body))
+        return StateJson.parseMembers(reply.optJSONArray(familyKey(home))) to reply.getString("token")
     }
 
     /** Changes a member; with [newToken] the old token stops working and the new one is returned. */
-    suspend fun updateMember(id: String, role: String? = null, strips: List<String>? = null, newToken: Boolean = false): Pair<List<Member>, String?> {
+    suspend fun updateMember(id: String, role: String? = null, strips: List<String>? = null, newToken: Boolean = false,
+                             home: Boolean = false): Pair<List<Member>, String?> {
         val body = JSONObject().put("id", id)
         role?.let { body.put("role", it) }
-        strips?.let { body.put("strips", JSONArray(it)) }
+        if (!home) strips?.let { body.put("strips", JSONArray(it)) }
         if (newToken) body.put("new_token", true)
-        val reply = JSONObject(call("POST", "api/users/update", body))
-        return StateJson.parseMembers(reply.optJSONArray("users")) to reply.optString("token").takeIf { it.isNotEmpty() }
+        val reply = JSONObject(call("POST", familyPath(home) + "/update", body))
+        return StateJson.parseMembers(reply.optJSONArray(familyKey(home))) to reply.optString("token").takeIf { it.isNotEmpty() }
     }
 
-    suspend fun deleteMember(id: String): List<Member> =
-        StateJson.parseMembers(JSONObject(call("POST", "api/users/delete", JSONObject().put("id", id))).optJSONArray("users"))
+    suspend fun deleteMember(id: String, home: Boolean = false): List<Member> =
+        StateJson.parseMembers(JSONObject(call("POST", familyPath(home) + "/delete", JSONObject().put("id", id)))
+            .optJSONArray(familyKey(home)))
 
     // ---- customer accounts (no token needed to sign up or sign in)
 

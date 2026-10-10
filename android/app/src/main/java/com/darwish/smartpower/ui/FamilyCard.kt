@@ -52,29 +52,35 @@ import com.darwish.smartpower.data.Me
 import com.darwish.smartpower.data.Member
 import com.darwish.smartpower.data.Strip
 
-/** Owner only: who else can use the strips, with what access, and invites to send them. */
+/**
+ * Who else can use the strips, with what access, and invites to send them. The owner picks which strips
+ * each member sees; a customer's household always sees all of that customer's strips (and nothing else).
+ */
 @Composable
 fun FamilyCard(vm: AppViewModel, state: UiState) {
+    val home = state.me.isCustomer
     var adding by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.loadMembers() }
     GlassCard(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("👨‍👩‍👧")
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.family_title), style = SectionTitleStyle, modifier = Modifier.weight(1f))
+            Text(stringResource(if (home) R.string.home_title else R.string.family_title), style = SectionTitleStyle,
+                modifier = Modifier.weight(1f))
         }
         Spacer(Modifier.height(4.dp))
-        Text(stringResource(R.string.family_hint), color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(if (home) R.string.home_hint else R.string.family_hint), color = Glass.TextSoft,
+            style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(10.dp))
         if (state.members.isEmpty()) {
             Text(stringResource(R.string.family_empty), color = Glass.TextFaint, style = MaterialTheme.typography.bodySmall)
         }
-        state.members.forEach { m -> MemberRow(vm, m, state.strips) }
+        state.members.forEach { m -> MemberRow(vm, m, state.strips, home) }
         Spacer(Modifier.height(10.dp))
         Button(onClick = { adding = true }, enabled = state.strips.isNotEmpty()) { Text("＋ " + stringResource(R.string.family_add)) }
     }
     if (adding) {
-        AddMemberDialog(state.strips, onDismiss = { adding = false }) { name, role, strips ->
+        AddMemberDialog(state.strips, home, onDismiss = { adding = false }) { name, role, strips ->
             vm.addMember(name, role, strips)
             adding = false
         }
@@ -83,7 +89,7 @@ fun FamilyCard(vm: AppViewModel, state: UiState) {
 }
 
 @Composable
-private fun MemberRow(vm: AppViewModel, m: Member, strips: List<Strip>) {
+private fun MemberRow(vm: AppViewModel, m: Member, strips: List<Strip>, home: Boolean) {
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(if (m.role == Me.ROLE_VIEW) "👁" else "🎛", fontSize = 20.sp)
@@ -92,7 +98,7 @@ private fun MemberRow(vm: AppViewModel, m: Member, strips: List<Strip>) {
             Text(m.name, fontWeight = FontWeight.SemiBold)
             Text(
                 stringResource(if (m.role == Me.ROLE_VIEW) R.string.role_view else R.string.role_control) + " · " +
-                    (if (m.strips.isEmpty()) stringResource(R.string.family_all_strips)
+                    (if (home || m.strips.isEmpty()) stringResource(R.string.family_all_strips)
                     else strips.filter { it.id in m.strips }.map { stripName(it) }.joinToString("، ")),
                 color = Glass.TextSoft, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
@@ -111,7 +117,7 @@ private fun MemberRow(vm: AppViewModel, m: Member, strips: List<Strip>) {
 }
 
 @Composable
-private fun AddMemberDialog(strips: List<Strip>, onDismiss: () -> Unit, onAdd: (String, String, List<String>) -> Unit) {
+private fun AddMemberDialog(strips: List<Strip>, home: Boolean, onDismiss: () -> Unit, onAdd: (String, String, List<String>) -> Unit) {
     var name by remember { mutableStateOf("") }
     var role by remember { mutableStateOf(Me.ROLE_CONTROL) }
     var chosen by remember { mutableStateOf(emptySet<String>()) }        // empty = all strips
@@ -132,6 +138,9 @@ private fun AddMemberDialog(strips: List<Strip>, onDismiss: () -> Unit, onAdd: (
                     FilterChip(selected = role == Me.ROLE_VIEW, onClick = { role = Me.ROLE_VIEW },
                         label = { Text("👁 " + stringResource(R.string.role_view)) })
                 }
+                if (home) {
+                    Text(stringResource(R.string.home_sees_all), color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall)
+                } else {
                 Text(stringResource(R.string.family_which_strips), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = chosen.isEmpty(), onClick = { chosen = emptySet() },
@@ -140,6 +149,7 @@ private fun AddMemberDialog(strips: List<Strip>, onDismiss: () -> Unit, onAdd: (
                         FilterChip(selected = s.id in chosen, onClick = { chosen = if (s.id in chosen) chosen - s.id else chosen + s.id },
                             label = { Text(stripName(s)) })
                     }
+                }
                 }
             }
         },
@@ -213,6 +223,7 @@ fun SignedInAsCard(me: Me, onSignOut: () -> Unit, onDeleteAccount: (() -> Unit)?
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.signed_in_as, me.name ?: ""), fontWeight = FontWeight.SemiBold)
                 me.login?.takeIf { it.isNotEmpty() }?.let { Text(ltr(it), color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall) }
+                me.home?.let { Text(stringResource(R.string.home_of, it), color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall) }
                 Text(
                     stringResource(
                         when (me.role) {

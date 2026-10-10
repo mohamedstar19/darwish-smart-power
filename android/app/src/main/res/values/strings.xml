@@ -402,4 +402,11 @@
     <string name="compare_now">Right now</string>
     <string name="compare_rest">Other outlets (%1$d)</string>
     <string name="compare_idle">No outlet is drawing power right now.</string>
+    <string name="home_title">My household</string>
+    <string name="home_hint">Give each person at home their own invite code; they enter it under “I have an invite code”. They see only your strips, and you choose whether they can control or only watch.</string>
+    <string name="home_sees_all">They will see all your strips, but cannot change settings or invite anyone.</string>
+    <string name="home_of">In %1$s’s home</string>
+    <string name="bill_own">This price and these limits are for your account only.</string>
+    <string name="bill_default">This is the default price. If you change it, it applies to your account only.</string>
+    <string name="bill_reset">Use the default price</string>
 </resources>

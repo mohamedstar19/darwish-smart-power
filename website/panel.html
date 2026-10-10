@@ -112,6 +112,15 @@ header .hello{color:var(--soft);font-size:13px}
 [dir="rtl"] .ct i{background:linear-gradient(270deg,#ff7a3d,#ffb347)}
 .ct i.rest{background:var(--faint)}
 .cmp .none{color:var(--soft);font-size:13px}
+.acct{margin-top:14px;padding:16px}
+.acct h2{margin:0 0 6px;font-size:16px}
+.acct .hint{color:var(--soft);font-size:12px;margin:0 0 10px}
+.acct .vals{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.mrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--stroke)}
+.mrow .who{flex:1;min-width:0}
+.mrow .who b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mrow .who span{color:var(--soft);font-size:12px}
+.mrow .btn{flex:none;padding:7px 10px;font-size:12px}
 /* welcome (sign in / new account) */
 .welcome{position:relative;max-width:420px;margin:0 auto;padding:10px 2px 24px;text-align:center}
 .whero{position:fixed;top:0;left:0;right:0;height:340px;z-index:0;overflow:hidden;border-radius:0 0 50% 50% / 0 0 56px 56px;
@@ -225,7 +234,15 @@ const L = {
        rMonth: "آخر 30 يوم", rYear: "آخر سنة", xlsxFail: "معرفناش ننزّل الملف، جرّب تاني.",
        cmp: "⚡ مقارنة المخارج", cNow: "دلوقتي", cDay: "النهارده", cWeek: "7 أيام", cMonth: "30 يوم",
        cRest: "باقي المخارج", cIdle: "مفيش مخرج بيسحب كهربا دلوقتي.", cEmpty: "لسه مفيش استهلاك متسجل في الفترة دي.",
-       cLoading: "بنجيب الأرقام…"},
+       cLoading: "بنجيب الأرقام…",
+       bill: "💰 فاتورتي", billOwn: "السعر والحدود دي خاصة بحسابك إنت بس.", billDef: "ده السعر العام. لو غيّرته هيتطبق على حسابك إنت بس.",
+       priceL: "سعر الكيلووات", maxT: "أقصى حرارة", maxW: "أقصى حمل", edit: "✏️ تعديل", billReset: "رجّع السعر العام",
+       askPrice: "سعر الكيلووات (من فاتورة الكهربا):", askTemp: "نبّهني لو حرارة مخرج وصلت (°C):", askWatts: "نبّهني لو المشترك سحب أكتر من (وات):",
+       home: "👨‍👩‍👧 أهل البيت", homeHint: "ادّي كل حد في البيت كود دعوة يدخل بيه من \"عندي كود دعوة\". هيشوف مشتركاتك إنت بس.",
+       homeEmpty: "محدش تاني ليه صلاحية لسه.", homeAdd: "＋ إضافة حد من البيت", askName: "اسمه إيه؟",
+       askControl: "يقدر يشغّل ويطفي؟\nموافق = تحكم · إلغاء = مشاهدة بس", rControl: "🎛 تحكم", rView: "👁 مشاهدة بس",
+       mkView: "مشاهدة بس", mkControl: "اسمح بالتحكم", newCode: "كود جديد", removeP: "شيل", removeAsk: "تشيل صلاحية {n}؟",
+       codeShow: "ده كود {n} (بيظهر المرة دي بس) — انسخه وابعتهوله:", homeOf: "من بيت"},
   en: {lang: "العربية", hello_m: "Good morning", hello_e: "Good evening", now: "Using now", today: "Today", month: "This month",
        scenes: "Scenes", strip: "Strip", outlet: "Outlet", online: "online", offline: "offline", allOn: "All on", allOff: "All off",
        timer: "Timer", rename: "New name (empty = default):", timerAsk: "Switch after how many minutes? (0 = cancel)", turnsOn: "on at", turnsOff: "off at",
@@ -250,7 +267,15 @@ const L = {
        rMonth: "Last 30 days", rYear: "Last year", xlsxFail: "Could not download the file, try again.",
        cmp: "⚡ Outlets compared", cNow: "Right now", cDay: "Today", cWeek: "7 days", cMonth: "30 days",
        cRest: "Other outlets", cIdle: "No outlet is drawing power right now.", cEmpty: "No usage recorded yet for this period.",
-       cLoading: "Loading…"}
+       cLoading: "Loading…",
+       bill: "💰 My bill", billOwn: "This price and these limits are for your account only.", billDef: "This is the default price. If you change it, it applies to your account only.",
+       priceL: "Price per kWh", maxT: "Max temperature", maxW: "Max load", edit: "✏️ Edit", billReset: "Use the default price",
+       askPrice: "Price per kWh (from your electricity bill):", askTemp: "Alert me when an outlet reaches (°C):", askWatts: "Alert me when the strip draws more than (W):",
+       home: "👨‍👩‍👧 My household", homeHint: "Give each person at home an invite code to enter under “I have an invite code”. They see only your strips.",
+       homeEmpty: "Nobody else has access yet.", homeAdd: "＋ Add someone from home", askName: "Their name?",
+       askControl: "May they switch outlets?\nOK = control · Cancel = view only", rControl: "🎛 Control", rView: "👁 View only",
+       mkView: "View only", mkControl: "Allow control", newCode: "New code", removeP: "Remove", removeAsk: "Remove {n}'s access?",
+       codeShow: "{n}'s code (shown only this once). Copy it and send it to them:", homeOf: "In the home of"}
 };
 const ICON = {plug:"🔌",kettle:"☕",router:"📶",tv:"📺",ac:"❄️",lamp:"💡",heater:"🔥",fan:"🌀",fridge:"🧊",washer:"🧺",charger:"🔋",
               computer:"💻",speaker:"🔊",camera:"📷",microwave:"🍲",iron:"👔"};
@@ -402,7 +427,7 @@ function render() {
   const rooms = {};
   s.strips.forEach(x => (rooms[x.room || ""] = rooms[x.room || ""] || []).push(x));
   let html = `<header><img src="/icons/icon-192.png" alt=""><div class="t"><h1 dir="ltr" style="text-align:start">Darwish Power</h1>
-      <div class="hello">${s.me && s.me.name ? t("hi") + " " + esc(s.me.name) : (hour < 12 ? t("hello_m") : t("hello_e"))}${readOnly() ? " · 👁 " + t("viewOnly") : ""}</div></div>
+      <div class="hello">${s.me && s.me.name ? t("hi") + " " + esc(s.me.name) : (hour < 12 ? t("hello_m") : t("hello_e"))}${s.me && s.me.home ? " · " + t("homeOf") + " " + esc(s.me.home) : ""}${readOnly() ? " · 👁 " + t("viewOnly") : ""}</div></div>
       <button class="icon-btn install" id="install">${t("install")}</button>
       <button class="icon-btn" id="lang">${t("lang")}</button><button class="icon-btn" id="logout">${t("logout")}</button></header>
     <section class="hero glass"><div class="label">${t("now")}</div>
@@ -427,6 +452,7 @@ function render() {
   }
   const customer = s.me && s.me.role === "customer";
   if (!s.strips.length) html += `<div class="empty glass" style="margin-top:16px">${customer ? t("noStripsYet") : t("none")}</div>`;
+  if (customer) html += accountHtml(s, cur);
   if (customer) html += `<div style="text-align:center;margin-top:18px"><a href="/delete-account" style="color:var(--faint);font-size:12px">${t("deleteAcc")}</a></div>`;
   Object.keys(rooms).sort((a, b) => (a || "~").localeCompare(b || "~")).forEach(room => {
     if (Object.keys(rooms).length > 1 || room) html += `<div class="room">${esc(room || t("other"))}</div>`;
@@ -436,7 +462,7 @@ function render() {
   document.getElementById("lang").onclick = () => { lang = lang === "ar" ? "en" : "ar"; save("dsp-lang", lang); render(); };
   document.getElementById("logout").onclick = () => {
     api("/api/logout", {}).catch(() => {});
-    save("dsp-token", null); token = ""; clearInterval(timerId); renderLogin();
+    save("dsp-token", null); token = ""; household = null; clearInterval(timerId); renderLogin();
   };
   const ib = document.getElementById("install");
   if (deferredInstall) { ib.style.display = "inline-block"; ib.onclick = async () => { deferredInstall.prompt(); deferredInstall = null; ib.style.display = "none"; }; }
@@ -532,6 +558,63 @@ function compareHtml(s, cur) {
     `</div>${body}</section>`;
 }
 
+// A customer's own bill (price and alert limits) and the people they invited into their home
+let household = null;
+async function loadHousehold() { try { household = (await api("/api/household")).members; render(); } catch (e) {} }
+function accountHtml(s, cur) {
+  if (household === null) { household = []; loadHousehold(); }
+  const st = s.settings || {};
+  let html = `<section class="glass acct"><h2>${t("bill")}</h2><p class="hint">${st.own ? t("billOwn") : t("billDef")}</p>
+    <div class="vals"><span class="pill">${t("priceL")}: <bdi>${num(st.price_kwh, 2)}</bdi> ${esc(cur)}</span>
+      <span class="pill">${t("maxT")}: <bdi>${num(st.max_temp_c, 0)}°C</bdi></span>
+      <span class="pill">${t("maxW")}: <bdi>${num(st.max_watts, 0)} W</bdi></span></div>
+    <div class="actions"><button class="btn primary" id="billEdit">${t("edit")}</button>
+      ${st.own ? `<button class="btn" id="billReset">${t("billReset")}</button>` : ""}</div></section>`;
+  html += `<section class="glass acct"><h2>${t("home")}</h2><p class="hint">${t("homeHint")}</p>` +
+    (household.length ? household.map(m => `<div class="mrow"><div class="who"><b>${esc(m.name)}</b>
+      <span>${m.role === "view" ? t("rView") : t("rControl")}</span></div>
+      <button class="btn" data-mrole="${esc(m.id)}" data-to="${m.role === "view" ? "control" : "view"}">${m.role === "view" ? t("mkControl") : t("mkView")}</button>
+      <button class="btn" data-mcode="${esc(m.id)}">${t("newCode")}</button>
+      <button class="btn" data-mdel="${esc(m.id)}">${t("removeP")}</button></div>`).join("")
+      : `<p class="hint">${t("homeEmpty")}</p>`) +
+    `<div class="actions" style="margin-top:10px"><button class="btn primary" id="homeAdd">${t("homeAdd")}</button></div></section>`;
+  return html;
+}
+function showCode(name, code) {
+  try { navigator.clipboard.writeText(code).catch(() => {}); } catch (e) {}
+  prompt(t("codeShow").replace("{n}", name), code);
+}
+const ACCOUNT_BUTTONS = "#billEdit,#billReset,#homeAdd,[data-mrole],[data-mcode],[data-mdel]";
+async function accountClick(el) {
+  const st = state.settings || {};
+  try {
+    if (el.id === "billEdit") {
+      const price = prompt(t("askPrice"), st.price_kwh); if (price === null) return;
+      const temp = prompt(t("askTemp"), st.max_temp_c); if (temp === null) return;
+      const watts = prompt(t("askWatts"), st.max_watts); if (watts === null) return;
+      const n = v => Number(String(v).replace(",", ".").trim());
+      await api("/api/my/settings", {price_kwh: n(price), max_temp_c: n(temp), max_watts: n(watts)});
+      toast(t("done"));
+    } else if (el.id === "billReset") {
+      await api("/api/my/settings", {reset: true}); toast(t("done"));
+    } else if (el.id === "homeAdd") {
+      const name = (prompt(t("askName")) || "").trim(); if (!name) return;
+      const r = await api("/api/household/add", {name, role: confirm(t("askControl")) ? "control" : "view"});
+      household = r.members; showCode(name, r.token);
+    } else if (el.dataset.mrole) {
+      household = (await api("/api/household/update", {id: el.dataset.mrole, role: el.dataset.to})).members;
+    } else if (el.dataset.mcode) {
+      const r = await api("/api/household/update", {id: el.dataset.mcode, new_token: true});
+      household = r.members; showCode(r.member.name, r.token);
+    } else if (el.dataset.mdel) {
+      const m = household.find(x => x.id === el.dataset.mdel);
+      if (!confirm(t("removeAsk").replace("{n}", m ? m.name : ""))) return;
+      household = (await api("/api/household/delete", {id: el.dataset.mdel})).members;
+    }
+  } catch (e) { toast(t("fail") + e.message); }
+  refresh();
+}
+
 let xlsxRange = "month";
 // the energy log as an Excel file: fetched with the sign-in, then handed to the browser as a download
 async function downloadXlsx() {
@@ -551,6 +634,8 @@ async function downloadXlsx() {
 
 document.addEventListener("click", async ev => {
   if (ev.target.closest("#xlsx")) { downloadXlsx(); return; }
+  const acc = ev.target.closest(ACCOUNT_BUTTONS);
+  if (acc) { accountClick(acc); return; }
   const cmp = ev.target.closest("[data-cmp]");
   if (cmp) { cmpRange = cmp.dataset.cmp; save("dsp-cmp", cmpRange); render(); loadCompare(true); return; }
   if (readOnly() && ev.target.closest("[data-sw],[data-timer],[data-more],[data-scene]")) { toast("👁 " + t("viewOnly")); return; }

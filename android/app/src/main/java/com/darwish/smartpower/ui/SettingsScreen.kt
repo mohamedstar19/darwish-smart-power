@@ -134,7 +134,7 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit, connectOnly: Boolean =
         if (!connectOnly) {
             // ---- family: the owner manages it, members see who they are
             if (state.server != null) {
-                if (state.me.isOwner) FamilyCard(vm, state)
+                if (state.me.isOwner || state.me.isCustomer) FamilyCard(vm, state)
             }
 
             // ---- strips the owner blocked; one tap lets a strip in again
@@ -151,8 +151,8 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit, connectOnly: Boolean =
                 }
             }
 
-            // ---- bill and alert limits (kept on the server, owner only)
-            state.server?.settings?.takeIf { state.me.isOwner }?.let { current ->
+            // ---- bill and alert limits (kept on the server): the owner's for everyone, or a customer's own
+            state.server?.settings?.takeIf { state.me.isOwner || state.me.isCustomer }?.let { current ->
                 var price by remember(current) { mutableStateOf(number(current.pricePerKwh, 2)) }
                 var maxTemp by remember(current) { mutableStateOf(current.maxTempC.toInt().toString()) }
                 var maxWatts by remember(current) { mutableStateOf(current.maxWatts.toInt().toString()) }
@@ -168,13 +168,25 @@ fun SettingsScreen(vm: AppViewModel, onSetup: () -> Unit, connectOnly: Boolean =
                         NumberField(maxWatts, stringResource(R.string.max_watts), Modifier.weight(1f)) { maxWatts = it }
                     }
                     Spacer(Modifier.height(8.dp))
-                    Button(onClick = {
-                        vm.saveServerSettings(current.copy(
-                            pricePerKwh = price.toDoubleOrNull() ?: current.pricePerKwh,
-                            maxTempC = maxTemp.toDoubleOrNull() ?: current.maxTempC,
-                            maxWatts = maxWatts.toDoubleOrNull() ?: current.maxWatts,
-                        ))
-                    }) { Text(stringResource(R.string.save)) }
+                    val customer = state.me.isCustomer
+                    if (customer) {
+                        Text(stringResource(if (current.own) R.string.bill_own else R.string.bill_default),
+                            color = Glass.TextFaint, style = MaterialTheme.typography.labelSmall)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Button(onClick = {
+                            val changed = current.copy(
+                                pricePerKwh = price.toDoubleOrNull() ?: current.pricePerKwh,
+                                maxTempC = maxTemp.toDoubleOrNull() ?: current.maxTempC,
+                                maxWatts = maxWatts.toDoubleOrNull() ?: current.maxWatts,
+                            )
+                            if (customer) vm.saveMySettings(changed) else vm.saveServerSettings(changed)
+                        }) { Text(stringResource(R.string.save)) }
+                        if (customer && current.own) {
+                            TextButton(onClick = { vm.saveMySettings(null) }) { Text(stringResource(R.string.bill_reset), color = Glass.TextSoft) }
+                        }
+                    }
                 }
             }
 

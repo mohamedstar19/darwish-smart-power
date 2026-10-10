@@ -88,6 +88,9 @@ MIN_PASSWORD = 8                         # characters in a new customer password
 ACCOUNT_FAILS = 10                       # wrong passwords for one account (15 minutes, from anywhere) before it pauses
 ANNOUNCES_PER_HOUR = 100                 # strips one account may say it is setting up, per hour (floods only)
 MAX_SESSIONS = 10                        # signed-in phones per customer account
+MAX_HOUSEHOLD = 20                       # people one customer may invite into their home
+# what a customer may set for their own account (the rest of the settings are the owner's)
+SETTING_LIMITS = {"price_kwh": (0, 1000), "max_temp_c": (20, 150), "max_watts": (50, 100000)}
 PASSWORD_ROUNDS = 200_000
 SSDP_GROUP = "239.255.255.250"
 SSDP_PORT = 1900
@@ -220,7 +223,10 @@ class Store:
         self.pending: Dict[str, Dict[str, Dict[str, Any]]] = {}
         self.alexa_ports: Dict[str, int] = {}
         # family members: {"id", "name", "role": "control"|"view", "strips": [MAC, ...] (empty = all),
-        #                  "token_hash", "created"}; the server token itself is the owner
+        #                  "token_hash", "created"}; the server token itself is the owner.
+        # customers: {"id", "name", "role": "customer", "login", "pw", "strips", "sessions", "settings"?}
+        # a customer's household: {"id", "name", "role": "control"|"view", "parent": customer id, "token_hash",
+        #                  "created"}; they see exactly the strips of the customer who invited them
         self.users: List[Dict[str, Any]] = []
         self.settings: Dict[str, Any] = dict(DEFAULT_SETTINGS)
         # strips the owner accepted; others stay waiting. blocked ones are refused outright.
@@ -612,7 +618,7 @@ def normalise_schedule(sched: Dict[str, Any]) -> Dict[str, Any]:
     return sched
 
 
-OWNER = {"role": "owner", "name": None, "id": None, "strips": None}
+OWNER = {"role": "owner", "name": None, "id": None, "strips": None, "account": None}
 ROLES = ("control", "view")
 CUSTOMER = "customer"                    # signs up in the app and sees only the strips they added
 ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
@@ -1392,8 +1398,135 @@ class Hub:
             totals[(mac, outlet)] = totals.get((mac, outlet), 0.0) + wh
         return totals
 
-    def cost(self, kwh: float) -> float:
-        return round(kwh * float(self.store.settings.get("price_kwh", 0)), 2)
+    def cost(self, kwh: float, price: Optional[float] = None) -> float:
+        if price is None:
+            price = float(self.store.settings.get("price_kwh", 0))
+        return round(kwh * price, 2)
+
+    # ---- whose account a person acts for, and that account's own bill settings
+
+    def customer(self, account_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        if not account_id:
+            return None
+        return next((u for u in self.store.users if u["id"] == account_id and u.get("role") == CUSTOMER), None)
+
+    def person(self, user: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """What a signed-in account may do: role, name, the customer account it acts for, and the strips
+        it sees (None = all). Someone a customer invited sees exactly that customer's strips, never more."""
+        strips = set(user.get("strips") or [])
+        if user.get("parent"):
+            parent = self.customer(user["parent"])
+            if parent is None or user.get("role") not in ROLES:
+                return None
+            return {"role": user["role"], "name": user["name"], "id": user["id"], "login": "",
+                    "account": parent["id"], "home": parent["name"], "strips": set(parent.get("strips") or [])}
+        if user.get("role") == CUSTOMER:
+            return {"role": CUSTOMER, "name": user["name"], "id": user["id"], "login": user.get("login", ""),
+                    "account": user["id"], "strips": strips}
+        return {"role": user["role"], "name": user["name"], "id": user["id"], "login": user.get("login", ""),
+                "account": None, "strips": strips or None}
+
+    def settings_for(self, account_id: Optional[str]) -> Dict[str, Any]:
+        """The owner's settings, with a customer's own price and alert limits on top."""
+        settings = dict(self.store.settings)
+        user = self.customer(account_id)
+        if user:
+            settings.update({k: v for k, v in (user.get("settings") or {}).items() if k in SETTING_LIMITS})
+        return settings
+
+    def strip_limits(self) -> Dict[str, Dict[str, Any]]:
+        """Alert limits per strip: its customer's own, where they set some."""
+        out: Dict[str, Dict[str, Any]] = {}
+        for u in self.store.users:
+            if u.get("role") == CUSTOMER and u.get("settings"):
+                for mac in u.get("strips") or []:
+                    out.setdefault(mac, self.settings_for(u["id"]))
+        return out
+
+    async def update_my_settings(self, account_id: str, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        """A customer sets their own price per kWh and alert limits; "reset" goes back to the owner's."""
+        user = self.customer(account_id)
+        if user is None:
+            return 403, {"error": "only a customer account has its own settings"}
+        mine = {} if req.get("reset") else dict(user.get("settings") or {})
+        for key, (low, high) in SETTING_LIMITS.items():
+            if key in req:
+                value = float(req[key])
+                if not low <= value <= high:
+                    return 400, {"error": "%s must be between %s and %s" % (key, low, high)}
+                mine[key] = value
+        if mine:
+            user["settings"] = mine
+        else:
+            user.pop("settings", None)
+        self.store.save()
+        return 200, {"ok": True, "settings": self.public_settings(account_id)}
+
+    def public_settings(self, account_id: Optional[str]) -> Dict[str, Any]:
+        settings = self.settings_for(account_id)
+        out = {k: settings.get(k) for k in ("price_kwh", "currency", "max_temp_c", "max_watts")}
+        out["own"] = bool((self.customer(account_id) or {}).get("settings"))
+        return out
+
+    # ---- a customer's household: people they invite, who see and control (or only see) their strips
+
+    def member_json(self, user: Dict[str, Any]) -> Dict[str, Any]:
+        return {"id": user["id"], "name": user["name"], "role": user["role"], "created": user.get("created", 0),
+                "last_seen": int(max(self.user_seen.get(user["id"], 0), user.get("last_seen", 0)))}
+
+    async def household(self, account_id: str) -> Dict[str, Any]:
+        return {"members": [self.member_json(u) for u in self.store.users if u.get("parent") == account_id]}
+
+    async def household_add(self, account_id: str, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        if self.customer(account_id) is None:
+            return 403, {"error": "only a customer account can invite people"}
+        name = str(req.get("name") or "").strip()[:30]
+        role = req.get("role", "control")
+        if not name:
+            return 400, {"error": "the person needs a name"}
+        if role not in ROLES:
+            return 400, {"error": "role must be control or view"}
+        if sum(1 for u in self.store.users if u.get("parent") == account_id) >= MAX_HOUSEHOLD:
+            return 400, {"error": "at most %d people per home" % MAX_HOUSEHOLD}
+        token = base64.urlsafe_b64encode(os.urandom(12)).decode().rstrip("=")
+        user = {"id": os.urandom(4).hex(), "name": name, "role": role, "parent": account_id,
+                "token_hash": hashlib.sha256(token.encode()).hexdigest(), "created": int(time.time())}
+        self.store.users.append(user)
+        self.store.save()
+        log("[account] customer %s invited %s (%s)" % (account_id, user["id"], role))
+        # the invite code is shown this once; only its hash is kept
+        return 200, {"ok": True, "member": self.member_json(user), "token": token, **(await self.household(account_id))}
+
+    async def household_update(self, account_id: str, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        user = next((u for u in self.store.users if u["id"] == req.get("id") and u.get("parent") == account_id), None)
+        if user is None:
+            return 404, {"error": "no such person in your home"}
+        reply: Dict[str, Any] = {"ok": True}
+        if "name" in req:
+            name = str(req.get("name") or "").strip()[:30]
+            if not name:
+                return 400, {"error": "the person needs a name"}
+            user["name"] = name
+        if "role" in req:
+            if req["role"] not in ROLES:
+                return 400, {"error": "role must be control or view"}
+            user["role"] = req["role"]
+        if req.get("new_token"):                    # a new invite code; the old one stops working
+            token = base64.urlsafe_b64encode(os.urandom(12)).decode().rstrip("=")
+            user["token_hash"] = hashlib.sha256(token.encode()).hexdigest()
+            reply["token"] = token
+        self.store.save()
+        reply["member"] = self.member_json(user)
+        reply.update(await self.household(account_id))
+        return 200, reply
+
+    async def household_delete(self, account_id: str, member_id: str) -> Tuple[int, Dict[str, Any]]:
+        before = len(self.store.users)
+        self.store.users = [u for u in self.store.users if not (u["id"] == member_id and u.get("parent") == account_id)]
+        if len(self.store.users) == before:
+            return 404, {"error": "no such person in your home"}
+        self.store.save()
+        return 200, {"ok": True, **(await self.household(account_id))}
 
     # ---- used by the web side (always on the event loop)
 
@@ -1427,7 +1560,7 @@ class Hub:
         }
 
     async def history_report(self, rng: str, strip_id: Optional[str] = None, now: Optional[float] = None,
-                             allowed: Optional[set] = None) -> Tuple[int, Dict[str, Any]]:
+                             allowed: Optional[set] = None, account: Optional[str] = None) -> Tuple[int, Dict[str, Any]]:
         now = time.time() if now is None else now
         mac = None
         if strip_id:
@@ -1458,14 +1591,16 @@ class Hub:
                 buckets[index] += wh / 1000.0
             by_outlet[(m, outlet)] = by_outlet.get((m, outlet), 0.0) + wh / 1000.0
         total = sum(buckets)
+        settings = self.settings_for(account)
+        price = float(settings.get("price_kwh", 0) or 0)
         return 200, {
             "range": rng,
             "buckets": [{"t": t, "kwh": round(v, 3)} for t, v in zip(labels, buckets)],
             "total_kwh": round(total, 3),
-            "cost": self.cost(total),
-            "currency": self.store.settings.get("currency", "EGP"),
-            "price_kwh": self.store.settings.get("price_kwh", 0),
-            "by_outlet": [{"strip": m, "outlet": o, "kwh": round(v, 3), "cost": self.cost(v)}
+            "cost": self.cost(total, price),
+            "currency": settings.get("currency", "EGP"),
+            "price_kwh": price,
+            "by_outlet": [{"strip": m, "outlet": o, "kwh": round(v, 3), "cost": self.cost(v, price)}
                           for (m, o), v in sorted(by_outlet.items(), key=lambda kv: -kv[1])],
         }
 
@@ -1475,7 +1610,8 @@ class Hub:
     EXPORT_DAYS = {"day": 1, "week": 7, "month": 30, "year": 365}
 
     async def history_xlsx(self, rng: str, strip_id: Optional[str] = None, lang: str = "ar",
-                           allowed: Optional[set] = None, now: Optional[float] = None) -> Tuple[int, Any]:
+                           allowed: Optional[set] = None, now: Optional[float] = None,
+                           account: Optional[str] = None) -> Tuple[int, Any]:
         """The energy log as an Excel file: a summary, one row per day and outlet, and (up to a month)
         one row per hour and outlet. Labels in Arabic or English."""
         now = time.time() if now is None else now
@@ -1492,7 +1628,7 @@ class Hub:
         start = local_midnight(now, self.EXPORT_DAYS[rng] - 1)
         rows = [r for r in self.history.rows_since(start, mac) if allowed is None or r[0] in allowed]
         rows.sort(key=lambda r: (r[2], r[0], r[1]))
-        price = float(self.store.settings.get("price_kwh", 0) or 0)
+        price = float(self.settings_for(account).get("price_kwh", 0) or 0)
         currency = self.store.settings.get("currency", "EGP")
         strip_name = lambda m: self.store.name(m, 0) or L("مشترك %s", "Strip %s") % m[-6:]
         outlet_name = lambda m, o: self.store.name(m, o) or L("مخرج %d", "Outlet %d") % o
@@ -1538,18 +1674,15 @@ class Hub:
 
     async def users(self) -> Dict[str, Any]:
         """Family members (customers are on the admin page)."""
-        return {"users": [self.user_json(u) for u in self.store.users if u.get("role") != CUSTOMER]}
+        return {"users": [self.user_json(u) for u in self.store.users
+                          if u.get("role") != CUSTOMER and not u.get("parent")]}
 
     def who_for(self, subject: str) -> Optional[Dict[str, Any]]:
         """The person behind a voice assistant link: "owner" or a member/customer id."""
         if subject == "owner":
             return OWNER
         user = next((u for u in self.store.users if u["id"] == subject), None)
-        if user is None:
-            return None
-        strips = set(user.get("strips") or [])
-        return {"role": user["role"], "name": user["name"], "id": user["id"], "login": user.get("login", ""),
-                "strips": strips if user["role"] == CUSTOMER else (strips or None)}
+        return self.person(user) if user is not None else None
 
     # ---- Alexa Smart Home (directives arrive through the skill's AWS Lambda, which only forwards them)
 
@@ -1689,7 +1822,7 @@ class Hub:
         user = next((u for u in self.store.users if u["id"] == user_id and u.get("role") == CUSTOMER), None)
         if user is None:
             return 404, {"error": "no such account"}
-        self.store.users.remove(user)
+        self.store.users = [u for u in self.store.users if u is not user and u.get("parent") != user_id]
         others = {m for u in self.store.users for m in (u.get("strips") or [])}
         for mac in user.get("strips") or []:
             if mac not in others:
@@ -1713,7 +1846,7 @@ class Hub:
                 if u.get("role") == CUSTOMER:
                     customer_of[mac] = u["id"]
         customers = [u for u in store.users if u.get("role") == CUSTOMER]
-        family = [u for u in store.users if u.get("role") != CUSTOMER]
+        family = [u for u in store.users if u.get("role") != CUSTOMER and not u.get("parent")]
         approved = [m for m in store.approved if m not in store.blocked_strips]
         online = [m for m in approved if m in self.strips and self.strips[m].online]
         days = store.stats.get("download_days", {})
@@ -1737,6 +1870,8 @@ class Hub:
             "customers": sorted(({
                 "id": u["id"], "name": u["name"], "login": u.get("login", ""), "created": u.get("created", 0),
                 "last_seen": int(seen(u)), "strips": len(u.get("strips") or []),
+                "household": sum(1 for m in store.users if m.get("parent") == u["id"]),
+                "own_price": (u.get("settings") or {}).get("price_kwh"),
                 "online": sum(1 for m in u.get("strips") or [] if m in self.strips and self.strips[m].online),
             } for u in customers), key=lambda x: -x["last_seen"]),
             "strips": sorted(({
@@ -1814,22 +1949,41 @@ class Hub:
         self.store.save()
         return 200, {"ok": True, **(await self.users())}
 
-    def filter_for(self, who: Dict[str, Any], snap: Dict[str, Any]) -> Dict[str, Any]:
+    async def state_for(self, who: Dict[str, Any], now: Optional[float] = None) -> Dict[str, Any]:
+        return self.filter_for(who, await self.snapshot(now), now)
+
+    def filter_for(self, who: Dict[str, Any], snap: Dict[str, Any], now: Optional[float] = None) -> Dict[str, Any]:
         """What a member limited to some strips may see of /api/state."""
         snap["me"] = {"role": who["role"], "name": who["name"], "strips": sorted(who["strips"]) if who["strips"] else [],
                       "login": who.get("login") or ""}
+        if who.get("home"):                         # invited by a customer: whose home this is
+            snap["me"]["home"] = who["home"]
         if who["role"] != "owner":                  # approving strips is the owner's job
             snap.pop("new_strips", None)
             snap.pop("blocked_strips", None)
+            snap["settings"] = self.public_settings(who.get("account"))
         if who["strips"] is None:
             return snap
         snap["strips"] = [x for x in snap["strips"] if may_see(who, x["id"])]
         snap["schedules"] = [x for x in snap["schedules"] if may_see(who, x["strip"])]
         snap["scenes"] = [x for x in snap["scenes"] if all(may_see(who, a["strip"]) for a in x["actions"])]
         # today's totals for just their strips
+        # today's hours and this month, for just their strips, at their own price
+        now = time.time() if now is None else now
+        price = float(self.settings_for(who.get("account")).get("price_kwh", 0) or 0)
+        midnight = local_midnight(now)
+        month_start = time.mktime(datetime.date.fromtimestamp(now).replace(day=1).timetuple())
+        hours, month_wh = [0.0] * 24, 0.0
+        for mac in sorted(who["strips"]):
+            for _, _, hour, wh in self.history.rows_since(min(month_start, midnight), mac):
+                if hour >= month_start:
+                    month_wh += wh
+                index = int((hour - midnight) // 3600)
+                if 0 <= index < 24:
+                    hours[index] += wh / 1000.0
         kwh = sum(x["today_kwh"] for x in snap["strips"])
-        snap["today"] = {"kwh": round(kwh, 3), "cost": self.cost(kwh), "hours": snap["today"]["hours"]}
-        snap["month"] = {"kwh": 0.0, "cost": 0.0}
+        snap["today"] = {"kwh": round(kwh, 3), "cost": self.cost(kwh, price), "hours": [round(h, 3) for h in hours]}
+        snap["month"] = {"kwh": round(month_wh / 1000.0, 3), "cost": self.cost(month_wh / 1000.0, price)}
         return snap
 
     def scene_strips(self, scene_id: str) -> List[str]:
@@ -2187,8 +2341,7 @@ class Hub:
 
     async def update_settings(self, req: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         new = dict(self.store.settings)
-        limits = {"price_kwh": (0, 1000), "max_temp_c": (20, 150), "max_watts": (50, 100000)}
-        for key, (low, high) in limits.items():
+        for key, (low, high) in SETTING_LIMITS.items():
             if key in req:
                 value = float(req[key])
                 if not low <= value <= high:
@@ -2208,11 +2361,12 @@ class Hub:
 
     def check_alerts(self, now: Optional[float] = None) -> None:
         now = time.time() if now is None else now
-        settings = self.store.settings
+        own = self.strip_limits()
         for strip in self.strips.values():
             mac = strip.mac
             if not self.store.is_approved(mac):
                 continue
+            settings = own.get(mac, self.store.settings)
             if not strip.online:
                 if strip.last_seen and now - strip.last_seen >= OFFLINE_ALERT_AFTER \
                         and not self.alerted_offline.get(mac):
@@ -2408,11 +2562,10 @@ class WebHandler(BaseHTTPRequestHandler):
             return OWNER
         for o in offered:
             user = self.server.hub.store.user_by_token(o) if o else None
-            if user:
+            person = self.server.hub.person(user) if user else None
+            if person:
                 self.server.hub.saw_user(user, self.client_ip())
-                strips = set(user.get("strips") or [])
-                return {"role": user["role"], "name": user["name"], "id": user["id"], "login": user.get("login", ""),
-                        "strips": strips if user["role"] == CUSTOMER else (strips or None)}
+                return person
         return None
 
     def client_ip(self) -> str:
@@ -2546,7 +2699,7 @@ class WebHandler(BaseHTTPRequestHandler):
             return
         hub = self.server.hub
         if path == "/api/state":
-            snap = hub.filter_for(who, self.server.run_on_loop(hub.snapshot()))
+            snap = self.server.run_on_loop(hub.state_for(who))
             snap["server"] = {"strip_port": STRIP_PORT, "version": VERSION}
             if who["role"] != "view":               # the address new strips dial; only people who add strips need it
                 snap["server"]["ip"] = self.server.public_ip
@@ -2558,6 +2711,11 @@ class WebHandler(BaseHTTPRequestHandler):
                 self.reply_json(403, {"error": "only the owner manages family members"})
             else:
                 self.reply_json(200, self.server.run_on_loop(hub.users()))
+        elif path == "/api/household":
+            if who["role"] != CUSTOMER:
+                self.reply_json(403, {"error": "only the account holder manages their home"})
+            else:
+                self.reply_json(200, self.server.run_on_loop(hub.household(who["id"])))
         elif path == "/api/health":
             self.reply_json(200, {"ok": True, "app": "darwish-smart-power", "version": VERSION})
         elif path == "/api/admin":
@@ -2579,7 +2737,7 @@ class WebHandler(BaseHTTPRequestHandler):
                 self.reply_json(403, {"error": "this strip is not shared with you"})
                 return
             code, body = self.server.run_on_loop(hub.history_report(
-                query.get("range", ["day"])[0], strip, allowed=who["strips"]))
+                query.get("range", ["day"])[0], strip, allowed=who["strips"], account=who.get("account")))
             self.reply_json(code, body)
         elif path == "/api/history.xlsx":
             query = parse_qs(urlsplit(self.path).query)
@@ -2589,7 +2747,7 @@ class WebHandler(BaseHTTPRequestHandler):
                 return
             rng = query.get("range", ["month"])[0]
             code, body = self.server.run_on_loop(hub.history_xlsx(
-                rng, strip, query.get("lang", ["ar"])[0], allowed=who["strips"]))
+                rng, strip, query.get("lang", ["ar"])[0], allowed=who["strips"], account=who.get("account")))
             if code != 200:
                 self.reply_json(code, body)
                 return
@@ -2818,7 +2976,8 @@ class WebHandler(BaseHTTPRequestHandler):
         try:
             outlets = outlet_list(req) if "outlets" in req else None
             if path == "/api/strips/expect":
-                code, body = self.server.run_on_loop(hub.expect_strip(req.get("code"), who.get("id") or "", self.client_ip()))
+                code, body = self.server.run_on_loop(hub.expect_strip(req.get("code"), who.get("account") or who.get("id") or "",
+                                                                      self.client_ip()))
             elif path == "/api/strips/approve":
                 code, body = self.server.run_on_loop(hub.approve_strip(strip_id))
                 if code == 200 and req.get("customer"):     # approve and give it to the customer who set it up
@@ -2852,6 +3011,19 @@ class WebHandler(BaseHTTPRequestHandler):
                     code, body = 400, {"error": "only customer accounts can be deleted here"}
                 else:
                     code, body = self.server.run_on_loop(hub.delete_account(who["id"]))
+            elif path.startswith("/api/household/") or path == "/api/my/settings":
+                if who["role"] != CUSTOMER:             # the account holder only, not the people they invited
+                    code, body = 403, {"error": "only the account holder can change this"}
+                elif path == "/api/my/settings":
+                    code, body = self.server.run_on_loop(hub.update_my_settings(who["id"], req))
+                elif path == "/api/household/add":
+                    code, body = self.server.run_on_loop(hub.household_add(who["id"], req))
+                elif path == "/api/household/update":
+                    code, body = self.server.run_on_loop(hub.household_update(who["id"], req))
+                elif path == "/api/household/delete":
+                    code, body = self.server.run_on_loop(hub.household_delete(who["id"], str(req.get("id", ""))))
+                else:
+                    code, body = 404, {"error": "not found"}
             elif path == "/api/users/add":
                 code, body = self.server.run_on_loop(hub.add_user(req))
             elif path == "/api/users/update":
@@ -3633,6 +3805,46 @@ async def selftest() -> None:
     assert [x["id"] for x in state["strips"]] == ["C0FFEEAA0001"]       # the strip they set up, and nothing else
     assert (await loop.run_in_executor(None, post, "/api/switch", {"strip": "A1B2C3D4E5F6", "outlet": 1, "on": True}, ali))[0] == 403
     assert (await loop.run_in_executor(None, post, "/api/users/add", {"name": "Y", "role": "control"}, ali))[0] == 403
+    # a customer's own price and alert limits; the owner's stay as they were
+    status, res = await loop.run_in_executor(None, post, "/api/my/settings", {"price_kwh": 2.5, "max_watts": 1200}, ali)
+    assert status == 200 and res["settings"]["price_kwh"] == 2.5 and res["settings"]["own"]
+    assert (await loop.run_in_executor(None, post, "/api/my/settings", {"price_kwh": -1}, ali))[0] == 400
+    status, state = await loop.run_in_executor(None, http, "/api/state", None, ali)
+    assert state["settings"]["price_kwh"] == 2.5 and "signup" not in state["settings"] and "month" in state
+    assert hub.store.settings["price_kwh"] != 2.5 and hub.strip_limits()["C0FFEEAA0001"]["max_watts"] == 1200
+    assert (await loop.run_in_executor(None, http, "/api/my/settings", {"price_kwh": 2}))[0] == 403      # the owner has /api/settings
+    status, report = await loop.run_in_executor(None, http, "/api/history?range=day", None, ali)
+    assert status == 200 and report["price_kwh"] == 2.5
+    # the people a customer invites see and control just that customer's strips, and manage nothing
+    status, res = await loop.run_in_executor(None, post, "/api/household/add", {"name": "Mona", "role": "view"}, ali)
+    assert status == 200 and len(res["token"]) >= 16 and [m["name"] for m in res["members"]] == ["Mona"]
+    mona, mona_id = res["token"], res["member"]["id"]
+    assert (await loop.run_in_executor(None, post, "/api/household/add", {"name": "X", "role": "owner"}, ali))[0] == 400
+    status, state = await loop.run_in_executor(None, http, "/api/state", None, mona)
+    assert status == 200 and state["me"]["role"] == "view" and state["me"]["home"] == "Ali"
+    assert [x["id"] for x in state["strips"]] == ["C0FFEEAA0001"] and state["settings"]["price_kwh"] == 2.5
+    assert (await loop.run_in_executor(None, post, "/api/switch", {"strip": "C0FFEEAA0001", "outlet": 1, "on": True}, mona))[0] == 403
+    assert (await loop.run_in_executor(None, post, "/api/household/update", {"id": mona_id, "role": "control"}, ali))[0] == 200
+    assert (await loop.run_in_executor(None, post, "/api/switch", {"strip": "A1B2C3D4E5F6", "outlet": 1, "on": True}, mona))[0] == 403
+    for path in ("/api/household/add", "/api/household/delete", "/api/my/settings", "/api/strips/remove", "/api/users/add",
+                 "/api/settings", "/api/account/delete"):
+        assert (await loop.run_in_executor(None, post, path, {"name": "Z", "id": mona_id, "strip": "C0FFEEAA0001",
+                                                                "price_kwh": 1}, mona))[0] in (400, 403), path
+    assert (await loop.run_in_executor(None, http, "/api/household", None, mona))[0] == 403
+    assert (await loop.run_in_executor(None, http, "/api/household", None, ali))[1]["members"][0]["role"] == "control"
+    assert all(u["id"] != mona_id for u in (await hub.users())["users"])          # not in the owner's family
+    assert (await hub.admin_report())["customers"][0]["household"] == 1
+    assert (await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "AB0002"}, mona))[0] == 200
+    assert hub.store.expected["AB0002"]["by"] == hub.store.account_by_login("01012345678")["id"]   # set up for Ali's home
+    hub.store.expected.pop("AB0002")
+    status, res = await loop.run_in_executor(None, post, "/api/household/update", {"id": mona_id, "new_token": True}, ali)
+    assert status == 200 and (await loop.run_in_executor(None, http, "/api/state", None, mona))[0] == 401
+    mona = res["token"]
+    assert (await loop.run_in_executor(None, http, "/api/state", None, mona))[0] == 200
+    assert (await loop.run_in_executor(None, post, "/api/household/delete", {"id": mona_id}, ali))[0] == 200
+    assert (await loop.run_in_executor(None, http, "/api/state", None, mona))[0] == 401
+    hub.guard.login_fails.clear()
+    assert (await loop.run_in_executor(None, post, "/api/my/settings", {"reset": True}, ali))[1]["settings"]["own"] is False
     assert (await loop.run_in_executor(None, post, "/api/login", {"login": "01012345678", "password": "nope"}))[0] == 401
     status, res = await loop.run_in_executor(None, post, "/api/login", {"login": "+01012345678".lstrip("+"), "password": "secret12"})
     assert status == 200 and res["token"] != ali
