@@ -2639,7 +2639,7 @@ class WebServer(ThreadingHTTPServer):
     def __init__(self, addr, hub: Hub, loop: asyncio.AbstractEventLoop, token: str, public_ip: str):
         super().__init__(addr, WebHandler)
         self.hub, self.loop, self.token, self.public_ip = hub, loop, token, public_ip
-        self.lan_ip = guess_lan_ip()
+        self.lan_ip = guess_home_ip()
 
     def strip_ip_for(self, phone_ip: str) -> str:
         """The address a strip set up by this phone should dial. In the server's own home (the phone comes
@@ -3466,6 +3466,25 @@ def guess_lan_ip() -> str:
         return "127.0.0.1"
 
 
+def guess_home_ip() -> str:
+    """The server's address on the home network, which strips in the server's own home dial. SP_LAN_IP sets it;
+    otherwise it is the address on the way to the internet, if that is a home-network address (a server with
+    a VPN, Tailscale or Docker has several addresses, and only that one is on the home Wi-Fi)."""
+    forced = os.environ.get("SP_LAN_IP", "").strip()
+    if forced:
+        return forced
+    for probe in ("8.8.8.8", "10.255.255.255"):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect((probe, 53))          # no packet is sent; this only picks a route
+                ip = s.getsockname()[0]
+        except OSError:
+            continue
+        if ipaddress.ip_address(ip).is_private and not ip.startswith("127."):
+            return ip
+    return "127.0.0.1"
+
+
 async def serve(args) -> int:
     store = Store(Path(args.data).resolve())
     history = History(store.path.with_name(store.path.stem + "-history.db"))
@@ -3479,6 +3498,8 @@ async def serve(args) -> int:
     print("Darwish Smart Power %s" % VERSION)
     print("  website          %s" % url)
     print("  control panel    %spanel   (installable app, asks for the password)" % url)
+    print("  strips dial      %s:%d (in other homes), %s:%d (in this home; SP_LAN_IP to change)"
+          % (ip, STRIP_PORT, web.lan_ip, STRIP_PORT))
     print("  strip port       TCP %d" % STRIP_PORT)
     print("  security         %s" % ("token required" if args.token else "NO TOKEN - only use on a home network you trust"))
     print("  saved settings   %s" % store.path)
