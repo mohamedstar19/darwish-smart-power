@@ -2639,6 +2639,15 @@ class WebServer(ThreadingHTTPServer):
     def __init__(self, addr, hub: Hub, loop: asyncio.AbstractEventLoop, token: str, public_ip: str):
         super().__init__(addr, WebHandler)
         self.hub, self.loop, self.token, self.public_ip = hub, loop, token, public_ip
+        self.lan_ip = guess_lan_ip()
+
+    def strip_ip_for(self, phone_ip: str) -> str:
+        """The address a strip set up by this phone should dial. In the server's own home (the phone comes
+        from the server's internet address, or the home network) that is the server's address at home:
+        most home routers do not loop a connection to their own internet address back inside."""
+        if self.lan_ip != "127.0.0.1" and (phone_ip == self.public_ip or is_local_address(phone_ip)):
+            return self.lan_ip
+        return self.public_ip
 
     def run_on_loop(self, coro, timeout: float = 20.0):
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
@@ -3098,6 +3107,8 @@ class WebHandler(BaseHTTPRequestHandler):
             if path == "/api/strips/expect":
                 code, body = self.server.run_on_loop(hub.expect_strip(req.get("code"), who.get("account") or who.get("id") or "",
                                                                       self.client_ip()))
+                if code == 200:
+                    body["strip_ip"] = self.server.strip_ip_for(self.client_ip())
             elif path == "/api/strips/approve":
                 code, body = self.server.run_on_loop(hub.approve_strip(strip_id))
                 if code == 200 and req.get("customer"):     # approve and give it to the customer who set it up
@@ -3921,7 +3932,12 @@ async def selftest() -> None:
     assert (await loop.run_in_executor(None, post, "/api/signup", {"name": "X", "login": "01012345678", "password": "secret12"}))[0] == 409
     status, state = await loop.run_in_executor(None, http, "/api/state", None, ali)
     assert status == 200 and state["me"]["role"] == CUSTOMER and state["strips"] == [] and "new_strips" not in state
-    assert (await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "AA0001"}, ali))[0] == 200
+    web.public_ip, web.lan_ip = "41.38.141.215", "192.168.1.50"
+    status, res = await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "AA0001"}, ali)
+    assert status == 200 and res["strip_ip"] == "41.38.141.215"          # a strip in another home dials the internet IP
+    status, res = await loop.run_in_executor(None, post, "/api/strips/expect", {"code": "AA0001"}, ali, "41.38.141.215")
+    assert status == 200 and res["strip_ip"] == "192.168.1.50"           # one in the server's own home dials it at home
+    web.public_ip = "127.0.0.1"
     assert hub.attach(Remote("41.33.1.1"), {"mac": "C0FFEEAA0001", "mac2": "", "model": "lgutap", "fw": "x"}) is not None
     status, state = await loop.run_in_executor(None, http, "/api/state", None, ali)
     assert [x["id"] for x in state["strips"]] == ["C0FFEEAA0001"]       # the strip they set up, and nothing else

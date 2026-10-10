@@ -198,9 +198,11 @@ class ServerClient(private val address: ServerAddress, private val token: String
     }
 
     /** Tells the server a strip with this setup code is being added from the app, so it is approved by itself. */
-    suspend fun expectStrip(code: String) {
-        call("POST", "api/strips/expect", JSONObject().put("code", code))
-    }
+    /** Tells the server this strip is being set up; returns the address the strip should dial (the server's
+     *  address at home when the phone is in the server's own home), or null if the server did not say. */
+    suspend fun expectStrip(code: String): String? =
+        JSONObject(call("POST", "api/strips/expect", JSONObject().put("code", code))).optString("strip_ip")
+            .takeIf { SetupRules.isIpv4(it) }
 
     suspend fun approveStrip(id: String) {
         call("POST", "api/strips/approve", JSONObject().put("strip", id))

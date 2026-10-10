@@ -499,12 +499,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Joins the strip's own Wi-Fi by itself, sends the setup, then gives the phone back its Wi-Fi. */
     suspend fun provisionFound(apSsid: String, serverIp: String, ssid: String, password: String): SetupResult {
         SetupRules.check(serverIp, ssid, password)?.let { return SetupResult.Invalid(it) }
-        // tell the server this strip is ours, so it is approved as soon as it connects
-        client()?.let { runCatching { it.expectStrip(SetupRules.apCode(apSsid)) } }
+        // tell the server this strip is ours, so it is approved as soon as it connects. Its answer is the address
+        // the strip should dial: in the server's own home that is the server's address at home, since most
+        // routers do not let a device reach the home's own internet address from inside
+        val told = client()?.let { runCatching { it.expectStrip(SetupRules.apCode(apSsid)) }.getOrNull() }
+        val dial = if (told != null && serverIp.trim() == suggestedServerIp()) told else serverIp
         // if the person missed Android's "connect?" prompt, ask once more by itself
         val joined = stripFinder.join(apSsid) ?: stripFinder.join(apSsid) ?: return SetupResult.JoinFailed
         val result = try {
-            setup.provision(serverIp, ssid, password, joined.network)
+            setup.provision(dial, ssid, password, joined.network)
         } finally {
             joined.release()
         }
