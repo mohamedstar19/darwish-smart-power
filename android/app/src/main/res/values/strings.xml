@@ -397,4 +397,9 @@
     <string name="notif_rule">%1$s on %2$s reached %3$s.</string>
     <string name="export_excel">Download the energy log (Excel file)</string>
     <string name="export_done">Energy file saved ✅</string>
+    <string name="compare_title">Outlets compared</string>
+    <string name="compare_used">Usage</string>
+    <string name="compare_now">Right now</string>
+    <string name="compare_rest">Other outlets (%1$d)</string>
+    <string name="compare_idle">No outlet is drawing power right now.</string>
 </resources>

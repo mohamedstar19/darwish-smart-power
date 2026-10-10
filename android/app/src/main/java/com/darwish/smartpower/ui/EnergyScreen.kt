@@ -27,6 +27,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,9 +47,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darwish.smartpower.R
 import com.darwish.smartpower.data.EnergyReport
+import com.darwish.smartpower.data.Strip
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private val RANGES = listOf("day" to R.string.range_day, "week" to R.string.range_week, "month" to R.string.range_month)
 
@@ -121,9 +126,11 @@ fun EnergyScreen(vm: AppViewModel) {
                     }
                 }
             }
+            if (state.strips.isNotEmpty()) {
+                item { OutletComparison(report, state.strips) }
+            }
             if (report.byOutlet.isNotEmpty()) {
                 item { SectionHeader(stringResource(R.string.energy_by_device)) }
-                val top = report.byOutlet.maxOf { it.kwh }.coerceAtLeast(0.001)
                 items(report.byOutlet, key = { it.stripId + it.outlet }) { usage ->
                     val strip = state.strips.firstOrNull { it.id == usage.stripId }
                     val outlet = strip?.outlets?.firstOrNull { it.index == usage.outlet }
@@ -143,13 +150,6 @@ fun EnergyScreen(vm: AppViewModel) {
                                 Text(kwh(usage.kwh), fontWeight = FontWeight.SemiBold)
                                 Text(money(usage.cost, currency), color = Glass.Amber, style = MaterialTheme.typography.labelSmall)
                             }
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(Glass.Fill)) {
-                            Box(
-                                Modifier.fillMaxWidth((usage.kwh / top).toFloat().coerceIn(0.02f, 1f)).fillMaxHeight()
-                                    .clip(RoundedCornerShape(50)).background(Glass.Accent)
-                            )
                         }
                     }
                 }
@@ -184,6 +184,102 @@ private fun BarChart(report: EnergyReport, modifier: Modifier) {
                 size = Size(barWidth, h),
                 cornerRadius = CornerRadius(barWidth / 2, barWidth / 2),
             )
+        }
+    }
+}
+
+private class CompareRow(val key: String, val emoji: String, val name: String, val place: String, val value: Double)
+
+private const val COMPARE_ROWS = 8
+
+/**
+ * The outlets side by side: one bar each on a shared scale, biggest first, with its value and share.
+ * "Usage" compares the energy each outlet used in the range picked above; "Right now" compares live watts.
+ * Past eight outlets the smallest fold into one "other outlets" bar so the card stays short.
+ */
+@Composable
+private fun OutletComparison(report: EnergyReport, strips: List<Strip>) {
+    var live by rememberSaveable { mutableStateOf(false) }
+    val rows = if (live) {
+        strips.flatMap { strip ->
+            strip.outlets.filter { it.watts >= 0.5 }.map { o ->
+                CompareRow(strip.id + o.index, deviceEmoji(o.icon), outletName(o), stripName(strip), o.watts)
+            }
+        }.sortedByDescending { it.value }
+    } else {
+        report.byOutlet.filter { it.kwh > 0 }.map { u ->
+            val strip = strips.firstOrNull { it.id == u.stripId }
+            val outlet = strip?.outlets?.firstOrNull { it.index == u.outlet }
+            CompareRow(
+                u.stripId + u.outlet, deviceEmoji(outlet?.icon ?: "plug"),
+                outlet?.let { outletName(it) } ?: stringResource(R.string.default_outlet_name, u.outlet),
+                strip?.let { stripName(it) } ?: u.stripId.takeLast(6), u.kwh,
+            )
+        }
+    }
+    val shown = if (rows.size <= COMPARE_ROWS) rows else {
+        val rest = rows.drop(COMPARE_ROWS - 1)
+        rows.take(COMPARE_ROWS - 1) +
+            CompareRow("rest", "➕", stringResource(R.string.compare_rest, rest.size), "", rest.sumOf { it.value })
+    }
+    val total = rows.sumOf { it.value }
+    val top = shown.maxOfOrNull { it.value }?.coerceAtLeast(0.001) ?: 0.001
+
+    GlassCard(Modifier.fillMaxWidth(), padding = 18.dp) {
+        Text(stringResource(R.string.compare_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(Glass.Fill).padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            listOf(false to R.string.compare_used, true to R.string.compare_now).forEach { (mode, label) ->
+                val selected = mode == live
+                Box(
+                    Modifier.weight(1f).clip(RoundedCornerShape(50))
+                        .background(if (selected) Glass.FillStrong else Glass.Fill.copy(alpha = 0f))
+                        .clickable { live = mode }
+                        .padding(vertical = 7.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(stringResource(label), style = MaterialTheme.typography.labelLarge,
+                        color = if (selected) Glass.Text else Glass.TextSoft)
+                }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        if (shown.isEmpty()) {
+            Text(stringResource(if (live) R.string.compare_idle else R.string.energy_empty),
+                color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall)
+        }
+        shown.forEachIndexed { i, row ->
+            if (i > 0) Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(row.emoji, fontSize = 16.sp)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (row.place.isEmpty()) row.name else "${row.name} · ${row.place}",
+                    modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(if (live) watts(row.value) else kwh(row.value), style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold)
+                val share = (row.value / total * 100).roundToInt()
+                Text(
+                    ltr(if (share == 0 && row.value > 0) "<1%" else "$share%"),
+                    color = Glass.TextFaint, style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.width(40.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                )
+            }
+            Spacer(Modifier.height(5.dp))
+            // bars grow from the start edge (right in Arabic), all on the same scale
+            Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(4.dp)).background(Glass.Fill)) {
+                Box(
+                    Modifier.fillMaxWidth((row.value / top).toFloat().coerceIn(0.015f, 1f)).fillMaxHeight()
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (row.key == "rest") Brush.linearGradient(listOf(Glass.TextFaint, Glass.TextFaint)) else Glass.Accent)
+                )
+            }
         }
     }
 }

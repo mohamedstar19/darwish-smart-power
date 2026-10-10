@@ -95,6 +95,23 @@ header .hello{color:var(--soft);font-size:13px}
 .xlsx{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 .xlsx select{flex:1 1 140px;background:rgba(0,0,0,.3);border:1px solid var(--stroke);border-radius:12px;padding:9px 10px;color:var(--text);font:inherit}
 .xlsx .btn{flex:2 1 200px}
+.cmp{margin-top:14px;padding:16px}
+.cmp h2{margin:0 0 10px;font-size:16px}
+.cmp .tabs{display:flex;gap:3px;background:var(--fill);border-radius:999px;padding:3px;margin-bottom:14px}
+.cmp .tabs button{flex:1;border:0;background:none;border-radius:999px;padding:7px 0;font:inherit;font-size:13px;color:var(--soft)}
+.cmp .tabs button.on{background:var(--fill2);color:var(--text);font-weight:600}
+.cr{margin-top:12px}
+.cmp .tabs+.cr{margin-top:0}
+.cl{display:flex;align-items:center;gap:8px;font-size:13px}
+.cl .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl .nm small{color:var(--soft)}
+.cl .v{font-weight:600}
+.cl .p{color:var(--faint);font-size:11px;min-width:34px;text-align:end}
+.ct{height:10px;background:var(--fill);border-radius:4px;margin-top:5px;overflow:hidden}
+.ct i{display:block;height:100%;min-width:3px;border-radius:4px;background:linear-gradient(90deg,#ff7a3d,#ffb347)}
+[dir="rtl"] .ct i{background:linear-gradient(270deg,#ff7a3d,#ffb347)}
+.ct i.rest{background:var(--faint)}
+.cmp .none{color:var(--soft);font-size:13px}
 /* welcome (sign in / new account) */
 .welcome{position:relative;max-width:420px;margin:0 auto;padding:10px 2px 24px;text-align:center}
 .whero{position:fixed;top:0;left:0;right:0;height:340px;z-index:0;overflow:hidden;border-radius:0 0 50% 50% / 0 0 56px 56px;
@@ -205,7 +222,10 @@ const L = {
        e403: "التسجيل مقفول دلوقتي.", e429: "محاولات كتير، جرّب بعد شوية.", eName: "اكتب اسمك.", eLogin: "اكتب رقم موبايل أو إيميل.",
        ePw: "الباسورد لازم يكون 8 حروف على الأقل.", noStripsYet: "لسه مفيش مشترك على حسابك. لو معاك آيفون، تواصل معانا وإحنا نجهّز المشترك ونربطه بحسابك، أو جهّزه مرة واحدة من أي موبايل أندرويد بتطبيقنا.",
        deleteAcc: "امسح حسابي", xlsx: "📥 تنزيل سجل الاستهلاك (Excel)", rDay: "النهارده", rWeek: "آخر 7 أيام",
-       rMonth: "آخر 30 يوم", rYear: "آخر سنة", xlsxFail: "معرفناش ننزّل الملف، جرّب تاني."},
+       rMonth: "آخر 30 يوم", rYear: "آخر سنة", xlsxFail: "معرفناش ننزّل الملف، جرّب تاني.",
+       cmp: "⚡ مقارنة المخارج", cNow: "دلوقتي", cDay: "النهارده", cWeek: "7 أيام", cMonth: "30 يوم",
+       cRest: "باقي المخارج", cIdle: "مفيش مخرج بيسحب كهربا دلوقتي.", cEmpty: "لسه مفيش استهلاك متسجل في الفترة دي.",
+       cLoading: "بنجيب الأرقام…"},
   en: {lang: "العربية", hello_m: "Good morning", hello_e: "Good evening", now: "Using now", today: "Today", month: "This month",
        scenes: "Scenes", strip: "Strip", outlet: "Outlet", online: "online", offline: "offline", allOn: "All on", allOff: "All off",
        timer: "Timer", rename: "New name (empty = default):", timerAsk: "Switch after how many minutes? (0 = cancel)", turnsOn: "on at", turnsOff: "off at",
@@ -227,7 +247,10 @@ const L = {
        e403: "New accounts are closed.", e429: "Too many attempts, try later.", eName: "Enter your name.", eLogin: "Enter a mobile number or e-mail.",
        ePw: "The password needs at least 8 characters.", noStripsYet: "No strip on your account yet. On an iPhone, contact us and we set up the strip and link it to your account, or set it up once from any Android phone with our app.",
        deleteAcc: "Delete my account", xlsx: "📥 Download the energy log (Excel)", rDay: "Today", rWeek: "Last 7 days",
-       rMonth: "Last 30 days", rYear: "Last year", xlsxFail: "Could not download the file, try again."}
+       rMonth: "Last 30 days", rYear: "Last year", xlsxFail: "Could not download the file, try again.",
+       cmp: "⚡ Outlets compared", cNow: "Right now", cDay: "Today", cWeek: "7 days", cMonth: "30 days",
+       cRest: "Other outlets", cIdle: "No outlet is drawing power right now.", cEmpty: "No usage recorded yet for this period.",
+       cLoading: "Loading…"}
 };
 const ICON = {plug:"🔌",kettle:"☕",router:"📶",tv:"📺",ac:"❄️",lamp:"💡",heater:"🔥",fan:"🌀",fridge:"🧊",washer:"🧺",charger:"🔋",
               computer:"💻",speaker:"🔊",camera:"📷",microwave:"🍲",iron:"👔"};
@@ -390,6 +413,7 @@ function render() {
   if (s.strips.length) html += `<div class="xlsx"><select id="xr" aria-label="${t("xlsx")}">
       ${["day", "week", "month", "year"].map(r => `<option value="${r}"${r === xlsxRange ? " selected" : ""}>${t("r" + r[0].toUpperCase() + r.slice(1))}</option>`).join("")}
       </select><button class="btn" id="xlsx">${t("xlsx")}</button></div>`;
+  if (s.strips.length) html += compareHtml(s, cur);
   if (s.new_strips && s.new_strips.length) {
     html += `<section class="glass newstrips"><h2>🆕 ${t("newTitle")}</h2><p>${t("newBody")}</p>` +
       s.new_strips.map(n => `<div class="newrow"><div><b>${t("strip")} <bdi>${esc(n.id.slice(-6))}</bdi></b>
@@ -455,6 +479,59 @@ async function withPin(stripId, fn) {
   }
 }
 
+// Outlets compared: one bar per outlet on a shared scale, biggest first. "Right now" uses live watts from
+// the state; the other ranges use the server's energy report, fetched when picked and refreshed each minute.
+const CMP_ROWS = 8;
+let cmpRange = (() => { try { return localStorage.getItem("dsp-cmp") || "now"; } catch (e) { return "now"; } })();
+let cmpReport = null;
+async function loadCompare(force) {
+  if (cmpRange === "now") return;
+  if (!force && cmpReport && cmpReport.range === cmpRange && Date.now() - cmpReport.at < 60000) return;
+  const rng = cmpRange;
+  try { const r = await api(`/api/history?range=${rng}`); if (rng === cmpRange) { cmpReport = {...r, range: rng, at: Date.now()}; render(); } }
+  catch (e) {}
+}
+function compareHtml(s, cur) {
+  const live = cmpRange === "now", find = id => s.strips.find(x => x.id === id);
+  const stripLabel = x => x.name || `${t("strip")} ${x.id.slice(-6)}`;
+  let rows = null;
+  if (live) {
+    rows = [];
+    s.strips.forEach(x => x.outlets.forEach(o => { if (o.watts >= 0.5) rows.push({icon: ICON[o.icon] || "🔌",
+      name: o.name || `${t("outlet")} ${o.index}`, place: stripLabel(x), v: o.watts}); }));
+    rows.sort((a, b) => b.v - a.v);
+  } else if (cmpReport && cmpReport.range === cmpRange) {
+    rows = cmpReport.by_outlet.filter(u => u.kwh > 0).map(u => {
+      const x = find(u.strip), o = x && x.outlets.find(q => q.index === u.outlet);
+      return {icon: ICON[o && o.icon] || "🔌", name: (o && o.name) || `${t("outlet")} ${u.outlet}`,
+        place: x ? stripLabel(x) : u.strip.slice(-6), v: u.kwh, cost: u.cost};
+    });
+  }
+  let body;
+  if (!rows) body = `<div class="none">${t("cLoading")}</div>`;
+  else if (!rows.length) body = `<div class="none">${live ? t("cIdle") : t("cEmpty")}</div>`;
+  else {
+    const total = rows.reduce((a, r) => a + r.v, 0) || 1;
+    if (rows.length > CMP_ROWS) {
+      const rest = rows.slice(CMP_ROWS - 1);
+      rows = rows.slice(0, CMP_ROWS - 1).concat({icon: "➕", name: `${t("cRest")} (${rest.length})`, place: "", rest: true,
+        v: rest.reduce((a, r) => a + r.v, 0), cost: live ? undefined : rest.reduce((a, r) => a + (r.cost || 0), 0)});
+    }
+    const top = Math.max(...rows.map(r => r.v), 0.001);
+    body = rows.map(r => {
+      const val = live ? `${num(r.v, r.v >= 100 ? 0 : 1)} W` : `${num(r.v, 2)} kWh`, pct = Math.round(r.v / total * 100);
+      const tip = r.cost != null ? `${val} · ${num(r.cost, 2)} ${cur}` : val;
+      return `<div class="cr" title="${esc(tip)}"><div class="cl"><span>${r.icon}</span>
+        <span class="nm">${esc(r.name)}${r.place ? ` <small>· ${esc(r.place)}</small>` : ""}</span>
+        <bdi class="v" dir="ltr">${val}</bdi><bdi class="p" dir="ltr">${pct || r.v <= 0 ? pct + "%" : "&lt;1%"}</bdi></div>
+        <div class="ct"><i${r.rest ? ' class="rest"' : ""} style="width:${(r.v / top * 100).toFixed(1)}%"></i></div></div>`;
+    }).join("");
+  }
+  return `<section class="glass cmp"><h2>${t("cmp")}</h2><div class="tabs" role="tablist">` +
+    ["now", "day", "week", "month"].map(r => `<button role="tab" aria-selected="${r === cmpRange}" class="${r === cmpRange ? "on" : ""}" data-cmp="${r}">${t("c" + r[0].toUpperCase() + r.slice(1))}</button>`).join("") +
+    `</div>${body}</section>`;
+}
+
 let xlsxRange = "month";
 // the energy log as an Excel file: fetched with the sign-in, then handed to the browser as a download
 async function downloadXlsx() {
@@ -474,6 +551,8 @@ async function downloadXlsx() {
 
 document.addEventListener("click", async ev => {
   if (ev.target.closest("#xlsx")) { downloadXlsx(); return; }
+  const cmp = ev.target.closest("[data-cmp]");
+  if (cmp) { cmpRange = cmp.dataset.cmp; save("dsp-cmp", cmpRange); render(); loadCompare(true); return; }
   if (readOnly() && ev.target.closest("[data-sw],[data-timer],[data-more],[data-scene]")) { toast("👁 " + t("viewOnly")); return; }
   const ap = ev.target.closest("[data-approve]"), bl = ev.target.closest("[data-block]");
   if (ap || bl) {
@@ -514,7 +593,7 @@ document.addEventListener("click", async ev => {
 });
 
 async function refresh() {
-  try { state = await api("/api/state"); render(); }
+  try { state = await api("/api/state"); render(); loadCompare(); }
   catch (e) {
     if (e.status === 401) { clearInterval(timerId); save("dsp-token", null); renderLogin(t("wrong")); }
     else if (!state) renderLogin(t("unreachable"));

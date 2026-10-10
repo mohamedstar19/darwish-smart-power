@@ -383,4 +383,9 @@
     <string name="notif_rule">%1$s في %2$s وصل %3$s.</string>
     <string name="export_excel">تنزيل سجل الاستهلاك (ملف Excel)</string>
     <string name="export_done">اتحفظ ملف الاستهلاك ✅</string>
+    <string name="compare_title">مقارنة المخارج</string>
+    <string name="compare_used">الاستهلاك</string>
+    <string name="compare_now">دلوقتي</string>
+    <string name="compare_rest">باقي المخارج (%1$d)</string>
+    <string name="compare_idle">مفيش مخرج بيسحب كهربا دلوقتي.</string>
 </resources>
