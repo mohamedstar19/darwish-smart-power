@@ -429,4 +429,8 @@
     <string name="setup_typed_hint">Open your phone’s Wi-Fi settings and look for a network named like TONLY_TAP_96BB292. Type its name here (or just the letters at its end) and the app joins it by itself.</string>
     <string name="setup_typed_label">The strip’s Wi-Fi name</string>
     <string name="setup_typed_use">Use this network</string>
+    <string name="setup_location_help">Some phones show the strip’s Wi-Fi to apps only when Location is on and the app may use it. The app does not use your location for anything.</string>
+    <string name="setup_allow_location">Allow location and search again</string>
+    <string name="setup_seen_title">Networks the phone sees (%1$d)</string>
+    <string name="setup_seen_state">Location on: %1$s · Location permission: %2$s</string>
 </resources>

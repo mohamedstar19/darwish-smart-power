@@ -128,6 +128,9 @@ fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Uni
         }
     }
 
+    // some phones list no setup Wi-Fi without the location permission, even on Android 13+: ask, then look again
+    val askLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { search() }
+
     fun ready() {
         if (vm.stripFinder.hasPermission()) search() else askPermission.launch(vm.stripFinder.permissions)
     }
@@ -203,11 +206,19 @@ fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Uni
                         })) {
                             Button(onClick = ::search) { Text(stringResource(R.string.setup_search_again)) }
                         }
+                        if (!found.hasLocation || !found.locationOn) {
+                            NoticeCard(stringResource(R.string.setup_location_help)) {
+                                Button(onClick = {
+                                    if (!found.hasLocation) askLocation.launch(vm.stripFinder.locationPermissions) else search()
+                                }) { Text(stringResource(if (!found.hasLocation) R.string.setup_allow_location else R.string.setup_search_again)) }
+                            }
+                        }
                         // Android sometimes hides the strip's Wi-Fi from apps; the person can see it in Wi-Fi settings
                         TypedApCard { apSsid ->
                             scan = found.copy(strips = listOf(NearbyWifi(apSsid, 0, 2412)))
                             chosen = apSsid
                         }
+                        SeenNetworksCard(found)
                     } else {
                         StripsCard(found.strips, chosen, onChoose = { chosen = it; result = null }, onSearch = ::search)
                         HomeWifiCard(
@@ -292,6 +303,25 @@ private fun BusyCard(emoji: String, title: String, tips: List<Int>) {
         )
         if (tips.isNotEmpty()) Spacer(Modifier.height(12.dp))
         tips.forEachIndexed { i, tip -> NumberedLine(i + 1, stringResource(tip)) }
+    }
+}
+
+/** What the phone listed, to see why no strip showed up (a screenshot of it says it all). */
+@Composable
+private fun SeenNetworksCard(found: ScanOutcome.Found) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    TextButton(onClick = { open = !open }) {
+        Text((if (open) "▴ " else "▾ ") + stringResource(R.string.setup_seen_title, found.seen), color = Glass.TextSoft)
+    }
+    if (open) GlassCard(Modifier.fillMaxWidth()) {
+        Text(
+            "Android ${android.os.Build.VERSION.RELEASE} (${android.os.Build.VERSION.SDK_INT}) · " +
+                "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n" +
+                stringResource(R.string.setup_seen_state, if (found.locationOn) "✅" else "❌", if (found.hasLocation) "✅" else "❌"),
+            color = Glass.TextSoft, style = MaterialTheme.typography.labelSmall,
+        )
+        Spacer(Modifier.height(6.dp))
+        found.names.take(25).forEach { Text("• " + it, style = MaterialTheme.typography.bodySmall) }
     }
 }
 

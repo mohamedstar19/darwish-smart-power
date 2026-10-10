@@ -415,4 +415,8 @@
     <string name="setup_typed_hint">افتح إعدادات الواي فاي في الموبايل ودوّر على شبكة اسمها زي TONLY_TAP_96BB292. اكتب اسمها هنا (أو الحروف اللي في آخرها بس)، والتطبيق هيدخل عليها لوحده.</string>
     <string name="setup_typed_label">اسم شبكة المشترك</string>
     <string name="setup_typed_use">استخدم الشبكة دي</string>
+    <string name="setup_location_help">بعض الموبايلات مش بتعرض شبكة المشترك للتطبيق غير لو الموقع (Location) شغال والتطبيق واخد إذنه. التطبيق مش بيستخدم موقعك في أي حاجة.</string>
+    <string name="setup_allow_location">اسمح بالموقع ودوّر تاني</string>
+    <string name="setup_seen_title">الشبكات اللي الموبايل شايفها (%1$d)</string>
+    <string name="setup_seen_state">الموقع شغال: %1$s · إذن الموقع: %2$s</string>
 </resources>

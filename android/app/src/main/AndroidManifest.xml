@@ -11,9 +11,10 @@
     <uses-permission
         android:name="android.permission.NEARBY_WIFI_DEVICES"
         android:usesPermissionFlags="neverForLocation" />
-    <!-- Android 12 and older only allow listing Wi-Fi networks with location; it is not used for anything else -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="32" />
+    <!-- Android 12 and older only list Wi-Fi networks with location, and some newer phones still hide them
+         without it (asked for only then); it is not used for anything else -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- alerts: strip offline, outlet too hot, too much power -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 

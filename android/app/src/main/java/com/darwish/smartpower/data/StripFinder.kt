@@ -34,9 +34,18 @@ sealed interface ScanOutcome {
     data object NeedPermission : ScanOutcome
     data object WifiOff : ScanOutcome
     data object LocationOff : ScanOutcome
-    /** [strips]: strips in setup mode; [homes]: other 2.4 GHz networks, strongest first; [seen]: how many
-     *  networks the phone listed at all (none at all usually means Android hid them: location is off). */
-    data class Found(val strips: List<NearbyWifi>, val homes: List<NearbyWifi>, val seen: Int = strips.size + homes.size) : ScanOutcome
+    /** [strips]: strips in setup mode; [homes]: other 2.4 GHz networks, strongest first; [names]: every network
+     *  the phone listed (none at all usually means Android hid them); [locationOn] / [hasLocation]: the phone's
+     *  location switch and the app's location permission, which some phones want before they list networks. */
+    data class Found(
+        val strips: List<NearbyWifi>,
+        val homes: List<NearbyWifi>,
+        val names: List<String> = (strips + homes).map { it.ssid },
+        val locationOn: Boolean = true,
+        val hasLocation: Boolean = true,
+    ) : ScanOutcome {
+        val seen: Int get() = names.size
+    }
 }
 
 /** The strip's Wi-Fi while the app is joined to it; [release] hands the phone back to its usual Wi-Fi. */
@@ -58,6 +67,18 @@ class StripFinder(context: Context) {
 
     fun hasPermission(): Boolean = permissions.all {
         ContextCompat.checkSelfPermission(app, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    /** Location too: Android 13+ should not need it, but some phones list no setup Wi-Fi without it. */
+    val locationPermissions: Array<String> =
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+
+    fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(app, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    private fun locationOn(): Boolean {
+        val location = app.getSystemService(LocationManager::class.java) ?: return false
+        return LocationManagerCompat.isLocationEnabled(location)
     }
 
     @SuppressLint("MissingPermission") // checked by hasPermission() first
@@ -95,7 +116,9 @@ class StripFinder(context: Context) {
         return ScanOutcome.Found(
             strips = seen.filter { SetupRules.isStripAp(it.ssid) },
             homes = seen.filter { !SetupRules.isStripAp(it.ssid) && SetupRules.is24GHz(it.frequency) },
-            seen = seen.size,
+            names = seen.map { it.ssid },
+            locationOn = locationOn(),
+            hasLocation = hasLocationPermission(),
         )
     }
 
@@ -169,7 +192,8 @@ class StripFinder(context: Context) {
 
     @Suppress("DEPRECATION")                    // SSID is replaced by wifiSsid only on Android 13+
     private fun ScanResult.toNearby(): NearbyWifi? {
-        val name = SSID?.trim('"').orEmpty()
-        return if (name.isEmpty()) null else NearbyWifi(name, level, frequency)
+        val modern = if (Build.VERSION.SDK_INT >= 33) wifiSsid?.toString() else null
+        val name = (modern?.takeIf { it.startsWith("\"") } ?: SSID).orEmpty().trim().trim('"').trim()
+        return if (name.isEmpty() || name == "<unknown ssid>") null else NearbyWifi(name, level, frequency)
     }
 }
