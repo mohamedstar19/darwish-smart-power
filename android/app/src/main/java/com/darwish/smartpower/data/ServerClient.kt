@@ -100,6 +100,9 @@ class ServerClient(private val address: ServerAddress, private val token: String
             .put("kind", s.kind).put("enabled", s.enabled)
         if (s.isCycle) {
             body.put("on_minutes", s.onMinutes).put("off_minutes", s.offMinutes)
+        } else if (s.isWatch) {
+            body.put("metric", s.metric).put("above", s.above).put("value", s.value).put("seconds", s.seconds)
+                .put("action", s.action)
         } else {
             body.put("on", s.turnOn).put("time", s.time).put("days", JSONArray(s.days))
         }

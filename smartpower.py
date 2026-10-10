@@ -492,6 +492,8 @@ class Store:
 
     # schedules, kind "time": {"id", "strip", "outlets", "on", "time": "HH:MM", "days": [0..6 = Mon..Sun], "enabled"}
     #            kind "cycle": {"id", "strip", "outlets", "on_minutes", "off_minutes", "started_at", "enabled"}
+    #            kind "watch": {"id", "strip", "outlets", "metric": "power"|"temp", "above", "value", "seconds",
+    #                           "action": "off"|"alert", "enabled"} - e.g. off once a charger draws under 3 W for 10 min
     def save_schedule(self, sched: Dict[str, Any]) -> None:
         self.schedules = [s for s in self.schedules if s.get("id") != sched["id"]] + [sched]
         self.schedules.sort(key=lambda s: (s.get("kind") != "time", s.get("time", ""), s["strip"]))
@@ -1174,6 +1176,8 @@ class Hub:
         self.last_alert: Dict[Tuple[str, str, int], float] = {}
         self.schedule_fired: Dict[str, str] = {}
         self.cycle_phase: Dict[str, bool] = {}
+        # monitoring rules: (rule id, outlet) -> when its condition started holding; "fired" once acted on
+        self.watch_since: Dict[Tuple[str, int], Any] = {}
         self.pin_failures: Dict[str, Tuple[int, float]] = {}
         self.user_seen: Dict[str, float] = {}
         self.user_ips: Dict[str, Dict[str, float]] = {}     # member id -> internet addresses their app used lately
@@ -1934,8 +1938,25 @@ class Hub:
                 return 400, {"error": "on and off times must be 1 to 1440 minutes"}
             sched.update({"on_minutes": on_m, "off_minutes": off_m, "started_at": int(now)})
             self.cycle_phase.pop(sched["id"], None)           # (re)start from the "on" part
+        elif kind == "watch":
+            metric, action = req.get("metric"), req.get("action", "off")
+            try:
+                value, seconds = float(req.get("value")), int(req.get("seconds", 0))
+            except (TypeError, ValueError):
+                return 400, {"error": "value and seconds must be numbers"}
+            above = metric == "temp" or bool(req.get("above", True))      # only "too hot" makes sense for heat
+            limits = {"power": (0.0, 4000.0), "temp": (20.0, 100.0)}
+            if metric not in limits or action not in ("off", "alert"):
+                return 400, {"error": "metric must be power or temp, action off or alert"}
+            if not limits[metric][0] <= value <= limits[metric][1] or (not above and value <= 0):
+                return 400, {"error": "the %s limit must be %g to %g" % ((metric,) + limits[metric])}
+            if not 10 <= seconds <= 86400:
+                return 400, {"error": "the condition must last 10 seconds to 24 hours"}
+            sched.update({"metric": metric, "above": above, "value": round(value, 1), "seconds": seconds,
+                          "action": action})
+            self.watch_since = {k: v for k, v in self.watch_since.items() if k[0] != sched["id"]}
         else:
-            return 400, {"error": "kind must be time or cycle"}
+            return 400, {"error": "kind must be time, cycle or watch"}
         self.store.save_schedule(sched)
         return 200, {"ok": True, "schedule": sched, "schedules": self.schedules_json(now)}
 
@@ -1950,6 +1971,7 @@ class Hub:
                 return denied
         self.store.delete_schedule(sched_id)
         self.cycle_phase.pop(sched_id, None)
+        self.watch_since = {k: v for k, v in self.watch_since.items() if k[0] != sched_id}
         return 200, {"ok": True, "schedules": self.schedules_json()}
 
     @staticmethod
@@ -2129,9 +2151,40 @@ class Hub:
                     link.close()
             try:
                 self.check_alerts()
+                await self.run_watches()
             except sqlite3.Error as err:
                 log("[alerts] %s" % err)
             await asyncio.sleep(POLL_EVERY)
+
+    async def run_watches(self, now: Optional[float] = None) -> None:
+        """Monitoring rules: an outlet that is on and stays above (or below) a power or temperature limit for
+        the rule's time is switched off, or just reported. It acts once until the condition clears again."""
+        now = time.time() if now is None else now
+        for rule in list(self.store.schedules):
+            if rule.get("kind") != "watch" or not rule.get("enabled", True):
+                continue
+            strip = self.strips.get(rule["strip"])
+            if strip is None or not strip.online or not self.store.is_approved(strip.mac):
+                continue
+            for n in (list(OUTLETS) if 0 in rule["outlets"] else rule["outlets"]):
+                o, key = strip.outlets[n], (rule["id"], n)
+                reading = o.watts if rule["metric"] == "power" else o.temp_c
+                holds = o.on and reading is not None and (
+                    reading > rule["value"] if rule["above"] else reading < rule["value"])
+                if not holds:
+                    self.watch_since.pop(key, None)
+                    continue
+                since = self.watch_since.setdefault(key, now)
+                if since == "fired" or now - since < rule["seconds"]:
+                    continue
+                self.watch_since[key] = "fired"
+                kind = "rule_" + rule["metric"] + ("_off" if rule["action"] == "off" else "")
+                self.history.add_event(kind, strip.mac, n, round(float(reading), 1), now=now)
+                if rule["action"] == "off":
+                    code, body = await self.switch(strip.mac, n, False, internal=True)
+                    log("[rule] %s outlet %d off: %s %.1f %s %.1f for %ds (%s)" % (
+                        strip.mac[-6:], n, rule["metric"], reading, ">" if rule["above"] else "<", rule["value"],
+                        rule["seconds"], "done" if body.get("confirmed") else body.get("error", "sent")))
 
     async def run_due_timers(self, now: Optional[float] = None) -> None:
         now = time.time() if now is None else now
@@ -3184,6 +3237,39 @@ async def selftest() -> None:
     assert (await hub.save_schedule({"strip": "A1B2C3D4E5F6", "kind": "cycle", "outlets": [3],
                                      "on_minutes": 0, "off_minutes": 5}))[0] == 400
     await hub.delete_schedule(body["schedule"]["id"])
+
+    # monitoring rules: a charger drawing under 3 W for a while is switched off; a too-big load only reported
+    strip_a = hub.strips["A1B2C3D4E5F6"]
+    assert (await hub.save_schedule({"strip": "A1B2C3D4E5F6", "kind": "watch", "outlets": [1], "metric": "power",
+                                     "above": False, "value": 3, "seconds": 5}))[0] == 400     # too short
+    assert (await hub.save_schedule({"strip": "A1B2C3D4E5F6", "kind": "watch", "outlets": [1], "metric": "volts",
+                                     "value": 3, "seconds": 60}))[0] == 400
+    code, body = await hub.save_schedule({"strip": "A1B2C3D4E5F6", "kind": "watch", "outlets": [1], "metric": "power",
+                                          "above": False, "value": 3, "seconds": 600})
+    assert code == 200
+    rule_id = body["schedule"]["id"]
+    code, body = await hub.save_schedule({"strip": "A1B2C3D4E5F6", "kind": "watch", "outlets": [2], "metric": "power",
+                                          "above": True, "value": 1500, "seconds": 30, "action": "alert"})
+    alert_id = body["schedule"]["id"]
+    await hub.switch("A1B2C3D4E5F6", 1, True)
+    strip_a.outlets[1].on, strip_a.outlets[1].watts = True, 1.2
+    strip_a.outlets[2].on, strip_a.outlets[2].watts = True, 2000.0
+    await hub.run_watches(now)
+    await hub.run_watches(now + 300)
+    assert relays[1]                                                        # not long enough yet
+    strip_a.outlets[1].on, strip_a.outlets[1].watts = True, 1.2
+    strip_a.outlets[2].on, strip_a.outlets[2].watts = True, 2000.0
+    await hub.run_watches(now + 601)
+    assert not relays[1]                                                    # charged: switched off
+    kinds = [(e["kind"], e["outlet"]) for e in (await hub.events(0))["events"]]
+    assert ("rule_power_off", 1) in kinds and ("rule_power", 2) in kinds
+    strip_a.outlets[2].on, strip_a.outlets[2].watts = True, 2000.0
+    await hub.run_watches(now + 700)                                        # acts once until it clears
+    assert sum(1 for e in (await hub.events(0))["events"] if e["kind"] == "rule_power") == 1
+    for rid in (rule_id, alert_id):
+        await hub.delete_schedule(rid)
+    hub.history.db.execute("DELETE FROM events")
+    hub.history.db.commit()
 
     # alerts: hot outlet (thresholds come from the settings)
     assert (await hub.update_settings({"max_temp_c": 5}))[0] == 400

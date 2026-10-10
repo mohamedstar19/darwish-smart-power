@@ -89,6 +89,11 @@ object AlertNotifier {
             "online" -> context.getString(R.string.notif_online_title) to context.getString(R.string.notif_online, stripName)
             "temp" -> context.getString(R.string.notif_temp_title) to context.getString(R.string.notif_temp, outletName, stripName, value)
             "power" -> context.getString(R.string.notif_power_title) to context.getString(R.string.notif_power, stripName, value)
+            "rule_power_off", "rule_temp_off", "rule_power", "rule_temp" -> context.getString(R.string.notif_rule_title) to
+                context.getString(
+                    if (e.kind.endsWith("_off")) R.string.notif_rule_off else R.string.notif_rule, outletName, stripName,
+                    if (e.kind.startsWith("rule_temp")) "$value°C" else context.getString(R.string.watts_value, value),
+                )
             "trip" -> context.getString(R.string.notif_trip_title) to context.getString(
                 if (e.value.toInt() == 2) R.string.notif_trip_heat else R.string.notif_trip_load, outletName, stripName,
             )

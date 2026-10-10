@@ -62,12 +62,25 @@ data class Schedule(
     /** For a running cycle: whether it is in its "on" part now, and when that changes. */
     val phaseOn: Boolean? = null,
     val nextChangeEpochSeconds: Long = 0,
+    /** Monitoring rule: while on, [metric] ("power" W / "temp" °C) above (or below) [value] for [seconds]
+     *  makes the server switch the outlets off ([action] "off") or only report it ("alert"). */
+    val metric: String = METRIC_POWER,
+    val above: Boolean = true,
+    val value: Double = 0.0,
+    val seconds: Int = 0,
+    val action: String = ACTION_OFF,
 ) {
     val isCycle: Boolean get() = kind == KIND_CYCLE
+    val isWatch: Boolean get() = kind == KIND_WATCH
 
     companion object {
         const val KIND_TIME = "time"
         const val KIND_CYCLE = "cycle"
+        const val KIND_WATCH = "watch"
+        const val METRIC_POWER = "power"
+        const val METRIC_TEMP = "temp"
+        const val ACTION_OFF = "off"
+        const val ACTION_ALERT = "alert"
     }
 }
 
@@ -235,6 +248,11 @@ object StateJson {
             offMinutes = s.optInt("off_minutes", 0),
             phaseOn = if (s.has("phase_on")) s.optBoolean("phase_on") else null,
             nextChangeEpochSeconds = s.optLong("next_change", 0L),
+            metric = s.optString("metric", Schedule.METRIC_POWER),
+            above = s.optBoolean("above", true),
+            value = s.optDouble("value", 0.0),
+            seconds = s.optInt("seconds", 0),
+            action = s.optString("action", Schedule.ACTION_OFF),
         )
     }
 
