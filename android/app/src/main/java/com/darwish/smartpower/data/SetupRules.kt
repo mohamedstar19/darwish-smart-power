@@ -28,22 +28,29 @@ object SetupRules {
         else -> null
     }
 
-    /** A strip in setup mode opens a Wi-Fi called TONLY_TAP_<code>; its password is LGU_<code>. */
-    const val AP_PREFIX = "TONLY_TAP_"
+    /** A strip in setup mode opens a Wi-Fi called TONLY_TAP_<code> (some batches ONLY_TAP_<code>);
+     *  its password is LGU_<code>. */
+    val AP_PREFIXES = listOf("TONLY_TAP_", "ONLY_TAP_")
     private const val AP_PASSWORD_PREFIX = "LGU_"
 
-    fun isStripAp(ssid: String): Boolean = ssid.startsWith(AP_PREFIX) && ssid.length > AP_PREFIX.length
+    fun isStripAp(ssid: String): Boolean = AP_PREFIXES.any { ssid.startsWith(it) && ssid.length > it.length }
 
-    fun apPassword(ssid: String): String? =
-        if (isStripAp(ssid)) AP_PASSWORD_PREFIX + ssid.removePrefix(AP_PREFIX) else null
+    fun apPassword(ssid: String): String? = if (isStripAp(ssid)) AP_PASSWORD_PREFIX + apCode(ssid) else null
 
-    /** The code printed after TONLY_TAP_, shown to tell strips apart. */
-    fun apCode(ssid: String): String = ssid.removePrefix(AP_PREFIX)
+    /** The code after the last "_" of the setup Wi-Fi name (the end of the strip's MAC), shown to tell strips apart. */
+    fun apCode(ssid: String): String = ssid.substringAfterLast('_')
+
+    /** Where the strip listens while in setup mode: its own address on its Wi-Fi, 192.168.1.1 on the strips
+     *  we know, 192.168.4.1 on some other batches. [gateway] is what the phone was given on that Wi-Fi. */
+    fun setupHosts(gateway: String?): List<String> =
+        listOfNotNull(gateway?.takeIf { isIpv4(it) && it != "0.0.0.0" }, SETUP_HOST, "192.168.4.1").distinct()
 
     /** The strip only works on 2.4 GHz Wi-Fi. */
     fun is24GHz(frequencyMhz: Int): Boolean = frequencyMhz in 2400..2500
 
     fun serverCommand(serverIp: String) = "up:ip:${serverIp.trim()}"
+    /** Leaves setup mode: the strip restarts and joins the home Wi-Fi (no answer is expected). */
+    const val REBOOT = "up:reboot:0"
     fun wifiCommand(ssid: String, password: String) = "up:connect:$ssid:$password"
     const val SERVER_OK = "ip_ok"
     const val WIFI_OK = "connect_ok"

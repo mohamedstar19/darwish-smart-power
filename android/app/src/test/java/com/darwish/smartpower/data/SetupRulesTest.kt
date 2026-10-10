@@ -43,6 +43,13 @@ class SetupRulesTest {
         assertEquals("LGU_91C0C4C", SetupRules.apPassword("TONLY_TAP_91C0C4C"))
         assertEquals("91C0C4C", SetupRules.apCode("TONLY_TAP_91C0C4C"))
         assertFalse(SetupRules.isStripAp("TONLY_TAP_"))
+        // another batch names its setup Wi-Fi ONLY_TAP_<code>; same password rule
+        assertTrue(SetupRules.isStripAp("ONLY_TAP_96BB292"))
+        assertEquals("LGU_96BB292", SetupRules.apPassword("ONLY_TAP_96BB292"))
+        assertEquals("96BB292", SetupRules.apCode("ONLY_TAP_96BB292"))
+        assertEquals(listOf("192.168.1.1", "192.168.4.1"), SetupRules.setupHosts(null))
+        assertEquals(listOf("192.168.4.1", "192.168.1.1"), SetupRules.setupHosts("192.168.4.1"))
+        assertEquals(listOf("192.168.1.1", "192.168.4.1"), SetupRules.setupHosts("0.0.0.0"))
         assertFalse(SetupRules.isStripAp("HomeWiFi"))
         assertNull(SetupRules.apPassword("HomeWiFi"))
     }

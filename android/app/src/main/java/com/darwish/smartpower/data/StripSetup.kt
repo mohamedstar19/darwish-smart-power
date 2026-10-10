@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.net.Inet4Address
 import java.net.InetSocketAddress
 import java.net.Socket
 
@@ -35,10 +36,12 @@ class StripSetup(private val context: Context) {
             SetupRules.check(serverIp, ssid, password)?.let { return@withContext SetupResult.Invalid(it) }
             val wifi = network ?: wifiNetwork() ?: return@withContext SetupResult.NoWifi
             try {
-                val first = exchangeWithRetry(wifi, SetupRules.serverCommand(serverIp))
+                val (host, first) = firstExchange(wifi, SetupRules.serverCommand(serverIp))
                 if (!first.contains(SetupRules.SERVER_OK)) return@withContext SetupResult.Refused(first)
-                val second = exchange(wifi, SetupRules.wifiCommand(ssid, password))
+                val second = exchange(wifi, host, SetupRules.wifiCommand(ssid, password))
                 if (!second.contains(SetupRules.WIFI_OK)) return@withContext SetupResult.Refused(second)
+                // leave setup mode now, so the strip joins the home Wi-Fi instead of staying in setup
+                runCatching { send(wifi, host, SetupRules.REBOOT) }
                 SetupResult.Done
             } catch (e: IOException) {
                 SetupResult.NotReachable
@@ -53,22 +56,43 @@ class StripSetup(private val context: Context) {
         }
     }
 
-    /** Right after joining, the strip's network can need a moment before it answers. */
-    private suspend fun exchangeWithRetry(network: Network, line: String): String {
-        repeat(3) {
-            try {
-                return exchange(network, line)
-            } catch (e: IOException) {
-                delay(1_500)
+    /** The gateway the strip's Wi-Fi gave this phone: that is the strip itself. */
+    private fun gateway(network: Network): String? {
+        val cm = context.getSystemService(ConnectivityManager::class.java) ?: return null
+        val routes = cm.getLinkProperties(network)?.routes ?: return null
+        return routes.firstOrNull { it.isDefaultRoute && it.gateway is Inet4Address }?.gateway?.hostAddress
+    }
+
+    /** Right after joining, the strip's network can need a moment before it answers; other batches of
+     *  strips listen on another address, so every known one is tried. Returns the address that answered. */
+    private suspend fun firstExchange(network: Network, line: String): Pair<String, String> {
+        val hosts = SetupRules.setupHosts(gateway(network))
+        var last: IOException? = null
+        repeat(4) {
+            for (host in hosts) {
+                try {
+                    return host to exchange(network, host, line)
+                } catch (e: IOException) {
+                    last = e
+                }
             }
+            delay(1_500)
         }
-        return exchange(network, line)
+        throw last ?: IOException("no answer")
+    }
+
+    /** One line out, nothing back (the strip restarts right away). */
+    private fun send(network: Network, host: String, line: String) {
+        network.socketFactory.createSocket().use { socket: Socket ->
+            socket.connect(InetSocketAddress(host, SetupRules.SETUP_PORT), 6_000)
+            socket.getOutputStream().apply { write("$line\r\n".toByteArray(Charsets.UTF_8)); flush() }
+        }
     }
 
     /** One line out, one line back, on a fresh connection (the strip expects that). */
-    private fun exchange(network: Network, line: String): String {
+    private fun exchange(network: Network, host: String, line: String): String {
         return network.socketFactory.createSocket().use { socket: Socket ->
-            socket.connect(InetSocketAddress(SetupRules.SETUP_HOST, SetupRules.SETUP_PORT), 6_000)
+            socket.connect(InetSocketAddress(host, SetupRules.SETUP_PORT), 6_000)
             socket.soTimeout = 6_000
             socket.getOutputStream().apply { write("$line\r\n".toByteArray(Charsets.UTF_8)); flush() }
             val input = socket.getInputStream()

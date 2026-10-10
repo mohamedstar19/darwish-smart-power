@@ -3022,6 +3022,11 @@ def provision(args) -> int:
             time.sleep(2)
     print("  server address -> %s" % setup_exchange(host, "up:ip:" + server_ip, "ip_ok"))
     print("  home Wi-Fi     -> %s" % setup_exchange(host, "up:connect:%s:%s" % (args.ssid, args.wifi_password), "connect_ok"))
+    try:                                           # leave setup mode; the strip restarts without answering
+        with socket.create_connection((host, SETUP_ADDR[1]), timeout=6) as conn:
+            conn.sendall(b"up:reboot:0\r\n")
+    except OSError:
+        pass
     print("\nDone. Switch this device back to your normal Wi-Fi.")
     print("The strip will now connect to %s:%d by itself." % (server_ip, STRIP_PORT))
     return 0
