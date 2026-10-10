@@ -19,7 +19,7 @@ import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -34,8 +34,9 @@ sealed interface ScanOutcome {
     data object NeedPermission : ScanOutcome
     data object WifiOff : ScanOutcome
     data object LocationOff : ScanOutcome
-    /** [strips]: strips in setup mode; [homes]: other 2.4 GHz networks, strongest first. */
-    data class Found(val strips: List<NearbyWifi>, val homes: List<NearbyWifi>) : ScanOutcome
+    /** [strips]: strips in setup mode; [homes]: other 2.4 GHz networks, strongest first; [seen]: how many
+     *  networks the phone listed at all (none at all usually means Android hid them: location is off). */
+    data class Found(val strips: List<NearbyWifi>, val homes: List<NearbyWifi>, val seen: Int = strips.size + homes.size) : ScanOutcome
 }
 
 /** The strip's Wi-Fi while the app is joined to it; [release] hands the phone back to its usual Wi-Fi. */
@@ -67,29 +68,43 @@ class StripFinder(context: Context) {
             val location = app.getSystemService(LocationManager::class.java)
             if (location == null || !LocationManagerCompat.isLocationEnabled(location)) return ScanOutcome.LocationOff
         }
-        val fresh = CompletableDeferred<Unit>()
+        // A strip's Wi-Fi appears a few seconds after it starts blinking, and Android allows only a few scans
+        // every two minutes (a refused scan leaves the old list). So ask up to three times, and keep listening
+        // to the scans Android makes by itself, until a strip shows up or about half a minute has passed.
+        val updates = Channel<Unit>(Channel.CONFLATED)
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                fresh.complete(Unit)
+                updates.trySend(Unit)
             }
         }
         ContextCompat.registerReceiver(
             app, receiver, IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION), ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+        var seen = nearby()
         try {
-            @Suppress("DEPRECATION")            // still the only way to ask for a scan; Android may throttle it
-            val started = wifi.startScan()
-            if (started) withTimeoutOrNull(10_000) { fresh.await() }
+            for (attempt in 0 until 3) {
+                if (seen.any { SetupRules.isStripAp(it.ssid) }) break
+                @Suppress("DEPRECATION")        // still the only way to ask for a scan; Android may throttle it
+                val started = wifi.startScan()
+                withTimeoutOrNull(if (started) 10_000L else 6_000L) { updates.receive() }
+                seen = nearby()
+            }
         } finally {
             runCatching { app.unregisterReceiver(receiver) }
         }
-        val seen = wifi.scanResults.mapNotNull { it.toNearby() }
-            .groupBy { it.ssid }.map { (_, same) -> same.maxBy { it.level } }
-            .sortedByDescending { it.level }
         return ScanOutcome.Found(
             strips = seen.filter { SetupRules.isStripAp(it.ssid) },
             homes = seen.filter { !SetupRules.isStripAp(it.ssid) && SetupRules.is24GHz(it.frequency) },
+            seen = seen.size,
         )
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun nearby(): List<NearbyWifi> {
+        val results = runCatching { wifi?.scanResults }.getOrNull().orEmpty()
+        return results.mapNotNull { it.toNearby() }
+            .groupBy { it.ssid }.map { (_, same) -> same.maxBy { it.level } }
+            .sortedByDescending { it.level }
     }
 
     /** Joins the strip's Wi-Fi; Android 10+ shows its own "connect to this device?" prompt first. */

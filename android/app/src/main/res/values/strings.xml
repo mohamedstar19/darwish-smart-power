@@ -424,4 +424,9 @@
     <string name="power_back_banner">💡 Power came back at %1$s. These outlets were on and are still off:</string>
     <string name="power_back_soon">%1$s turns on by itself at %2$s</string>
     <string name="power_back_restore">Turn back on what was on</string>
+    <string name="setup_sees_nothing">The phone lists no Wi-Fi networks at all. Turn on Location from the quick settings, make sure the app has the “Nearby devices” permission, then search again.</string>
+    <string name="setup_typed_title">Can you see the strip’s Wi-Fi in your Wi-Fi settings?</string>
+    <string name="setup_typed_hint">Open your phone’s Wi-Fi settings and look for a network named like TONLY_TAP_96BB292. Type its name here (or just the letters at its end) and the app joins it by itself.</string>
+    <string name="setup_typed_label">The strip’s Wi-Fi name</string>
+    <string name="setup_typed_use">Use this network</string>
 </resources>

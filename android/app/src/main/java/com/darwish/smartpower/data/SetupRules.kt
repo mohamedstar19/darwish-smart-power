@@ -35,6 +35,14 @@ object SetupRules {
 
     fun isStripAp(ssid: String): Boolean = AP_PREFIXES.any { ssid.startsWith(it) && ssid.length > it.length }
 
+    /** What someone typed for the strip's Wi-Fi: its full name, or just the code at its end (e.g. 96BB292). */
+    fun apFromTyped(text: String): String? {
+        val typed = text.trim().uppercase()
+        if (typed.isEmpty() || typed.any { it.isWhitespace() || it == ':' }) return null
+        val ssid = if (AP_PREFIXES.any { typed.startsWith(it) }) typed else AP_PREFIXES.first() + typed
+        return ssid.takeIf { isStripAp(it) && apCode(it).all { c -> c.isLetterOrDigit() } }
+    }
+
     fun apPassword(ssid: String): String? = if (isStripAp(ssid)) AP_PASSWORD_PREFIX + apCode(ssid) else null
 
     /** The code after the last "_" of the setup Wi-Fi name (the end of the strip's MAC), shown to tell strips apart. */

@@ -55,6 +55,16 @@ class SetupRulesTest {
     }
 
     @Test
+    fun typedWifiName() {
+        assertEquals("TONLY_TAP_96BB292", SetupRules.apFromTyped(" 96bb292 "))
+        assertEquals("TONLY_TAP_96BB292", SetupRules.apFromTyped("tonly_tap_96bb292"))
+        assertEquals("ONLY_TAP_96BB292", SetupRules.apFromTyped("ONLY_TAP_96BB292"))
+        assertNull(SetupRules.apFromTyped(""))
+        assertNull(SetupRules.apFromTyped("my wifi"))
+        assertNull(SetupRules.apFromTyped("ab:cd"))
+    }
+
+    @Test
     fun onlyTwoPointFourGigahertz() {
         assertTrue(SetupRules.is24GHz(2412))
         assertTrue(SetupRules.is24GHz(2472))

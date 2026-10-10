@@ -105,8 +105,11 @@ fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Uni
         result = null
         scope.launch {
             val all = vm.scanForStrips()
+            // reconnecting one strip: show just its Wi-Fi when we can tell which it is (its code may come from
+            // its second MAC, so if none matches, show every strip in setup mode rather than none)
             val found = if (targetCode != null && all is ScanOutcome.Found) {
-                all.copy(strips = all.strips.filter { SetupRules.apCode(it.ssid).equals(targetCode, ignoreCase = true) })
+                val mine = all.strips.filter { targetCode.endsWith(SetupRules.apCode(it.ssid), ignoreCase = true) }
+                if (mine.isNotEmpty()) all.copy(strips = mine) else all
             } else all
             scan = found
             if (found is ScanOutcome.Found && found.strips.none { it.ssid == chosen }) {
@@ -193,8 +196,17 @@ fun SetupScreen(vm: AppViewModel, snackbar: SnackbarHostState, onBack: () -> Uni
                         Button(onClick = ::search) { Text(stringResource(R.string.setup_search_again)) }
                     }
                     is ScanOutcome.Found -> if (found.strips.isEmpty()) {
-                        NoticeCard(stringResource(if (target != null) R.string.reconnect_not_found else R.string.setup_found_none)) {
+                        NoticeCard(stringResource(when {
+                            found.seen == 0 -> R.string.setup_sees_nothing
+                            target != null -> R.string.reconnect_not_found
+                            else -> R.string.setup_found_none
+                        })) {
                             Button(onClick = ::search) { Text(stringResource(R.string.setup_search_again)) }
+                        }
+                        // Android sometimes hides the strip's Wi-Fi from apps; the person can see it in Wi-Fi settings
+                        TypedApCard { apSsid ->
+                            scan = found.copy(strips = listOf(NearbyWifi(apSsid, 0, 2412)))
+                            chosen = apSsid
                         }
                     } else {
                         StripsCard(found.strips, chosen, onChoose = { chosen = it; result = null }, onSearch = ::search)
@@ -280,6 +292,27 @@ private fun BusyCard(emoji: String, title: String, tips: List<Int>) {
         )
         if (tips.isNotEmpty()) Spacer(Modifier.height(12.dp))
         tips.forEachIndexed { i, tip -> NumberedLine(i + 1, stringResource(tip)) }
+    }
+}
+
+/** When the scan shows no strip: type the name seen in the phone's Wi-Fi settings (or just its code). */
+@Composable
+private fun TypedApCard(onUse: (String) -> Unit) {
+    var typed by rememberSaveable { mutableStateOf("") }
+    val apSsid = SetupRules.apFromTyped(typed)
+    GlassCard(Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.setup_typed_title), style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(stringResource(R.string.setup_typed_hint), color = Glass.TextSoft, style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(
+            value = typed, onValueChange = { typed = it.take(32) }, singleLine = true,
+            label = { Text(stringResource(R.string.setup_typed_label)) },
+            placeholder = { Text("TONLY_TAP_96BB292") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = { apSsid?.let(onUse) }, enabled = apSsid != null) { Text(stringResource(R.string.setup_typed_use)) }
     }
 }
 

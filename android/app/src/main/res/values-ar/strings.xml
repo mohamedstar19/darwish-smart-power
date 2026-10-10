@@ -410,4 +410,9 @@
     <string name="power_back_banner">💡 الكهرباء رجعت الساعة %1$s. المخارج دي كانت شغالة ولسه مقفولة:</string>
     <string name="power_back_soon">%1$s هيشتغل لوحده الساعة %2$s</string>
     <string name="power_back_restore">شغّل اللي كان شغال</string>
+    <string name="setup_sees_nothing">الموبايل مش راجع أي شبكات واي فاي خالص. شغّل الموقع (Location) من فوق، واتأكد إن التطبيق واخد إذن "الأجهزة القريبة"، وبعدين دوّر تاني.</string>
+    <string name="setup_typed_title">شايف شبكة المشترك في إعدادات الواي فاي؟</string>
+    <string name="setup_typed_hint">افتح إعدادات الواي فاي في الموبايل ودوّر على شبكة اسمها زي TONLY_TAP_96BB292. اكتب اسمها هنا (أو الحروف اللي في آخرها بس)، والتطبيق هيدخل عليها لوحده.</string>
+    <string name="setup_typed_label">اسم شبكة المشترك</string>
+    <string name="setup_typed_use">استخدم الشبكة دي</string>
 </resources>
